@@ -6,6 +6,7 @@ from ctree.c.nodes import SymbolRef, Constant
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
+from teller.core import hm
 from teller.utils import uniqueName
 from teller.types.common import Array
 
@@ -96,3 +97,7 @@ class PyrDown(object):
         return Array(uniqueName(), retval)
 
 pyr_down = PyrDown()
+
+@hm
+def pyr_down_fn(im):
+    return pyr_down(im)
