@@ -1,0 +1,17 @@
+.idea/
+*.o
+*.so
+*.pyc
+examples/*.xml
+examples/*.cl
+build
+dist
+hindemith.egg*
+*.dot
+*.avi
+*.xml
+.ropeproject
+*.gz
+*.egg
+kernels.cl
+*.swp
