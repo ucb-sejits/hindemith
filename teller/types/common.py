@@ -1,6 +1,10 @@
+from teller.operations.dense_linear_algebra.elementwise_array_operations import ElementWiseMul, \
+    ElementWiseSub, ElementWiseDiv, ElementWiseAdd
+
 __author__ = 'leonardtruong'
 
 from ..utils import uniqueName
+
 
 class HMType(object):
     pass
@@ -37,7 +41,7 @@ class Array(HMType):
         if isinstance(other, Scalar):
             return Array(uniqueName(), self.data * other.value)
         elif isinstance(other, Array):
-            return Array(uniqueName(), self.data * other.data)
+            return Array(uniqueName(), ElementWiseMul()(self.data, other.data))
         print(type(other))
         raise NotImplementedError()
 
@@ -45,19 +49,19 @@ class Array(HMType):
         if isinstance(other, Scalar):
             return Array(uniqueName(), self.data / other.value)
         elif isinstance(other, Array):
-            return Array(uniqueName(), self.data / other.data)
+            return Array(uniqueName(), ElementWiseDiv()(self.data, other.data))
         print(type(other))
         raise NotImplementedError()
 
     def __sub__(self, other):
         if isinstance(other, Array):
-            return Array(uniqueName(), self.data - other.data)
+            return Array(uniqueName(), ElementWiseSub()(self.data, other.data))
         print(type(other))
         raise NotImplementedError()
 
     def __add__(self, other):
         if isinstance(other, Array):
-            return Array(uniqueName(), self.data + other.data)
+            return Array(uniqueName(), ElementWiseAdd()(self.data, other.data))
         elif isinstance(other, Scalar):
             return Array(uniqueName(), self.data + other.value)
         print(type(other))

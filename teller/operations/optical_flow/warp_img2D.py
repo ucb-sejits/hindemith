@@ -29,7 +29,7 @@ class WarpImg2DConcreteOcl(ConcreteSpecializedFunction):
         return self
 
     def __call__(self, input, u, v):
-        output = zeros(input.shape, input.dtype)
+        output = zeros_like(input.data)
         events = []
         in_buf, in_evt = buffer_from_ndarray(self.queue, input.data, blocking=False)
         events.append(in_evt)

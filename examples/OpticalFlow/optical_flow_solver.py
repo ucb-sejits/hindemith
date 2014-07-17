@@ -2,7 +2,7 @@ from numpy import zeros
 
 import logging
 from teller.core import *
-from teller.operations.optical_flow.pyr_down import pyr_down
+from teller.operations.optical_flow.pyr_down import pyr_down, pyr_down_fn
 from teller.operations.optical_flow.pyr_up import pyr_up
 
 logging.basicConfig(level=20)
@@ -59,8 +59,8 @@ class OpticalFlowSolver(object):
         sizes = [(im1.shape[0], im1.shape[1])]
 
         for i in range(1, num_pyr + 1):
-            pyr1.insert(0, pyr_down(pyr1[0]))
-            pyr2.insert(0, pyr_down(pyr2[0]))
+            pyr1.insert(0, pyr_down_fn(im=pyr1[0]))
+            pyr2.insert(0, pyr_down_fn(im=pyr2[0]))
             sizes.insert(0, (pyr1[0].shape[0], pyr1[0].shape[1]))
 
         hm_u = zeros(sizes[0], dtype=u.dtype)
