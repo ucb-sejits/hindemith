@@ -2,7 +2,7 @@ __author__ = 'leonardtruong'
 
 from stencil_code.stencil_grid import StencilGrid
 from common import Array
-from ..utils import uniqueName
+from ..utils import unique_name
 
 
 class Stencil(Array):
@@ -11,7 +11,7 @@ class Stencil(Array):
         self.offx = offx
         self.offy = offy
         self.dtype = data.dtype
-        self.uniqueName = uniqueName()
+        self.uniqueName = unique_name()
 
     def __mul__(self, other):
         if isinstance(other, Array):
@@ -21,6 +21,6 @@ class Stencil(Array):
             input.data = other.data
             output = StencilGrid(other.data.shape, dtype=other.data.dtype)
             self.kernel(input, output)
-            return Array(uniqueName(), output.data)
+            return Array(unique_name(), output.data)
         print(type(other))
         raise NotImplementedError()

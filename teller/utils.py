@@ -3,7 +3,7 @@ __author__ = 'leonardtruong'
 nameCnt = 0
 
 
-def uniqueName():
+def unique_name():
     global nameCnt
     name = '_f{0}'.format(nameCnt)
     nameCnt += 1
