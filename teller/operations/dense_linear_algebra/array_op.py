@@ -148,7 +148,6 @@ class ArrayDiv(ArrayOp):
         if backend == 'python':
             cls.__call__ = cls.pure_python
             return super(ArrayDiv, cls).__new__(cls, array, backend)
-            return obj
         elif backend == 'ocl':
             return ArrayOpLazy('/', array)
         # TODO: Create HMException
