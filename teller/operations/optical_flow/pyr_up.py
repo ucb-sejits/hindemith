@@ -25,7 +25,7 @@ class OclFunc2(ConcreteSpecializedFunction):
         return self
 
     def __call__(self, im):
-        output = zeros_like(im)
+        output = zeros_like(im.data)
         in_buf, evt = buffer_from_ndarray(self.queue, im.data, blocking=False)
         evt.wait()
         self.kernel.setarg(0, in_buf, sizeof(cl_mem))
