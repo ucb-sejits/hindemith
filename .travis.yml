@@ -36,6 +36,10 @@ install:
   - python setup.py install
   - cd ${TRAVIS_BUILD_DIR}
 
+  - git clone git://github.com/ucb-sejits/stencil_code.git ${TRAVIS_BUILD_DIR}/dependencies/stencil_code
+  - cd ${TRAVIS_BUILD_DIR}/dependencies/stencil_code
+  - python setup.py install
+  - cd ${TRAVIS_BUILD_DIR}
 
 script:
   - nosetests -a --verbose --with-coverage --cover-package=teller --cover-erase
