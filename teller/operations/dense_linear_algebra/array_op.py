@@ -6,15 +6,35 @@ from ctree.c.nodes import SymbolRef, Constant
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
+from teller.types.common import HMType
+from teller.utils import unique_name
 
 __author__ = 'leonardtruong'
 
 
+class Array(HMType):
+    def __new__(cls, name, data):
+        class subcls(cls):
+            def __new__(cls, *args, **kwargs):
+                return object.__new__(cls)
+            def __init__(self, name, data):
+                self.name = name
+                self.data = data
+                self.shape = data.shape
+                self.dtype = data.dtype
+        subcls.__add__ = ArrayAdd(data)
+        subcls.__sub__ = ArraySub(data)
+        subcls.__mul__ = ArrayMul(data)
+        subcls.__div__ = ArrayDiv(data)
+        return subcls(name, data)
+
+
 class ArrayOpConcrete(ConcreteSpecializedFunction):
-    def __init__(self):
+    def __init__(self, array):
         self.device = clGetDeviceIDs()[-1]
         self.context = clCreateContext([self.device])
         self.queue = clCreateCommandQueue(self.context)
+        self.array = array
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
@@ -22,10 +42,10 @@ class ArrayOpConcrete(ConcreteSpecializedFunction):
         self.global_size = global_size
         return self
 
-    def __call__(self, input1, input2):
-        output = zeros_like(input1.data)
+    def __call__(self, input2):
+        output = zeros_like(self.array)
         events = []
-        in_buf1, in_evt = buffer_from_ndarray(self.queue, input1.data, blocking=False)
+        in_buf1, in_evt = buffer_from_ndarray(self.queue, self.array, blocking=False)
         events.append(in_evt)
         self.kernel.setarg(0, in_buf1, sizeof(cl_mem))
 
@@ -41,10 +61,14 @@ class ArrayOpConcrete(ConcreteSpecializedFunction):
         evt.wait()
         _, evt = buffer_to_ndarray(self.queue, out_buf, output)
         evt.wait()
-        return output
+        return Array(unique_name(), output)
 
 
 class ArrayOpLazy(LazySpecializedFunction):
+    def __init__(self, tree, array=None):
+        super(ArrayOpLazy, self).__init__(tree)
+        self.array = array
+
     def args_to_subconfig(self, args):
         return tuple((arg.dtype, arg.shape) for arg in args)
 
@@ -67,73 +91,69 @@ class ArrayOpLazy(LazySpecializedFunction):
                                   'op': StringTemplate(tree)
                               }
         )
-        fn = ArrayOpConcrete()
+        fn = ArrayOpConcrete(self.array)
         kernel = OclFile("kernel", [body])
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
         ptr = program['elementwise_op']
         return fn.finalize(ptr, (arg_cfg[0][1][1], arg_cfg[0][1][0]))
 
+class ArrayOp(object):
+    def __init__(self, array, backend):
+        self.array = array
 
-class ArrayAdd(object):
-    def __new__(cls, backend='ocl'):
+class ArrayAdd(ArrayOp):
+    def __new__(cls, array, backend='ocl'):
         if backend == 'python':
             cls.__call__ = cls.pure_python
-            return object.__new__(cls)
-        # elif backend == 'c':
-        #     return WarpImg2DLazyC(None)
+            return super(ArrayAdd, cls).__new__(cls, array, backend)
         elif backend == 'ocl':
-            return ArrayOpLazy('+')
+            return ArrayOpLazy('+', array)
         # TODO: Create HMException
         raise Exception("Unsupported backend: {0}".format(backend))
 
-    def pure_python(self, input1, input2):
-        return input1 + input2
+    def pure_python(self, input2):
+        return Array(unique_name(), self.array + input2.data)
 
 
-class ArraySub(object):
-    def __new__(cls, backend='ocl'):
+class ArraySub(ArrayOp):
+    def __new__(cls, array, backend='ocl'):
         if backend == 'python':
             cls.__call__ = cls.pure_python
-            return object.__new__(cls)
-        # elif backend == 'c':
-        #     return WarpImg2DLazyC(None)
+            return super(ArraySub, cls).__new__(cls, array, backend)
         elif backend == 'ocl':
-            return ArrayOpLazy('-')
+            return ArrayOpLazy('-', array)
         # TODO: Create HMException
         raise Exception("Unsupported backend: {0}".format(backend))
 
-    def pure_python(self, input1, input2):
-        return input1 - input2
+    def pure_python(self, input2):
+        return Array(unique_name(), self.array - input2.data)
 
 
-class ArrayMul(object):
-    def __new__(cls, backend='ocl'):
+class ArrayMul(ArrayOp):
+    def __new__(cls, array, backend='ocl'):
         if backend == 'python':
             cls.__call__ = cls.pure_python
-            return object.__new__(cls)
-        # elif backend == 'c':
-        #     return WarpImg2DLazyC(None)
+            return super(ArrayMul, cls).__new__(cls, array, backend)
         elif backend == 'ocl':
-            return ArrayOpLazy('*')
+            return ArrayOpLazy('*', array)
         # TODO: Create HMException
         raise Exception("Unsupported backend: {0}".format(backend))
 
-    def pure_python(self, input1, input2):
-        return input1 * input2
+    def pure_python(self, input2):
+        return Array(unique_name(), self.array * input2.data)
 
 
-class ArrayDiv(object):
-    def __new__(cls, backend='ocl'):
+class ArrayDiv(ArrayOp):
+    def __new__(cls, array, backend='ocl'):
         if backend == 'python':
             cls.__call__ = cls.pure_python
-            return object.__new__(cls)
-        # elif backend == 'c':
-        #     return WarpImg2DLazyC(None)
+            return super(ArrayDiv, cls).__new__(cls, array, backend)
+            return obj
         elif backend == 'ocl':
-            return ArrayOpLazy('/')
+            return ArrayOpLazy('/', array)
         # TODO: Create HMException
         raise Exception("Unsupported backend: {0}".format(backend))
 
-    def pure_python(self, input1, input2):
-        return input1 / input2
+    def pure_python(self, input2):
+        return Array(unique_name(), self.array / input2.data)
 

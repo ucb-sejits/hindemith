@@ -1,11 +1,11 @@
 __author__ = 'leonardtruong'
 
 from stencil_code.stencil_grid import StencilGrid
-from common import Array
+from ..operations.dense_linear_algebra.array_op import Array
 from ..utils import unique_name
 
 
-class Stencil(Array):
+class Stencil(object):
     def __init__(self, data, offx, offy):
         self.data = data
         self.offx = offx

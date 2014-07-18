@@ -4,7 +4,7 @@ from numpy import zeros, zeros_like
 import numpy as np
 from ctree.nodes import Project
 from teller.utils import unique_name, clamp
-from teller.types.common import Array
+from teller.operations.dense_linear_algebra.array_op import Array
 from pycl import clCreateCommandQueue, cl_mem, clGetDeviceIDs, clCreateContext, \
     buffer_from_ndarray, clEnqueueNDRangeKernel, buffer_to_ndarray, \
     clCreateProgramWithSource, clWaitForEvents
