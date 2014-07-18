@@ -10,7 +10,7 @@ from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 __author__ = 'leonardtruong'
 
 
-class ElementwiseConcrete(ConcreteSpecializedFunction):
+class ArrayOpConcrete(ConcreteSpecializedFunction):
     def __init__(self):
         self.device = clGetDeviceIDs()[-1]
         self.context = clCreateContext([self.device])
@@ -44,7 +44,7 @@ class ElementwiseConcrete(ConcreteSpecializedFunction):
         return output
 
 
-class ElementWiseLazy(LazySpecializedFunction):
+class ArrayOpLazy(LazySpecializedFunction):
     def args_to_subconfig(self, args):
         return tuple((arg.dtype, arg.shape) for arg in args)
 
@@ -67,14 +67,14 @@ class ElementWiseLazy(LazySpecializedFunction):
                                   'op': StringTemplate(tree)
                               }
         )
-        fn = ElementwiseConcrete()
+        fn = ArrayOpConcrete()
         kernel = OclFile("kernel", [body])
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
         ptr = program['elementwise_op']
         return fn.finalize(ptr, (arg_cfg[0][1][1], arg_cfg[0][1][0]))
 
 
-class ElementWiseAdd(object):
+class ArrayAdd(object):
     def __new__(cls, backend='ocl'):
         if backend == 'python':
             cls.__call__ = cls.pure_python
@@ -82,7 +82,7 @@ class ElementWiseAdd(object):
         # elif backend == 'c':
         #     return WarpImg2DLazyC(None)
         elif backend == 'ocl':
-            return ElementWiseLazy('+')
+            return ArrayOpLazy('+')
         # TODO: Create HMException
         raise Exception("Unsupported backend: {0}".format(backend))
 
@@ -90,7 +90,7 @@ class ElementWiseAdd(object):
         return input1 + input2
 
 
-class ElementWiseSub(object):
+class ArraySub(object):
     def __new__(cls, backend='ocl'):
         if backend == 'python':
             cls.__call__ = cls.pure_python
@@ -98,7 +98,7 @@ class ElementWiseSub(object):
         # elif backend == 'c':
         #     return WarpImg2DLazyC(None)
         elif backend == 'ocl':
-            return ElementWiseLazy('-')
+            return ArrayOpLazy('-')
         # TODO: Create HMException
         raise Exception("Unsupported backend: {0}".format(backend))
 
@@ -106,7 +106,7 @@ class ElementWiseSub(object):
         return input1 - input2
 
 
-class ElementWiseMul(object):
+class ArrayMul(object):
     def __new__(cls, backend='ocl'):
         if backend == 'python':
             cls.__call__ = cls.pure_python
@@ -114,7 +114,7 @@ class ElementWiseMul(object):
         # elif backend == 'c':
         #     return WarpImg2DLazyC(None)
         elif backend == 'ocl':
-            return ElementWiseLazy('*')
+            return ArrayOpLazy('*')
         # TODO: Create HMException
         raise Exception("Unsupported backend: {0}".format(backend))
 
@@ -122,7 +122,7 @@ class ElementWiseMul(object):
         return input1 * input2
 
 
-class ElementWiseDiv(object):
+class ArrayDiv(object):
     def __new__(cls, backend='ocl'):
         if backend == 'python':
             cls.__call__ = cls.pure_python
@@ -130,7 +130,7 @@ class ElementWiseDiv(object):
         # elif backend == 'c':
         #     return WarpImg2DLazyC(None)
         elif backend == 'ocl':
-            return ElementWiseLazy('/')
+            return ArrayOpLazy('/')
         # TODO: Create HMException
         raise Exception("Unsupported backend: {0}".format(backend))
 
