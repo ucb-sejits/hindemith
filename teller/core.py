@@ -1,6 +1,7 @@
 from _ctypes import sizeof
-from teller.types.common import Float32, Int, Array, Scalar
+from teller.types.common import Float32, Int, Scalar
 from teller.types.stencil import Stencil
+from teller.operations.dense_linear_algebra.array_op import Array
 from numpy import ndarray
 
 __author__ = 'leonardtruong'

@@ -8,7 +8,7 @@ from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from teller.core import hm
 from teller.utils import unique_name
-from teller.types.common import Array
+from teller.operations.dense_linear_algebra.array_op import Array
 
 __author__ = 'leonardtruong'
 

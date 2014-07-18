@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 
 from teller.operations.optical_flow.pyr_up import PyrUp
-from teller.types.common import Array
+from teller.operations.dense_linear_algebra.array_op import Array
 
 class TestPyrUp(unittest.TestCase):
     def test_simple_pyr_up(self):
