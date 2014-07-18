@@ -3,7 +3,7 @@ from ctypes import CFUNCTYPE, c_void_p
 from numpy import zeros, zeros_like
 import numpy as np
 from ctree.nodes import Project
-from teller.utils import uniqueName, clamp
+from teller.utils import unique_name, clamp
 from teller.types.common import Array
 from pycl import clCreateCommandQueue, cl_mem, clGetDeviceIDs, clCreateContext, \
     buffer_from_ndarray, clEnqueueNDRangeKernel, buffer_to_ndarray, \
@@ -51,7 +51,7 @@ class WarpImg2DConcreteOcl(ConcreteSpecializedFunction):
         evt.wait()
         _, evt = buffer_to_ndarray(self.queue, out_buf, output)
         evt.wait()
-        return Array(uniqueName(), output)
+        return Array(unique_name(), output)
 
 class WarpImg2DLazyOcl(LazySpecializedFunction):
     def args_to_subconfig(self, args):
@@ -112,7 +112,7 @@ class WarpImg2DConcreteC(ConcreteSpecializedFunction):
     def __call__(self, input, u, v):
         output = zeros_like(input.data)
         self._c_function(input.data, u.data, v.data, output)
-        return Array(uniqueName(), output)
+        return Array(unique_name(), output)
 
 
 class WarpImg2DLazyC(LazySpecializedFunction):
@@ -220,6 +220,6 @@ class WarpImg2D(object):
                 else:
                     data[index] = tex_Ix[(clamp(x + my_x, 0, len_x - 1),
                                           clamp(y + my_y, 0, len_y - 1))]
-        return Array(uniqueName(), data)
+        return Array(unique_name(), data)
 
 warp_img2d = WarpImg2D()

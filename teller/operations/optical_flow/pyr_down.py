@@ -7,7 +7,7 @@ from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from teller.core import hm
-from teller.utils import uniqueName
+from teller.utils import unique_name
 from teller.types.common import Array
 
 __author__ = 'leonardtruong'
@@ -40,7 +40,7 @@ class OclFunc(ConcreteSpecializedFunction):
         evt.wait()
         _, evt = buffer_to_ndarray(self.queue, out_buf, output)
         evt.wait()
-        return Array(uniqueName(), output)
+        return Array(unique_name(), output)
 
 
 class PyrDownLazy(LazySpecializedFunction):
@@ -94,7 +94,7 @@ class PyrDown(object):
                     im[(2 * x + 1, 2 * y + 1)] +
                     im[(2 * x, 2 * y + 1)]
                 )/4.0
-        return Array(uniqueName(), retval)
+        return Array(unique_name(), retval)
 
 pyr_down = PyrDown()
 

@@ -2,7 +2,7 @@ from teller.operations.dense_linear_algebra.array_op import ArrayMul, ArraySub, 
 
 __author__ = 'leonardtruong'
 
-from ..utils import uniqueName
+from ..utils import unique_name
 
 
 class HMType(object):
@@ -16,7 +16,7 @@ class Scalar(HMType):
 
     def __mul__(self, other):
         if isinstance(other, Array):
-            return Array(uniqueName(), self.value * other.data)
+            return Array(unique_name(), self.value * other.data)
         print(type(other))
         raise NotImplementedError()
 
@@ -38,31 +38,31 @@ class Array(HMType):
 
     def __mul__(self, other):
         if isinstance(other, Scalar):
-            return Array(uniqueName(), self.data * other.value)
+            return Array(unique_name(), self.data * other.value)
         elif isinstance(other, Array):
-            return Array(uniqueName(), ArrayMul()(self.data, other.data))
+            return Array(unique_name(), ArrayMul()(self.data, other.data))
         print(type(other))
         raise NotImplementedError()
 
     def __div__(self, other):
         if isinstance(other, Scalar):
-            return Array(uniqueName(), self.data / other.value)
+            return Array(unique_name(), self.data / other.value)
         elif isinstance(other, Array):
-            return Array(uniqueName(), ArrayDiv()(self.data, other.data))
+            return Array(unique_name(), ArrayDiv()(self.data, other.data))
         print(type(other))
         raise NotImplementedError()
 
     def __sub__(self, other):
         if isinstance(other, Array):
-            return Array(uniqueName(), ArraySub()(self.data, other.data))
+            return Array(unique_name(), ArraySub()(self.data, other.data))
         print(type(other))
         raise NotImplementedError()
 
     def __add__(self, other):
         if isinstance(other, Array):
-            return Array(uniqueName(), ArrayAdd()(self.data, other.data))
+            return Array(unique_name(), ArrayAdd()(self.data, other.data))
         elif isinstance(other, Scalar):
-            return Array(uniqueName(), self.data + other.value)
+            return Array(unique_name(), self.data + other.value)
         print(type(other))
         raise NotImplementedError()
 
