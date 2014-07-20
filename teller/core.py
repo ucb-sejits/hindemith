@@ -3,6 +3,7 @@ from teller.types.common import Float32, Int, Scalar
 from teller.types.stencil import Stencil
 from teller.operations.dense_linear_algebra.array_op import Array
 from numpy import ndarray
+from teller.utils import UnsupportedTypeError
 
 __author__ = 'leonardtruong'
 
@@ -25,8 +26,7 @@ def coercer(arg):
     elif isinstance(value, ndarray):
         return name, Array(name, value)
     else:
-        print(type(value))
-        raise NotImplementedError()
+        raise UnsupportedTypeError("Teller found unsupported type: {0}".format(type(value)))
 
 
 def hm(fn):

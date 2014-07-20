@@ -12,3 +12,15 @@ def unique_name():
 
 def clamp(val, minimum, maximum):
     return max(minimum, min(val, maximum))
+
+
+class TellerException(Exception):
+    pass
+
+
+class UnsupportedBackendError(TellerException):
+    pass
+
+
+class UnsupportedTypeError(TellerException):
+    pass
