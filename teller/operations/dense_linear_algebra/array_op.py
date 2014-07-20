@@ -97,19 +97,27 @@ class ArrayOpLazy(LazySpecializedFunction):
         ptr = program['elementwise_op']
         return fn.finalize(ptr, (arg_cfg[0][1][1], arg_cfg[0][1][0]))
 
+
 class ArrayOp(object):
+    def __new__(cls, array, backend):
+        if backend == 'python':
+            cls.__call__ = cls.pure_python
+            return super(ArrayOp, cls).__new__(cls, array, backend)
+        # TODO: Create HMException
+        raise Exception("Unsupported backend: {0}".format(backend))
+
     def __init__(self, array, backend):
         self.array = array
 
+    def pure_python(self, input2):
+        raise NotImplementedError()
+
+
 class ArrayAdd(ArrayOp):
     def __new__(cls, array, backend='ocl'):
-        if backend == 'python':
-            cls.__call__ = cls.pure_python
-            return super(ArrayAdd, cls).__new__(cls, array, backend)
-        elif backend == 'ocl':
+        if backend == 'ocl':
             return ArrayOpLazy('+', array)
-        # TODO: Create HMException
-        raise Exception("Unsupported backend: {0}".format(backend))
+        return super(ArrayAdd, cls).__new__(cls, array, backend)
 
     def pure_python(self, input2):
         return Array(unique_name(), self.array + input2.data)
@@ -117,13 +125,9 @@ class ArrayAdd(ArrayOp):
 
 class ArraySub(ArrayOp):
     def __new__(cls, array, backend='ocl'):
-        if backend == 'python':
-            cls.__call__ = cls.pure_python
-            return super(ArraySub, cls).__new__(cls, array, backend)
-        elif backend == 'ocl':
+        if backend == 'ocl':
             return ArrayOpLazy('-', array)
-        # TODO: Create HMException
-        raise Exception("Unsupported backend: {0}".format(backend))
+        return super(ArraySub, cls).__new__(cls, array, backend)
 
     def pure_python(self, input2):
         return Array(unique_name(), self.array - input2.data)
@@ -131,13 +135,9 @@ class ArraySub(ArrayOp):
 
 class ArrayMul(ArrayOp):
     def __new__(cls, array, backend='ocl'):
-        if backend == 'python':
-            cls.__call__ = cls.pure_python
-            return super(ArrayMul, cls).__new__(cls, array, backend)
-        elif backend == 'ocl':
+        if backend == 'ocl':
             return ArrayOpLazy('*', array)
-        # TODO: Create HMException
-        raise Exception("Unsupported backend: {0}".format(backend))
+        return super(ArrayMul, cls).__new__(cls, array, backend)
 
     def pure_python(self, input2):
         return Array(unique_name(), self.array * input2.data)
@@ -145,13 +145,9 @@ class ArrayMul(ArrayOp):
 
 class ArrayDiv(ArrayOp):
     def __new__(cls, array, backend='ocl'):
-        if backend == 'python':
-            cls.__call__ = cls.pure_python
-            return super(ArrayDiv, cls).__new__(cls, array, backend)
-        elif backend == 'ocl':
+        if backend == 'ocl':
             return ArrayOpLazy('/', array)
-        # TODO: Create HMException
-        raise Exception("Unsupported backend: {0}".format(backend))
+        return super(ArrayDiv, cls).__new__(cls, array, backend)
 
     def pure_python(self, input2):
         return Array(unique_name(), self.array / input2.data)
