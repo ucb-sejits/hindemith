@@ -3,7 +3,7 @@ from ctypes import CFUNCTYPE, c_void_p
 from numpy import zeros, zeros_like
 import numpy as np
 from ctree.nodes import Project
-from teller.utils import unique_name, clamp
+from teller.utils import unique_name, clamp, UnsupportedBackendError
 from teller.operations.dense_linear_algebra.array_op import Array
 from pycl import clCreateCommandQueue, cl_mem, clGetDeviceIDs, clCreateContext, \
     buffer_from_ndarray, clEnqueueNDRangeKernel, buffer_to_ndarray, \
@@ -184,8 +184,9 @@ class WarpImg2D(object):
             return WarpImg2DLazyC(None)
         elif backend == 'ocl':
             return WarpImg2DLazyOcl(None)
-        # TODO: Create HMException
-        raise Exception("Unsupported backend: {0}".format(backend))
+        raise UnsupportedBackendError(
+            "Teller found an unsupported backend: {0}".format(backend)
+        )
 
     def pure_python(self, tex_Ix, u, v):
         raise NotImplementedError()

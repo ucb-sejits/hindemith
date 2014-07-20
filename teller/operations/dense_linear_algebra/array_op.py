@@ -7,7 +7,7 @@ from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from teller.types.common import HMType
-from teller.utils import unique_name
+from teller.utils import unique_name, UnsupportedBackendError
 
 __author__ = 'leonardtruong'
 
@@ -103,8 +103,9 @@ class ArrayOp(object):
         if backend == 'python':
             cls.__call__ = cls.pure_python
             return super(ArrayOp, cls).__new__(cls, array, backend)
-        # TODO: Create HMException
-        raise Exception("Unsupported backend: {0}".format(backend))
+        raise UnsupportedBackendError(
+            "Teller found an unsupported backend: {0}".format(backend)
+        )
 
     def __init__(self, array, backend):
         self.array = array

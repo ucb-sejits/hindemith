@@ -5,7 +5,7 @@ from teller.core import coercer, hm
 from teller.types.common import Float32, Int, Scalar
 from teller.operations.dense_linear_algebra.array_op import Array
 from teller.types.stencil import Stencil
-from teller.utils import unique_name
+from teller.utils import unique_name, UnsupportedTypeError
 
 __author__ = 'leonardtruong'
 
@@ -41,8 +41,8 @@ class TestCoercer(unittest.TestCase):
         self._check(array, Array)
 
     def test_not_support(self):
-        # TODO: This should throw a real Exception with a relevant message
-        self.assertRaises(NotImplementedError,  coercer, ('name', 'string'))
+        self.assertRaises(UnsupportedTypeError,  coercer, ('name', 'string'))
+
 
 class TestDecorator(unittest.TestCase):
     def test_dec(self):
