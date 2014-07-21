@@ -1,10 +1,10 @@
 import unittest
 from numpy import array, float32, int32
 import numpy
-from teller.core import coercer, fuse
-from teller.operations.dense_linear_algebra import Float32, Int, Scalar, Array
-from teller.types.stencil import Stencil
-from teller.utils import unique_name, UnsupportedTypeError
+from hindemith.core import coercer, fuse
+from hindemith.operations.dense_linear_algebra import Float32, Int, Scalar, Array
+from hindemith.types.stencil import Stencil
+from hindemith.utils import unique_name, UnsupportedTypeError
 
 __author__ = 'leonardtruong'
 
@@ -51,5 +51,22 @@ class TestDecorator(unittest.TestCase):
 
         a = test_func(arg=1)
         self.assertEqual(a.value, 1)
+
+    def test_fusion(self):
+        @fuse
+        def test_func(A=None, B=None, C=None):
+            D = A * B
+            E = C - D
+            return E
+
+        A = Array('A', numpy.random.rand(200, 200).astype(numpy.float32))
+        B = Array('B', numpy.random.rand(200, 200).astype(numpy.float32))
+        C = Array('C', numpy.random.rand(200, 200).astype(numpy.float32))
+        actual = test_func(A=A, B=B, C=C)
+        expected = C.data - (A.data * B.data)
+        try:
+            numpy.testing.assert_array_almost_equal(actual.data, expected, decimal=3)
+        except AssertionError as e:
+            self.fail("Outputs not equal: %s" % e.message)
 
 

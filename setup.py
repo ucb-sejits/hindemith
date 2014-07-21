@@ -3,7 +3,7 @@ __author__ = 'leonardtruong'
 from setuptools import setup, find_packages
 
 setup(
-    name='teller',
+    name='hindemith',
     version='0.0.1a',
     author = 'Leonard Truong',
     author_email = 'leonardtruong@berkeley.edu',

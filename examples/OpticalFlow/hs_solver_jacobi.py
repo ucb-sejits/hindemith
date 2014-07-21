@@ -1,5 +1,5 @@
 # from hindemith.hlib import *
-from teller.operations.optical_flow.warp_img2D import warp_img2d
+from hindemith.operations.optical_flow.warp_img2D import warp_img2d
 from optical_flow_solver import *
 from stencil_code.stencil_kernel import StencilKernel
 from numpy import *

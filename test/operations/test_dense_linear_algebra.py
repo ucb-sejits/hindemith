@@ -3,7 +3,7 @@ __author__ = 'leonardtruong'
 import unittest
 import numpy as np
 
-from teller.operations.dense_linear_algebra import ArrayAdd, ArrayMul, ArraySub, ArrayDiv, \
+from hindemith.operations.dense_linear_algebra import ArrayAdd, ArrayMul, ArraySub, ArrayDiv, \
     Array
 
 

@@ -1,9 +1,9 @@
 from numpy import zeros
 
 import logging
-from teller.core import *
-from teller.operations.optical_flow.pyr_down import pyr_down, pyr_down_fn
-from teller.operations.optical_flow.pyr_up import pyr_up
+from hindemith.core import *
+from hindemith.operations.optical_flow.pyr_down import pyr_down, pyr_down_fn
+from hindemith.operations.optical_flow.pyr_up import pyr_up
 
 logging.basicConfig(level=20)
 

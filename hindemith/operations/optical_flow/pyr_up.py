@@ -6,8 +6,8 @@ from ctree.c.nodes import SymbolRef, Constant
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from teller.utils import unique_name, clamp
-from teller.operations.dense_linear_algebra import Array
+from hindemith.utils import unique_name, clamp
+from hindemith.operations.dense_linear_algebra import Array
 
 __author__ = 'leonardtruong'
 

@@ -1,11 +1,11 @@
-from teller.operations.dense_linear_algebra import Array
+from hindemith.operations.dense_linear_algebra import Array
 
 __author__ = 'leonardtruong'
 
 import unittest
 import numpy as np
 
-from teller.operations.optical_flow.pyr_down import PyrDown
+from hindemith.operations.optical_flow.pyr_down import PyrDown
 
 
 class TestPyrDown(unittest.TestCase):

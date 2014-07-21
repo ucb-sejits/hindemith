@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# teller documentation build configuration file, created by
+# hindemith documentation build configuration file, created by
 # sphinx-quickstart on Thu Jul 17 18:07:05 2014.
 #
 # This file is execfile()d with the current directory set to its
@@ -49,7 +49,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'teller'
+project = u'hindemith'
 copyright = u'2014, Leonard Truong'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -202,7 +202,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-  ('index', 'teller.tex', u'teller Documentation',
+  ('index', 'hindemith.tex', u'hindemith Documentation',
    u'Leonard Truong', 'manual'),
 ]
 
@@ -232,7 +232,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'teller', u'teller Documentation',
+    ('index', 'hindemith', u'hindemith Documentation',
      [u'Leonard Truong'], 1)
 ]
 
@@ -246,8 +246,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-  ('index', 'teller', u'teller Documentation',
-   u'Leonard Truong', 'teller', 'One line description of project.',
+  ('index', 'hindemith', u'hindemith Documentation',
+   u'Leonard Truong', 'hindemith', 'One line description of project.',
    'Miscellaneous'),
 ]
 
@@ -267,13 +267,13 @@ texinfo_documents = [
 # -- Options for Epub output ----------------------------------------------
 
 # Bibliographic Dublin Core info.
-epub_title = u'teller'
+epub_title = u'hindemith'
 epub_author = u'Leonard Truong'
 epub_publisher = u'Leonard Truong'
 epub_copyright = u'2014, Leonard Truong'
 
 # The basename for the epub file. It defaults to the project name.
-#epub_basename = u'teller'
+#epub_basename = u'hindemith'
 
 # The HTML theme for the epub output. Since the default themes are not optimized
 # for small screen space, using the same theme for HTML and epub output is

@@ -6,3 +6,4 @@ omit =
     */docs/*
     */dependencies/*
     */examples/*
+    */ipython_notebooks/*
