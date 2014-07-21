@@ -7,7 +7,7 @@ from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from teller.utils import unique_name, clamp
-from teller.operations.dense_linear_algebra.array_op import Array
+from teller.operations.dense_linear_algebra import Array
 
 __author__ = 'leonardtruong'
 

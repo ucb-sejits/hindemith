@@ -10,6 +10,16 @@ def unique_name():
     return name
 
 
+kernelNameCnt = 0
+
+
+def unique_kernel_name():
+    global kernelNameCnt
+    name = '_kernel{0}'.format(kernelNameCnt)
+    kernelNameCnt += 1
+    return name
+
+
 def clamp(val, minimum, maximum):
     return max(minimum, min(val, maximum))
 
