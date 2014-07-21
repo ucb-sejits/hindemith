@@ -5,7 +5,7 @@ from docutils.parsers.rst.directives import body
 __author__ = 'leonardtruong'
 
 from _ctypes import sizeof, POINTER
-from numpy import zeros, array, zeros_like
+from numpy import zeros_like
 from numpy.ctypeslib import ndpointer
 from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
     clEnqueueNDRangeKernel, buffer_to_ndarray, clCreateProgramWithSource, clWaitForEvents
@@ -119,30 +119,19 @@ class ArrayOpLazy(LazySpecializedFunction):
             Assign(SymbolRef('element_id%d' % d, c_int()), get_global_id(d))
             for d in range(len(arg_cfg[0][2]))
         ])
+        index = StringTemplate('element_id1 * $len_x + element_id0', {'len_x': Constant(
+            arg_cfg[0][2][1])})
         defn.append(
             Assign(
-                ArrayRef(
-                    SymbolRef(params[-1].name),
-                    StringTemplate('element_id1 * $len_x + element_id0', {'len_x': Constant(
-                        arg_cfg[0][2][1])})
-                ),
+                ArrayRef(SymbolRef(params[-1].name), index),
                 tree(
-                    ArrayRef(
-                        SymbolRef(params[0].name),
-                        StringTemplate('element_id1 * $len_x + element_id0', {'len_x': Constant(
-                            arg_cfg[0][2][1])})
-                    ),
-                    ArrayRef(
-                        SymbolRef(params[1].name),
-                        StringTemplate('element_id1 * $len_x + element_id0', {'len_x': Constant(
-                            arg_cfg[0][2][1])})
-                    ),
+                    ArrayRef(SymbolRef(params[0].name), index),
+                    ArrayRef(SymbolRef(params[1].name), index),
                 )
             )
         )
         entry_point = unique_kernel_name()
         tree = FunctionDecl(None, entry_point, params, defn)
-        print(tree)
         tree.set_kernel()
         fn = ArrayOpConcrete(self.array, output_name)
         kernel = OclFile("kernel", [tree])
