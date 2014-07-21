@@ -24,7 +24,7 @@ defines['ne21'] = 1
 #defines['ne21'] = 1
 
 
-@hm
+@fuse
 def update_uv(u, v, du, dv, two, w, h):
     u = u + du
     v = v + dv
@@ -37,7 +37,7 @@ def update_uv(u, v, du, dv, two, w, h):
     return new_u, new_v
 
 
-@hm
+@fuse
 def update_uv_noresize(u, v, du, dv):
     new_u = u + du
     new_v = v + dv

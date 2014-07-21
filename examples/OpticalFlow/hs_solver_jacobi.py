@@ -5,7 +5,7 @@ from stencil_code.stencil_kernel import StencilKernel
 from numpy import *
 
 
-@hm
+@fuse
 def HornSchunckJacobiSolver(im1_data, im2_data, D, Gx, Gy, u, v, zero, one, lam2, num_iter):
     du = zero * u
     dv = zero * v

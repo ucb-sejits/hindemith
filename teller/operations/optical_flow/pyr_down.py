@@ -8,7 +8,7 @@ from ctree.c.nodes import SymbolRef, Constant, Assign, ArrayRef, Add, Div, Funct
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from teller.core import hm
+from teller.core import fuse
 from teller.utils import unique_name, unique_kernel_name
 from teller.operations.dense_linear_algebra import Array
 
@@ -137,6 +137,6 @@ class PyrDown(object):
 
 pyr_down = PyrDown()
 
-@hm
+@fuse
 def pyr_down_fn(im):
     return pyr_down(im)

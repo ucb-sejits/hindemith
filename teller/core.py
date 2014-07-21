@@ -28,11 +28,11 @@ def coercer(arg):
         raise UnsupportedTypeError("Teller found unsupported type: {0}".format(type(value)))
 
 
-def hm(fn):
-    def hm_fn(*args, **kwargs):
+def fuse(fn):
+    def fused_fn(*args, **kwargs):
         coerced_args = {}
         for name, value in map(coercer, kwargs.items()):
             coerced_args[name] = value
         return fn(**coerced_args)
-    return hm_fn
+    return fused_fn
 
