@@ -1,10 +1,12 @@
+from teller.operations.dense_linear_algebra import Array
+
 __author__ = 'leonardtruong'
 
 import unittest
 import numpy as np
 
 from teller.operations.optical_flow.warp_img2D import WarpImg2D
-from teller.operations.dense_linear_algebra.array_op import Array
+
 
 class TestWarpImg2D(unittest.TestCase):
     def test_simple_warp_img_2D(self):

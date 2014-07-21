@@ -2,8 +2,7 @@ import unittest
 from numpy import array, float32, int32
 import numpy
 from teller.core import coercer, hm
-from teller.types.common import Float32, Int, Scalar
-from teller.operations.dense_linear_algebra.array_op import Array
+from teller.operations.dense_linear_algebra import Float32, Int, Scalar, Array
 from teller.types.stencil import Stencil
 from teller.utils import unique_name, UnsupportedTypeError
 

@@ -3,7 +3,7 @@ __author__ = 'leonardtruong'
 import unittest
 import numpy as np
 
-from teller.operations.dense_linear_algebra.array_op import ArrayAdd, ArrayMul, ArraySub, ArrayDiv, \
+from teller.operations.dense_linear_algebra import ArrayAdd, ArrayMul, ArraySub, ArrayDiv, \
     Array
 
 
@@ -20,20 +20,20 @@ class TestArrayOps(unittest.TestCase):
             self.fail("Outputs not equal: %s" % e.message)
 
     def test_simple_array_add(self):
-        self._check(ArrayAdd(self.rand1.data, backend='ocl'),
-                    ArrayAdd(self.rand1.data, backend='python'))
+        self._check(ArrayAdd(self.rand1.name, self.rand1.data, backend='ocl'),
+                    ArrayAdd(self.rand1.name, self.rand1.data, backend='python'))
 
     def test_simple_array_sub(self):
-        self._check(ArraySub(self.rand1.data, backend='ocl'),
-                    ArraySub(self.rand1.data, backend='python'))
+        self._check(ArraySub(self.rand1.name, self.rand1.data, backend='ocl'),
+                    ArraySub(self.rand1.name, self.rand1.data, backend='python'))
 
     def test_simple_array_mul(self):
-        self._check(ArrayMul(self.rand1.data, backend='ocl'),
-                    ArrayMul(self.rand1.data, backend='python'))
+        self._check(ArrayMul(self.rand1.name, self.rand1.data, backend='ocl'),
+                    ArrayMul(self.rand1.name, self.rand1.data, backend='python'))
 
     def test_simple_array_div(self):
-        self._check(ArrayDiv(self.rand1.data, backend='ocl'),
-                    ArrayDiv(self.rand1.data, backend='python'))
+        self._check(ArrayDiv(self.rand1.name, self.rand1.data, backend='ocl'),
+                    ArrayDiv(self.rand1.name, self.rand1.data, backend='python'))
 
 
 class TestNativeArrayOps(unittest.TestCase):

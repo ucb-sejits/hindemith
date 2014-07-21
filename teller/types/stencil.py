@@ -1,7 +1,8 @@
+from teller.operations.dense_linear_algebra import Array
+
 __author__ = 'leonardtruong'
 
 from stencil_code.stencil_grid import StencilGrid
-from ..operations.dense_linear_algebra.array_op import Array
 from ..utils import unique_name
 
 

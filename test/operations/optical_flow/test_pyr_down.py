@@ -1,10 +1,12 @@
+from teller.operations.dense_linear_algebra import Array
+
 __author__ = 'leonardtruong'
 
 import unittest
 import numpy as np
 
 from teller.operations.optical_flow.pyr_down import PyrDown
-from teller.operations.dense_linear_algebra.array_op import Array
+
 
 class TestPyrDown(unittest.TestCase):
     def test_simple_pyr_down(self):
