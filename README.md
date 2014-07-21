@@ -1,3 +1,4 @@
+[![Stories in Ready](https://badge.waffle.io/ucb-sejits/hindemith.png?label=ready&title=Ready)](https://waffle.io/ucb-sejits/hindemith)
 # hindemith
 
 Hindemith is a python package containing a suite of high performance pattern specializers and a 
