@@ -1,8 +1,9 @@
 from _ctypes import sizeof
-from teller.operations.dense_linear_algebra import Float32, Int, Scalar, Array
-from teller.types.stencil import Stencil
+from ctree import get_ast
+from hindemith.operations.dense_linear_algebra import Float32, Int, Scalar, Array
+from hindemith.types.stencil import Stencil
 from numpy import ndarray
-from teller.utils import UnsupportedTypeError
+from hindemith.utils import UnsupportedTypeError
 
 __author__ = 'leonardtruong'
 

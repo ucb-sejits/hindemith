@@ -13,8 +13,8 @@ from ctree.c.nodes import SymbolRef, Constant, FunctionDecl, Assign, ArrayRef, A
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from teller.types.common import HMType
-from teller.utils import unique_name, UnsupportedBackendError, unique_kernel_name
+from hindemith.types.common import HMType
+from hindemith.utils import unique_name, UnsupportedBackendError, unique_kernel_name
 
 
 class Scalar(HMType):

@@ -1,11 +1,11 @@
-from teller.operations.dense_linear_algebra import Array
+from hindemith.operations.dense_linear_algebra import Array
 
 __author__ = 'leonardtruong'
 
 import unittest
 import numpy as np
 
-from teller.operations.optical_flow.warp_img2D import WarpImg2D
+from hindemith.operations.optical_flow.warp_img2D import WarpImg2D
 
 
 class TestWarpImg2D(unittest.TestCase):

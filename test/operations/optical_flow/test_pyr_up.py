@@ -1,11 +1,11 @@
-from teller.operations.dense_linear_algebra import Array
+from hindemith.operations.dense_linear_algebra import Array
 
 __author__ = 'leonardtruong'
 
 import unittest
 import numpy as np
 
-from teller.operations.optical_flow.pyr_up import PyrUp
+from hindemith.operations.optical_flow.pyr_up import PyrUp
 
 class TestPyrUp(unittest.TestCase):
     def test_simple_pyr_up(self):

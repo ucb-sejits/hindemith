@@ -3,8 +3,8 @@ from ctypes import CFUNCTYPE, c_void_p
 from numpy import zeros_like
 import numpy as np
 from ctree.nodes import Project
-from teller.utils import unique_name, clamp, UnsupportedBackendError
-from teller.operations.dense_linear_algebra import Array
+from hindemith.utils import unique_name, clamp, UnsupportedBackendError
+from hindemith.operations.dense_linear_algebra import Array
 from pycl import clCreateCommandQueue, cl_mem, clGetDeviceIDs, clCreateContext, \
     buffer_from_ndarray, clEnqueueNDRangeKernel, buffer_to_ndarray, \
     clCreateProgramWithSource, clWaitForEvents

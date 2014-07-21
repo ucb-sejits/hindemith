@@ -1,5 +1,5 @@
 import unittest
-from teller.utils import unique_name, clamp
+from hindemith.utils import unique_name, clamp
 
 __author__ = 'leonardtruong'
 
