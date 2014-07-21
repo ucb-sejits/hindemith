@@ -1,7 +1,7 @@
 import unittest
 from numpy import array, float32, int32
 import numpy
-from teller.core import coercer, hm
+from teller.core import coercer, fuse
 from teller.operations.dense_linear_algebra import Float32, Int, Scalar, Array
 from teller.types.stencil import Stencil
 from teller.utils import unique_name, UnsupportedTypeError
@@ -45,7 +45,7 @@ class TestCoercer(unittest.TestCase):
 
 class TestDecorator(unittest.TestCase):
     def test_dec(self):
-        @hm
+        @fuse
         def test_func(arg=None):
             return arg
 
