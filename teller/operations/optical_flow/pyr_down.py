@@ -1,13 +1,15 @@
-from _ctypes import sizeof
-from numpy import zeros, array, zeros_like
+from _ctypes import sizeof, POINTER
+from ctypes import c_float, c_int
+from ctree.ocl.macros import get_global_id
+from numpy import zeros_like
 from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
     clEnqueueNDRangeKernel, buffer_to_ndarray, clCreateProgramWithSource, clWaitForEvents
-from ctree.c.nodes import SymbolRef, Constant
+from ctree.c.nodes import SymbolRef, Constant, Assign, ArrayRef, Add, Div, FunctionDecl
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from teller.core import hm
-from teller.utils import unique_name
+from teller.utils import unique_name, unique_kernel_name
 from teller.operations.dense_linear_algebra import Array
 
 __author__ = 'leonardtruong'
@@ -45,34 +47,70 @@ class OclFunc(ConcreteSpecializedFunction):
 
 class PyrDownLazy(LazySpecializedFunction):
     def args_to_subconfig(self, args):
-        return tuple((arg.dtype, arg.shape) for arg in args)
+        return tuple((arg.name, arg.dtype, arg.shape) for arg in args)
 
     def transform(self, tree, program_config):
         #TODO: Have to flip indices, figure out why
         arg_cfg = program_config[0]
 
-        body = StringTemplate("""
-            void __kernel pyr_down(__global const $type* input, __global $type* output) {
-                int x = get_global_id(0);
-                int y = get_global_id(1);
-                output[y * $len_x + x] = (
-                    input[(y * 2) * $len_x + (x * 2)] +
-                    input[(y * 2) * $len_x + (x * 2 + 1)] +
-                    input[(y * 2 + 1) * $len_x + (x * 2 + 1)] +
-                    input[(y * 2 + 1) * $len_x + (x * 2)]
-                ) / 4.0;
-            }
-        """,
-                              {
-                                  'type': SymbolRef('float'),
-                                  'len_x': Constant(arg_cfg[0][1][1])
-                              }
+        input_name = arg_cfg[0][0]
+        output_name = unique_name()
+        params = [
+            SymbolRef(input_name, POINTER(c_float)(), _global=True, _const=True),
+            SymbolRef(output_name, POINTER(c_float)(), _global=True)
+        ]
+        defn = []
+        defn.extend([
+            Assign(SymbolRef('element_id%d' % d, c_int()), get_global_id(d))
+            for d in range(len(arg_cfg[0][2]))
+        ])
+        out_index = StringTemplate('element_id1 * $len_x + element_id0', {'len_x': Constant(
+            arg_cfg[0][2][1])})
+        defn.append(
+            Assign(
+                ArrayRef(SymbolRef(output_name), out_index),
+                Div(
+                    Add(
+                        ArrayRef(
+                            SymbolRef(input_name),
+                            StringTemplate('(element_id1 * 2) * $len_x + (element_id0 * 2)',
+                                           {'len_x': Constant(arg_cfg[0][2][1])})
+                        ),
+                        Add(
+                            ArrayRef(
+                                SymbolRef(input_name),
+                                StringTemplate('(element_id1 * 2) * $len_x + (element_id0 * 2 + 1)',
+                                               {'len_x': Constant(arg_cfg[0][2][1])})
+                            ),
+                            Add(
+                                ArrayRef(
+                                    SymbolRef(input_name),
+                                    StringTemplate('(element_id1 * 2 + 1) * $len_x + (element_id0 * 2 + 1)',
+                                                   {'len_x': Constant(arg_cfg[0][2][1])})
+                                ),
+                                Add(
+                                    ArrayRef(
+                                        SymbolRef(input_name),
+                                        StringTemplate('(element_id1 * 2 + 1) * $len_x + (element_id0 * 2)',
+                                                       {'len_x': Constant(arg_cfg[0][2][1])})
+                                    ),
+                                )
+                            )
+                        )
+                    ),
+                    Constant(4.0)
+                )
+            )
         )
+
+        entry_point = unique_kernel_name()
+        tree = FunctionDecl(None, entry_point, params, defn)
+        tree.set_kernel()
         fn = OclFunc()
-        kernel = OclFile("kernel", [body])
+        kernel = OclFile("kernel", [tree])
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
-        ptr = program['pyr_down']
-        return fn.finalize(ptr, (arg_cfg[0][1][1] / 2, arg_cfg[0][1][0] / 2))
+        ptr = program[entry_point]
+        return fn.finalize(ptr, (arg_cfg[0][2][1] / 2, arg_cfg[0][2][0] / 2))
 
 
 class PyrDown(object):
