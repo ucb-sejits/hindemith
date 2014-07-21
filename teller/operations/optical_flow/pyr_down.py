@@ -21,10 +21,11 @@ class OclFunc(ConcreteSpecializedFunction):
         self.context = clCreateContext([self.device])
         self.queue = clCreateCommandQueue(self.context)
 
-    def finalize(self, kernel, global_size):
+    def finalize(self, kernel, global_size, output_name):
         self.kernel = kernel
         self.kernel.argtypes = (cl_mem, cl_mem)
         self.global_size = global_size
+        self.output_name = output_name
         return self
 
     def __call__(self, im):
@@ -42,7 +43,7 @@ class OclFunc(ConcreteSpecializedFunction):
         evt.wait()
         _, evt = buffer_to_ndarray(self.queue, out_buf, output)
         evt.wait()
-        return Array(unique_name(), output)
+        return Array(self.output_name, output)
 
 
 class PyrDownLazy(LazySpecializedFunction):
@@ -110,7 +111,7 @@ class PyrDownLazy(LazySpecializedFunction):
         kernel = OclFile("kernel", [tree])
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
         ptr = program[entry_point]
-        return fn.finalize(ptr, (arg_cfg[0][2][1] / 2, arg_cfg[0][2][0] / 2))
+        return fn.finalize(ptr, (arg_cfg[0][2][1] / 2, arg_cfg[0][2][0] / 2), output_name)
 
 
 class PyrDown(object):
