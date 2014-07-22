@@ -20,17 +20,27 @@ def unique_kernel_name():
     return name
 
 
+pythonNameCnt = 0
+
+
+def unique_python_name():
+    global pythonNameCnt
+    name = '_python_func{0}'.format(pythonNameCnt)
+    pythonNameCnt += 1
+    return name
+
+
 def clamp(val, minimum, maximum):
     return max(minimum, min(val, maximum))
 
 
-class TellerException(Exception):
+class HindemithException(Exception):
     pass
 
 
-class UnsupportedBackendError(TellerException):
+class UnsupportedBackendError(HindemithException):
     pass
 
 
-class UnsupportedTypeError(TellerException):
+class UnsupportedTypeError(HindemithException):
     pass

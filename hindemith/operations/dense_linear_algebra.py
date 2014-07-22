@@ -139,6 +139,35 @@ class ArrayOpLazy(LazySpecializedFunction):
         ptr = program[entry_point]
         return fn.finalize(ptr, (arg_cfg[0][2][1], arg_cfg[0][2][0]))
 
+    def get_semantic_tree(self, arg, output_name):
+        params = [
+            SymbolRef(self.array_name, POINTER(c_float)(), _global=True, _const=True),
+            SymbolRef(arg.name, POINTER(c_float)(), _global=True, _const=True),
+            SymbolRef(output_name, POINTER(c_float)(), _global=True)
+        ]
+        defn = []
+        defn.extend([
+            Assign(SymbolRef('element_id%d' % d, c_int()), get_global_id(d))
+            for d in range(len(arg.data.shape))
+        ])
+        index = StringTemplate('element_id1 * $len_x + element_id0', {'len_x': Constant(
+            arg.data.shape[1])})
+        defn.append(
+            Assign(
+                ArrayRef(SymbolRef(params[-1].name), index),
+                Mul(
+                    ArrayRef(SymbolRef(params[0].name), index),
+                    ArrayRef(SymbolRef(params[1].name), index),
+                    )
+            )
+        )
+        entry_point = unique_kernel_name()
+        tree = FunctionDecl(None, entry_point, params, defn)
+        tree.set_kernel()
+        kernel = OclFile("kernel", [tree])
+        return kernel
+
+
 
 class ArrayOp(object):
     def __new__(cls, name, array, backend):
