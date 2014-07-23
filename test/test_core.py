@@ -80,7 +80,7 @@ class TestDecorator(unittest.TestCase):
         B = Array('B', numpy.random.rand(200, 200).astype(numpy.float32))
         C = Array('C', numpy.random.rand(200, 200).astype(numpy.float32))
         actual = test_func(A=A, B=B, C=C)
-        expected = C.data - (A.data * B.data)
+        expected = C.data + (A.data * B.data)
         try:
             numpy.testing.assert_array_almost_equal(actual.data, expected, decimal=3)
         except AssertionError as e:

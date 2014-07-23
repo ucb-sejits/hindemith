@@ -164,6 +164,10 @@ class BlockBuilder(ast.NodeTransformer):
         prev = self.get_specializer(previous.value)
         next = self.get_specializer(next_tree.value)
         if not prev or not next:
+            LOG.debug(
+                "Fusing failed because one of the operations is not a specializer: %s %s",
+                prev, next
+            )
             return
 
         fused_name = unique_python_name()
@@ -230,6 +234,7 @@ class BlockBuilder(ast.NodeTransformer):
         if specializer:
             output = specializer.generate_output(node.targets[0].id)
             self.symbol_table[output.name] = output
+            LOG.debug('Found specializer that returns type %s', type(output))
         node.value = self.visit(node.value)
         return node
 
