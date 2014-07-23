@@ -1,12 +1,15 @@
+from ctree.c.nodes import SymbolRef, Op
 from ctree.frontend import get_ast
 from ctree.jit import LazySpecializedFunction
+from numpy.ctypeslib import ct
 from hindemith.operations.dense_linear_algebra import Float32, Int, Scalar, \
-    Array
+    Array, ArrayOpConcrete
 from hindemith.types.stencil import Stencil
-from numpy import ndarray
-from hindemith.utils import UnsupportedTypeError, unique_python_name
+from numpy import ndarray, zeros, zeros_like
+from hindemith.utils import UnsupportedTypeError, unique_python_name, unique_name
 import ast
 import logging
+from pycl import clCreateProgramWithSource
 
 LOG = logging.getLogger('Hindemith')
 
@@ -38,9 +41,14 @@ def coercer(arg):
 
 def fuse(fn):
     def fused_fn(*args, **kwargs):
+        global symbol_table
         symbol_table = {}
+        arg_table = {}
+        a = []
         for name, value in map(coercer, kwargs.items()):
             symbol_table[name] = value
+            arg_table[name] = value
+            a.append(name)
         tree = get_ast(fn)
         blocks = tree.body[0].body
 
@@ -50,11 +58,29 @@ def fuse(fn):
         # init = [get_specializer(blocks[0], symbol_table)]
         decls.extend(tree.body[0].body)
         tree.body[0].body = decls
+        tree.body[0].decorator_list = []
+        tree.body.append(
+            ast.Assign(
+                [ast.Subscript(
+                            ast.Name('symbol_table', ast.Load()),
+                            ast.Index(ast.Str('E')),
+                            ast.Store())],
+                ast.Call(
+                    func=ast.Name('test_func', ast.Load()),
+                    args=[],
+                    keywords=[ast.keyword(arg, ast.Subscript(
+                            ast.Name('symbol_table', ast.Load()),
+                            ast.Index(ast.Str(arg)),
+                            ast.Load()))
+                            for arg in a]
+                )
+            )
+        )
         tree = ast.fix_missing_locations(tree)
-        # from ctree import browser_show_ast
-        # browser_show_ast(tree, 'tmp.png')
         exec(compile(tree, filename='', mode='exec')) in globals(), locals()
-        return fn(**symbol_table)
+        from ctree import browser_show_ast
+        browser_show_ast(tree, 'tmp.png')
+        return symbol_table['E']
     return fused_fn
 
 
@@ -67,6 +93,29 @@ def do_fusion(prev, next):
         return True
     else:
         return False
+
+
+class PromoteToRegister(ast.NodeTransformer):
+    def __init__(self, name, new_name, new_type):
+        super(PromoteToRegister, self).__init__()
+        self.target = name
+        self.new_target = new_name
+        self.new_type = new_type
+
+    def visit_FunctionDecl(self, node):
+        node.defn = list(map(self.visit, node.defn))
+        node.params = list(filter(lambda x: x.name != self.target, node.params))
+        node.defn.insert(0, SymbolRef(self.new_target, self.new_type))
+        return node
+
+    def visit_BinaryOp(self, node):
+        if isinstance(node.op, Op.ArrayRef):
+            if node.left.name == self.target:
+                return SymbolRef(self.new_target)
+
+        node.left = self.visit(node.left)
+        node.right = self.visit(node.right)
+        return node
 
 
 class BlockBuilder(ast.NodeTransformer):
@@ -118,10 +167,39 @@ class BlockBuilder(ast.NodeTransformer):
 
         fused_name = unique_python_name()
         fused = ast.Call(
-            func=ast.Name(fused_name, ast.Load()),
+            func=ast.Subscript(
+                            ast.Name('symbol_table', ast.Load()),
+                            ast.Index(ast.Str(fused_name)),
+                            ast.Load()),
             args=previous.value.args + [next_tree.value.func.value],
             keywords=[]
         )
+        list1 = prev.get_fusable_nodes(self.symbol_table[previous.value.args[0].id],
+                                      self.symbol_table[previous.targets[0].id].name)
+        list2 = next.get_fusable_nodes(self.symbol_table[next_tree.value.args[0].id],
+                                       self.symbol_table[next_tree.targets[0].id].name)
+
+        args = []
+        args.append(self.symbol_table[previous.value.args[0].id])
+        # args.append(self.symbol_table[previous.value.func.value.id])
+        args.append(self.symbol_table[next_tree.value.args[0].id])
+        args.append(self.symbol_table[next_tree.targets[0].id])
+        tree = list1[0]
+        kernel = tree.body[0]
+        tree2 = list2[0]
+        kernel2 = tree2.body[0]
+        kernel.params.extend(kernel2.params)
+        kernel.defn.append(kernel2.defn[-1])
+
+        PromoteToRegister('D', unique_name(), ct.c_float()).visit(kernel)
+        # tree.body.append(list2[0].body[0])
+        print(kernel)
+        fn = ArrayOpConcrete(self.symbol_table[previous.value.func.value.id].data,  args[-1].name)
+
+        program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
+        ptr = program[kernel.name]
+        func = fn.finalize(ptr, self.symbol_table[previous.value.func.value.id].data.shape)
+        self.symbol_table['_python_func0'] = func
         previous.value = ast.copy_location(fused, previous.value)
         previous.targets = next_tree.targets
         return True
@@ -141,6 +219,13 @@ class BlockBuilder(ast.NodeTransformer):
                 self.prev = None
             body.append(child)
         node.body = body
+        return node
+
+    def visit_Assign(self, node):
+        self.symbol_table[node.targets[0].id] = Array(
+            node.targets[0].id, zeros_like(self.symbol_table[node.value.args[0].id].data)
+        )
+        node.value = self.visit(node.value)
         return node
 
     # def visit_Call(self, node):

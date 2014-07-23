@@ -65,30 +65,42 @@ class ArrayOpConcrete(ConcreteSpecializedFunction):
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
-        self.kernel.argtypes = (cl_mem, cl_mem, cl_mem)
         self.global_size = global_size
         return self
 
-    def __call__(self, input2):
-        output = zeros_like(self.array)
+    def process_inputs(self, *args):
         events = []
-        in_buf1, in_evt = buffer_from_ndarray(self.queue, self.array, blocking=False)
-        events.append(in_evt)
-        self.kernel.setarg(0, in_buf1, sizeof(cl_mem))
-
-        in_buf2, in_evt = buffer_from_ndarray(self.queue, input2.data, blocking=False)
-        events.append(in_evt)
-        self.kernel.setarg(1, in_buf2, sizeof(cl_mem))
-
-        out_buf, out_evt = buffer_from_ndarray(self.queue, output, blocking=False)
-        events.append(out_evt)
-        self.kernel.setarg(2, out_buf, sizeof(cl_mem))
+        processed = []
+        self.kernel.argtypes = tuple(cl_mem for _ in args)
+        for index, arg in enumerate(args):
+            if isinstance(arg, Array):
+                print arg.name
+                arg = arg.data
+            buf, evt = buffer_from_ndarray(self.queue, arg, blocking=False)
+            processed.append(buf)
+            events.append(evt)
+            self.kernel.setarg(index, buf, sizeof(cl_mem))
         clWaitForEvents(*events)
+        return processed
+
+    def process_output(self, out_buf, output):
+        _, evt = buffer_to_ndarray(self.queue, out_buf, output.data)
+        evt.wait()
+        return output
+
+
+    def __call__(self, *args):
+        if len(args) == 2:
+            # FIXME: SO HACKY
+            output = zeros_like(self.array)
+            args += (Array('E', output),)
+        events = []
+        args = (self.array,) + args
+        bufs = self.process_inputs(*args)
+
         evt = clEnqueueNDRangeKernel(self.queue, self.kernel, self.global_size)
         evt.wait()
-        _, evt = buffer_to_ndarray(self.queue, out_buf, output)
-        evt.wait()
-        return Array(self.output_name, output)
+        return self.process_output(bufs[-1], args[-1])
 
 
 class ArrayOpLazy(LazySpecializedFunction):
@@ -96,6 +108,7 @@ class ArrayOpLazy(LazySpecializedFunction):
         super(ArrayOpLazy, self).__init__(tree)
         self.array = array
         self.array_name = name
+        self.fusable_nodes = []
 
     def args_to_subconfig(self, args):
         def process_arg(arg):
@@ -155,7 +168,7 @@ class ArrayOpLazy(LazySpecializedFunction):
         defn.append(
             Assign(
                 ArrayRef(SymbolRef(params[-1].name), index),
-                Mul(
+                self.original_tree(
                     ArrayRef(SymbolRef(params[0].name), index),
                     ArrayRef(SymbolRef(params[1].name), index),
                     )
@@ -167,6 +180,8 @@ class ArrayOpLazy(LazySpecializedFunction):
         kernel = OclFile("kernel", [tree])
         return kernel
 
+    def get_fusable_nodes(self, arg, output_name):
+        return [self.get_semantic_tree(arg, output_name)]
 
 
 class ArrayOp(object):
