@@ -43,7 +43,7 @@ class TestCoercer(unittest.TestCase):
         self.assertRaises(UnsupportedTypeError,  coercer, ('name', 'string'))
 
 
-class TestDecorator(unittest.TestCase):
+class TestFusion(unittest.TestCase):
     def test_dec(self):
         @fuse
         def test_func(arg=None):
@@ -51,6 +51,21 @@ class TestDecorator(unittest.TestCase):
 
         a = test_func(arg=1)
         self.assertEqual(a.value, 1)
+
+    def test_no_fusion(self):
+        @fuse
+        def test_func(A=None, B=None):
+            D = A * B
+            return D
+
+        A = Array('A', numpy.random.rand(200, 200).astype(numpy.float32))
+        B = Array('B', numpy.random.rand(200, 200).astype(numpy.float32))
+        actual = test_func(A=A, B=B)
+        expected = A.data * B.data
+        try:
+            numpy.testing.assert_array_almost_equal(actual.data, expected, decimal=3)
+        except AssertionError as e:
+            self.fail("Outputs not equal: %s" % e.message)
 
     def test_fusion_simple(self):
         @fuse
