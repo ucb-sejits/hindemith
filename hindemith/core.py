@@ -1,10 +1,10 @@
-from ctree import browser_show_ast
 from ctree.frontend import get_ast
 from ctree.jit import LazySpecializedFunction
-from hindemith.operations.dense_linear_algebra import Float32, Int, Scalar, Array
+from hindemith.operations.dense_linear_algebra import Float32, Int, Scalar, \
+    Array
 from hindemith.types.stencil import Stencil
 from numpy import ndarray
-from hindemith.utils import UnsupportedTypeError, unique_kernel_name, unique_python_name
+from hindemith.utils import UnsupportedTypeError, unique_python_name
 import ast
 import logging
 
@@ -31,7 +31,9 @@ def coercer(arg):
     elif isinstance(value, ndarray):
         return name, Array(name, value)
     else:
-        raise UnsupportedTypeError("Hindemith found unsupported type: {0}".format(type(value)))
+        raise UnsupportedTypeError(
+            "Hindemith found unsupported type: {0}".format(type(value))
+        )
 
 
 def fuse(fn):
@@ -46,25 +48,14 @@ def fuse(fn):
         decls = []
         BlockBuilder(symbol_table, decls).visit(tree)
         # init = [get_specializer(blocks[0], symbol_table)]
-        # fused_blocks = reduce(fuse_blocks_wrapper(symbol_table), blocks[1:], init)
         decls.extend(tree.body[0].body)
         tree.body[0].body = decls
         tree = ast.fix_missing_locations(tree)
-        browser_show_ast(tree, 'tmp.png')
+        # from ctree import browser_show_ast
+        # browser_show_ast(tree, 'tmp.png')
         exec(compile(tree, filename='', mode='exec')) in globals(), locals()
         return fn(**symbol_table)
     return fused_fn
-
-
-def fuse_blocks_wrapper(symbol_table):
-    def fuse_blocks(result, next):
-        prev = result[-1]
-        next = get_specializer(next, symbol_table)
-        if do_fusion(prev, next):
-            return result
-        else:
-            return result + [next]
-    return fuse_blocks
 
 
 def fusable(prev, next):
@@ -96,7 +87,9 @@ class BlockBuilder(ast.NodeTransformer):
 
     def get_specializer(self, node):
         if isinstance(node.func, ast.Attribute):
-            arg = getattr(self.symbol_table[node.func.value.id], node.func.attr)
+            arg = getattr(
+                self.symbol_table[node.func.value.id], node.func.attr
+            )
             name = ast.Str(node.func.value.id)
             attr = ast.Str(node.func.attr)
         else:
@@ -150,10 +143,10 @@ class BlockBuilder(ast.NodeTransformer):
         node.body = body
         return node
 
-
     # def visit_Call(self, node):
     #     if isinstance(node.func, ast.Attribute):
-    #         arg = getattr(self.symbol_table[node.func.value.id], node.func.attr)
+    #         arg = getattr(self.symbol_table[node.func.value.id],
+    #                       node.func.attr)
     #         name = ast.Str(node.func.value.id)
     #         attr = ast.Str(node.func.attr)
     #     else:
