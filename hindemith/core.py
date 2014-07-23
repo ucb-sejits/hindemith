@@ -15,6 +15,8 @@ LOG = logging.getLogger('Hindemith')
 
 __author__ = 'leonardtruong'
 
+logging.basicConfig(level=10)
+
 
 def coercer(arg):
     name, value = arg
@@ -193,7 +195,7 @@ class BlockBuilder(ast.NodeTransformer):
         PromoteToRegister('D', unique_name(), ct.c_float()).visit(kernel)
         # tree.body.append(list2[0].body[0])
         print(kernel)
-        fn = ArrayOpConcrete(self.symbol_table[previous.value.func.value.id].data,  args[-1].name)
+        fn = ArrayOpConcrete(self.symbol_table[previous.value.func.value.id].data,  args[-1])
 
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
         ptr = program[kernel.name]
@@ -207,9 +209,11 @@ class BlockBuilder(ast.NodeTransformer):
         body = []
         for child in node.body:
             result = self.visit(child)
+            # Currently only support fusing assign nodes
             if isinstance(result, ast.Assign):
                 if isinstance(result.value, ast.Call):
                     if self.prev:
+                        LOG.debug("Attempting fusion with %s, %s", self.prev, child)
                         if self.attempt_fusion(self.prev, child):
                             self.prev = child
                             continue
@@ -221,9 +225,11 @@ class BlockBuilder(ast.NodeTransformer):
         return node
 
     def visit_Assign(self, node):
-        self.symbol_table[node.targets[0].id] = Array(
-            node.targets[0].id, zeros_like(self.symbol_table[node.value.args[0].id].data)
-        )
+        LOG.debug('Found Assign node, attempting type inference.')
+        specializer = self.get_specializer(node.value)
+        if specializer:
+            output = specializer.generate_output(node.targets[0].id)
+            self.symbol_table[output.name] = output
         node.value = self.visit(node.value)
         return node
 

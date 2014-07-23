@@ -52,7 +52,7 @@ class TestDecorator(unittest.TestCase):
         a = test_func(arg=1)
         self.assertEqual(a.value, 1)
 
-    def test_fusion(self):
+    def test_fusion_simple(self):
         @fuse
         def test_func(A=None, B=None, C=None):
             D = A * B
@@ -69,4 +69,20 @@ class TestDecorator(unittest.TestCase):
         except AssertionError as e:
             self.fail("Outputs not equal: %s" % e.message)
 
+    def test_fusion_simple2(self):
+        @fuse
+        def test_func(A=None, B=None, C=None):
+            D = A * B
+            E = C + D
+            return E
+
+        A = Array('A', numpy.random.rand(200, 200).astype(numpy.float32))
+        B = Array('B', numpy.random.rand(200, 200).astype(numpy.float32))
+        C = Array('C', numpy.random.rand(200, 200).astype(numpy.float32))
+        actual = test_func(A=A, B=B, C=C)
+        expected = C.data - (A.data * B.data)
+        try:
+            numpy.testing.assert_array_almost_equal(actual.data, expected, decimal=3)
+        except AssertionError as e:
+            self.fail("Outputs not equal: %s" % e.message)
 

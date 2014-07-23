@@ -56,12 +56,12 @@ class Array(HMType):
 
 
 class ArrayOpConcrete(ConcreteSpecializedFunction):
-    def __init__(self, array, output_name):
+    def __init__(self, array, output):
         self.device = clGetDeviceIDs()[-1]
         self.context = clCreateContext([self.device])
         self.queue = clCreateCommandQueue(self.context)
         self.array = array
-        self.output_name = output_name
+        self.output = output
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
@@ -89,10 +89,7 @@ class ArrayOpConcrete(ConcreteSpecializedFunction):
 
 
     def __call__(self, *args):
-        output = zeros_like(self.array)
-        args += (Array('E', output),)
-        events = []
-        args = (self.array,) + args
+        args = (self.array,) + args + (self.output,)
         bufs = self.process_inputs(*args)
 
         evt = clEnqueueNDRangeKernel(self.queue, self.kernel, self.global_size)
@@ -143,7 +140,7 @@ class ArrayOpLazy(LazySpecializedFunction):
         entry_point = unique_kernel_name()
         tree = FunctionDecl(None, entry_point, params, defn)
         tree.set_kernel()
-        fn = ArrayOpConcrete(self.array, output_name)
+        fn = ArrayOpConcrete(self.array, self.generate_output(output_name))
         kernel = OclFile("kernel", [tree])
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
         ptr = program[entry_point]
@@ -179,6 +176,10 @@ class ArrayOpLazy(LazySpecializedFunction):
 
     def get_fusable_nodes(self, arg, output_name):
         return [self.get_semantic_tree(arg, output_name)]
+
+    def generate_output(self, name):
+        self.output = Array(name, zeros_like(self.array))
+        return self.output
 
 
 class ArrayOp(object):
