@@ -41,7 +41,6 @@ def coercer(arg):
 
 def fuse(fn):
     def fused_fn(*args, **kwargs):
-        global symbol_table
         symbol_table = {}
         arg_table = {}
         a = []
@@ -77,7 +76,7 @@ def fuse(fn):
             )
         )
         tree = ast.fix_missing_locations(tree)
-        exec(compile(tree, filename='', mode='exec')) in globals(), locals()
+        exec(compile(tree, filename='', mode='exec')) in locals()
         # from ctree import browser_show_ast
         # browser_show_ast(tree, 'tmp.png')
         return symbol_table['E']
@@ -228,49 +227,17 @@ class BlockBuilder(ast.NodeTransformer):
         node.value = self.visit(node.value)
         return node
 
-    # def visit_Call(self, node):
-    #     if isinstance(node.func, ast.Attribute):
-    #         arg = getattr(self.symbol_table[node.func.value.id],
-    #                       node.func.attr)
-    #         name = ast.Str(node.func.value.id)
-    #         attr = ast.Str(node.func.attr)
-    #     else:
-    #         name = ast.Str(node.func.id)
-    #         attr = None
-    #     expr = ast.Expression(
-    #         ast.Call(
-    #             func=ast.Attribute(
-    #                 value=ast.Name('self', ast.Load()),
-    #                 attr='is_specializer',
-    #                 ctx=ast.Load()
-    #             ),
-    #             args=[name, attr],
-    #             keywords=[]
-    #         )
-    #     )
-    #     ast.fix_missing_locations(expr)
-    #     exec(compile(expr, filename='', mode='eval')) in globals(), locals()
-    #
-    #     if self.result:
-    #         new_func = unique_kernel_name()
-    #         self.decls.append(ast.FunctionDef(
-    #             name=new_func,
-    #             args=ast.arguments(
-    #                 args=[],
-    #                 defaults=[]
-    #             ),
-    #             body=[ast.Expr(node)],
-    #             decorator_list=[]
-    #         ))
-    #         return ast.copy_location(ast.Call(
-    #             func=ast.Name(new_func, ast.Load()),
-    #             args=[],
-    #             keywords=[]
-    #         ), node)
-    #     return node
-
 
 class MagicMethodProcessor(ast.NodeTransformer):
+    """
+    Converts locations in a python AST where a magic method would be called to a Call node for
+    that magic method.
+
+    For example, ``a + b`` would become ``a.__add__(b)``.
+
+    By exposing references to these magic methods, we can check if they are subclasses of
+    LazySpecializedFunction.  If so, we can do further checks to determine their fusability.
+    """
     def __init__(self):
         self.result = False
 
