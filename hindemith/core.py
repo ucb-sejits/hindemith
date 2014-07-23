@@ -65,7 +65,7 @@ def fuse(fn):
                             ast.Index(ast.Str('E')),
                             ast.Store())],
                 ast.Call(
-                    func=ast.Name('test_func', ast.Load()),
+                    func=ast.Name(fn.__name__, ast.Load()),
                     args=[],
                     keywords=[ast.keyword(arg, ast.Subscript(
                             ast.Name('symbol_table', ast.Load()),
