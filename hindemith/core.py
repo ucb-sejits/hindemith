@@ -198,7 +198,7 @@ class BlockBuilder(ast.NodeTransformer):
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
         ptr = program[kernel.name]
         func = fn.finalize(ptr, self.symbol_table[previous.value.func.value.id].data.shape)
-        self.symbol_table['_python_func0'] = func
+        self.symbol_table[fused_name] = func
         previous.value = ast.copy_location(fused, previous.value)
         previous.targets = next_tree.targets
         return True
