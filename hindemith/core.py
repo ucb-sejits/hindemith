@@ -78,8 +78,8 @@ def fuse(fn):
         )
         tree = ast.fix_missing_locations(tree)
         exec(compile(tree, filename='', mode='exec')) in globals(), locals()
-        from ctree import browser_show_ast
-        browser_show_ast(tree, 'tmp.png')
+        # from ctree import browser_show_ast
+        # browser_show_ast(tree, 'tmp.png')
         return symbol_table['E']
     return fused_fn
 

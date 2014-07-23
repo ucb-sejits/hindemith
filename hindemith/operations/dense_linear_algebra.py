@@ -74,7 +74,6 @@ class ArrayOpConcrete(ConcreteSpecializedFunction):
         self.kernel.argtypes = tuple(cl_mem for _ in args)
         for index, arg in enumerate(args):
             if isinstance(arg, Array):
-                print arg.name
                 arg = arg.data
             buf, evt = buffer_from_ndarray(self.queue, arg, blocking=False)
             processed.append(buf)
@@ -90,10 +89,8 @@ class ArrayOpConcrete(ConcreteSpecializedFunction):
 
 
     def __call__(self, *args):
-        if len(args) == 2:
-            # FIXME: SO HACKY
-            output = zeros_like(self.array)
-            args += (Array('E', output),)
+        output = zeros_like(self.array)
+        args += (Array('E', output),)
         events = []
         args = (self.array,) + args
         bufs = self.process_inputs(*args)
