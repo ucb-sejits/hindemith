@@ -1,14 +1,13 @@
-from ctree import browser_show_ast
 from ctree.c.nodes import SymbolRef, Op
 from ctree.frontend import get_ast
 from ctree.jit import LazySpecializedFunction
 from numpy.ctypeslib import ct
 from hindemith.operations.dense_linear_algebra import Float32, Int, Scalar, \
     Array, ArrayOpConcrete
-from hindemith.operations.optical_flow import pyr_down
 from hindemith.types.stencil import Stencil
-from numpy import ndarray, zeros, zeros_like
-from hindemith.utils import UnsupportedTypeError, unique_python_name, unique_name
+from numpy import ndarray
+from hindemith.utils import UnsupportedTypeError, unique_python_name, \
+    unique_name
 import ast
 import logging
 from stencil_code.stencil_grid import StencilGrid
@@ -55,9 +54,9 @@ def fuse(fn):
             symbol_table[name] = value
             arg_table[name] = value
             a.append(name)
-        return fn(**arg_table)
         tree = get_ast(fn)
         blocks = tree.body[0].body
+        return fn(**arg_table)
 
         MagicMethodProcessor().visit(tree)
         decls = []
@@ -69,17 +68,17 @@ def fuse(fn):
         tree.body.append(
             ast.Assign(
                 [ast.Subscript(
-                            ast.Name('symbol_table', ast.Load()),
-                            ast.Index(ast.Str('E')),
-                            ast.Store())],
+                    ast.Name('symbol_table', ast.Load()),
+                    ast.Index(ast.Str('E')),
+                    ast.Store())],
                 ast.Call(
                     func=ast.Name(fn.__name__, ast.Load()),
                     args=[],
                     keywords=[ast.keyword(arg, ast.Subscript(
-                            ast.Name('symbol_table', ast.Load()),
-                            ast.Index(ast.Str(arg)),
-                            ast.Load()))
-                            for arg in a]
+                        ast.Name('symbol_table', ast.Load()),
+                        ast.Index(ast.Str(arg)),
+                        ast.Load()))
+                        for arg in a]
                 )
             )
         )
@@ -171,7 +170,8 @@ class BlockBuilder(ast.NodeTransformer):
         next = self.get_specializer(next_tree.value)
         if not prev or not next:
             LOG.debug(
-                "Fusing failed because one of the operations is not a specializer: %s %s",
+                "Fusing failed because one of the operations is not a \
+                 specializer: %s %s",
                 prev, next
             )
             return
@@ -179,16 +179,20 @@ class BlockBuilder(ast.NodeTransformer):
         fused_name = unique_python_name()
         fused = ast.Call(
             func=ast.Subscript(
-                            ast.Name('symbol_table', ast.Load()),
-                            ast.Index(ast.Str(fused_name)),
-                            ast.Load()),
+                ast.Name('symbol_table', ast.Load()),
+                ast.Index(ast.Str(fused_name)),
+                ast.Load()),
             args=previous.value.args + [next_tree.value.func.value],
             keywords=[]
         )
-        list1 = prev.get_fusable_nodes(self.symbol_table[previous.value.args[0].id],
-                                      self.symbol_table[previous.targets[0].id].name)
-        list2 = next.get_fusable_nodes(self.symbol_table[next_tree.value.args[0].id],
-                                       self.symbol_table[next_tree.targets[0].id].name)
+        list1 = prev.get_fusable_nodes(
+            self.symbol_table[previous.value.args[0].id],
+            self.symbol_table[previous.targets[0].id].name
+        )
+        list2 = next.get_fusable_nodes(
+            self.symbol_table[next_tree.value.args[0].id],
+            self.symbol_table[next_tree.targets[0].id].name
+        )
 
         args = []
         next.get_sources()
@@ -206,11 +210,17 @@ class BlockBuilder(ast.NodeTransformer):
         PromoteToRegister('D', unique_name(), ct.c_float()).visit(kernel)
         # tree.body.append(list2[0].body[0])
         print(kernel)
-        fn = ArrayOpConcrete(self.symbol_table[previous.value.func.value.id].data,  args[-1])
+        fn = ArrayOpConcrete(
+            self.symbol_table[previous.value.func.value.id].data, args[-1]
+        )
 
-        program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
+        program = clCreateProgramWithSource(
+            fn.context, kernel.codegen()
+        ).build()
         ptr = program[kernel.name]
-        func = fn.finalize(ptr, self.symbol_table[previous.value.func.value.id].data.shape)
+        func = fn.finalize(
+            ptr, self.symbol_table[previous.value.func.value.id].data.shape
+        )
         self.symbol_table[fused_name] = func
         previous.value = ast.copy_location(fused, previous.value)
         previous.targets = next_tree.targets
@@ -224,7 +234,8 @@ class BlockBuilder(ast.NodeTransformer):
             if isinstance(result, ast.Assign):
                 if isinstance(result.value, ast.Call):
                     if self.prev:
-                        LOG.debug("Attempting fusion with %s, %s", self.prev, child)
+                        LOG.debug("Attempting fusion with %s, %s",
+                                  self.prev, child)
                         if self.attempt_fusion(self.prev, child):
                             self.prev = child
                             continue
@@ -248,13 +259,14 @@ class BlockBuilder(ast.NodeTransformer):
 
 class MagicMethodProcessor(ast.NodeTransformer):
     """
-    Converts locations in a python AST where a magic method would be called to a Call node for
-    that magic method.
+    Converts locations in a python AST where a magic method would be called to a
+    Call node for that magic method.
 
     For example, ``a + b`` would become ``a.__add__(b)``.
 
-    By exposing references to these magic methods, we can check if they are subclasses of
-    LazySpecializedFunction.  If so, we can do further checks to determine their fusability.
+    By exposing references to these magic methods, we can check if they are
+    subclasses of LazySpecializedFunction.  If so, we can do further checks to
+    determine their fusability.
     """
     def __init__(self):
         self.result = False
