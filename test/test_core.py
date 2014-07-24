@@ -62,8 +62,8 @@ class TestFusion(unittest.TestCase):
             D = A * B
             return D
 
-        A = Array('A', numpy.random.rand(200, 200).astype(numpy.float32))
-        B = Array('B', numpy.random.rand(200, 200).astype(numpy.float32))
+        A = Array('A', numpy.random.rand(60, 60).astype(numpy.float32))
+        B = Array('B', numpy.random.rand(60, 60).astype(numpy.float32))
         actual = test_func(A=A, B=B)
         expected = A.data * B.data
         try:
@@ -80,9 +80,9 @@ class TestFusion(unittest.TestCase):
             E = C - D
             return E
 
-        A = Array('A', numpy.random.rand(200, 200).astype(numpy.float32))
-        B = Array('B', numpy.random.rand(200, 200).astype(numpy.float32))
-        C = Array('C', numpy.random.rand(200, 200).astype(numpy.float32))
+        A = Array('A', numpy.random.rand(60, 60).astype(numpy.float32))
+        B = Array('B', numpy.random.rand(60, 60).astype(numpy.float32))
+        C = Array('C', numpy.random.rand(60, 60).astype(numpy.float32))
         actual = test_func(A=A, B=B, C=C)
         expected = C.data - (A.data * B.data)
         try:
@@ -99,9 +99,9 @@ class TestFusion(unittest.TestCase):
             E = C + D
             return E
 
-        A = Array('A', numpy.random.rand(200, 200).astype(numpy.float32))
-        B = Array('B', numpy.random.rand(200, 200).astype(numpy.float32))
-        C = Array('C', numpy.random.rand(200, 200).astype(numpy.float32))
+        A = Array('A', numpy.random.rand(60, 60).astype(numpy.float32))
+        B = Array('B', numpy.random.rand(60, 60).astype(numpy.float32))
+        C = Array('C', numpy.random.rand(60, 60).astype(numpy.float32))
         actual = test_func(A=A, B=B, C=C)
         expected = C.data + (A.data * B.data)
         try:
