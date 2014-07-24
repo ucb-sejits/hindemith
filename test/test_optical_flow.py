@@ -1,5 +1,4 @@
 import unittest
-from stencil_code.stencil_grid import StencilGrid
 from stencil_code.stencil_kernel import StencilKernel
 
 from hindemith.core import fuse
@@ -7,11 +6,12 @@ from hindemith.utils import unique_name
 from hindemith.operations.optical_flow.pyr_down import pyr_down
 from hindemith.operations.optical_flow.pyr_up import pyr_up
 from hindemith.operations.optical_flow.warp_img2D import warp_img2d
-from hindemith.operations.dense_linear_algebra import Array, square, Float32
+from hindemith.operations.dense_linear_algebra import Array, Float32
 
 from numpy import random, float32, zeros, testing
 
 __author__ = 'leonardtruong'
+
 
 class Stencil1(StencilKernel):
     def __init__(self, backend='ocl'):
@@ -35,7 +35,7 @@ stencil1 = Stencil1().kernel
 class Stencil2(StencilKernel):
     def __init__(self, backend='ocl'):
         self.neighbor_definitions = [[(-1, -1), (1, -1), (1, 0), (0, 1)],
-                                    [(0, -1), (-1, 0), (-1, 1), (1, 1)]]
+                                     [(0, -1), (-1, 0), (-1, 1), (1, 1)]]
         super(Stencil2, self).__init__(backend)
 
     def kernel(self, input, output):
@@ -47,9 +47,11 @@ class Stencil2(StencilKernel):
 
 stencil2 = Stencil2().kernel
 
+
 def pyr_down_fn(im):
-    output =  pyr_down(Array(unique_name(), im))
+    output = pyr_down(Array(unique_name(), im))
     return output.data
+
 
 @fuse
 def hs_solver_jacobi(im1_data, im2_data, u, v, zero, one, lam2, num_iter):
@@ -151,8 +153,8 @@ def py_update_uv(u, v, du, dv, two, w, h):
 
 class TestOpticalFlow(unittest.TestCase):
     def test_optical_flow(self):
-        height = 120
-        width = 160
+        height = 60
+        width = 80
         im1 = random.rand(height, width).astype(float32)
         im2 = random.rand(height, width).astype(float32)
         u = zeros((height, width), dtype=float32)
