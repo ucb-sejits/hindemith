@@ -8,7 +8,6 @@ from ctree.c.nodes import SymbolRef, Constant, Assign, ArrayRef, Add, Div, Funct
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from hindemith.core import fuse
 from hindemith.utils import unique_name, unique_kernel_name
 from hindemith.operations.dense_linear_algebra import Array
 
@@ -137,6 +136,3 @@ class PyrDown(object):
 
 pyr_down = PyrDown()
 
-@fuse
-def pyr_down_fn(im):
-    return pyr_down(im)

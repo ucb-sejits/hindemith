@@ -28,6 +28,11 @@ class Scalar(HMType):
         print(type(other))
         raise NotImplementedError()
 
+    def __add__(self, other):
+        if isinstance(other, Array):
+            return Array(unique_name(), self.value + other.data)
+        print(type(other))
+        raise NotImplementedError()
 
 class Float32(Scalar):
     pass
@@ -237,4 +242,7 @@ class ArrayDiv(ArrayOp):
 
     def pure_python(self, input2):
         return Array(unique_name(), self.array / input2.data)
+
+def square(input):
+    return Array(unique_name(), input.data * input.data)
 

@@ -2,7 +2,8 @@ import unittest
 from numpy import array, float32, int32
 import numpy
 from hindemith.core import coercer, fuse
-from hindemith.operations.dense_linear_algebra import Float32, Int, Scalar, Array
+from hindemith.operations.dense_linear_algebra import Float32, Int, Scalar, \
+    Array
 from hindemith.types.stencil import Stencil
 from hindemith.utils import unique_name, UnsupportedTypeError
 
@@ -21,7 +22,10 @@ class TestCoercer(unittest.TestCase):
 
     def test_stencil(self):
         # TODO: This needs to be removed once stencils are reworked
-        data = array([1.0 / 12.0, 8.0 / 12.0, -8.0 / 12.0, -1.0 / 12.0], dtype=float32)
+        data = array(
+            [1.0 / 12.0, 8.0 / 12.0, -8.0 / 12.0, -1.0 / 12.0],
+            dtype=float32
+        )
         offx = array([-2, -1, 1, 2], dtype=int32)
         offy = array([0, 0, 0, 0], dtype=int32)
         stencil = Stencil(data, offx, offy)
@@ -63,7 +67,9 @@ class TestFusion(unittest.TestCase):
         actual = test_func(A=A, B=B)
         expected = A.data * B.data
         try:
-            numpy.testing.assert_array_almost_equal(actual.data, expected, decimal=3)
+            numpy.testing.assert_array_almost_equal(
+                actual.data, expected, decimal=3
+            )
         except AssertionError as e:
             self.fail("Outputs not equal: %s" % e.message)
 
@@ -80,7 +86,9 @@ class TestFusion(unittest.TestCase):
         actual = test_func(A=A, B=B, C=C)
         expected = C.data - (A.data * B.data)
         try:
-            numpy.testing.assert_array_almost_equal(actual.data, expected, decimal=3)
+            numpy.testing.assert_array_almost_equal(
+                actual.data, expected, decimal=3
+            )
         except AssertionError as e:
             self.fail("Outputs not equal: %s" % e.message)
 
@@ -97,7 +105,8 @@ class TestFusion(unittest.TestCase):
         actual = test_func(A=A, B=B, C=C)
         expected = C.data + (A.data * B.data)
         try:
-            numpy.testing.assert_array_almost_equal(actual.data, expected, decimal=3)
+            numpy.testing.assert_array_almost_equal(
+                actual.data, expected, decimal=3
+            )
         except AssertionError as e:
             self.fail("Outputs not equal: %s" % e.message)
-

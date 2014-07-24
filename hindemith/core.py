@@ -1,14 +1,17 @@
+from ctree import browser_show_ast
 from ctree.c.nodes import SymbolRef, Op
 from ctree.frontend import get_ast
 from ctree.jit import LazySpecializedFunction
 from numpy.ctypeslib import ct
 from hindemith.operations.dense_linear_algebra import Float32, Int, Scalar, \
     Array, ArrayOpConcrete
+from hindemith.operations.optical_flow import pyr_down
 from hindemith.types.stencil import Stencil
 from numpy import ndarray, zeros, zeros_like
 from hindemith.utils import UnsupportedTypeError, unique_python_name, unique_name
 import ast
 import logging
+from stencil_code.stencil_grid import StencilGrid
 from pycl import clCreateProgramWithSource
 
 LOG = logging.getLogger('Hindemith')
@@ -26,6 +29,8 @@ def coercer(arg):
         return name, Int(name, value)
     elif isinstance(value, Stencil):
         value.name = name
+        return name, value
+    elif isinstance(value, StencilGrid):
         return name, value
     elif isinstance(value, Array):
         value.name = name
@@ -50,6 +55,7 @@ def fuse(fn):
             symbol_table[name] = value
             arg_table[name] = value
             a.append(name)
+        return fn(**arg_table)
         tree = get_ast(fn)
         blocks = tree.body[0].body
 
@@ -185,6 +191,7 @@ class BlockBuilder(ast.NodeTransformer):
                                        self.symbol_table[next_tree.targets[0].id].name)
 
         args = []
+        next.get_sources()
         args.append(self.symbol_table[previous.value.args[0].id])
         # args.append(self.symbol_table[previous.value.func.value.id])
         args.append(self.symbol_table[next_tree.value.args[0].id])
