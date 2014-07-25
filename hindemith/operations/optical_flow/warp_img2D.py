@@ -192,36 +192,36 @@ class WarpImg2D(object):
     def pure_python(self, tex_Ix, u, v):
         raise NotImplementedError()
         # FIXME: This doesn't work due to python's casting being different than C
-        u = u.data
-        v = v.data
-        tex_Ix = tex_Ix.data
-        data = zeros_like(tex_Ix)
-        len_x = tex_Ix.shape[0]
-        len_y = tex_Ix.shape[1]
-        for x in range(len_x):
-            for y in range(len_y):
-                index = (x, y)
-                my_x = int(u[index])
-                my_y = int(v[index])
-                xfrac = u[index] - float(my_x)
-                yfrac = v[index] - float(my_y)
-                if u[index] < 0.0:
-                    my_x -= 1
-                    xfrac += 1.0
-                if v[index] < 0.0:
-                    my_y -= 1
-                    yfrac += 1.0
-                if x + my_x >= 0 and x + my_x + 1 < len_x and \
-                   y + my_y >= 0 and y + my_y + 1 < len_y:
-                    tmp = 0.0
-                    tmp += tex_Ix[(x + my_x, y + my_y)] * (1.0 - xfrac) * (1.0 - yfrac)
-                    tmp += tex_Ix[(x + my_x + 1, y + my_y)] * (xfrac) * (1.0 - yfrac)
-                    tmp += tex_Ix[(x + my_x, y + my_y + 1)] * (1.0 - xfrac) * (yfrac)
-                    tmp += tex_Ix[(x + my_x + 1, y + my_y + 1)] * (xfrac) * (yfrac)
-                    data[index] = tmp
-                else:
-                    data[index] = tex_Ix[(clamp(x + my_x, 0, len_x - 1),
-                                          clamp(y + my_y, 0, len_y - 1))]
-        return Array(unique_name(), data)
+        # u = u.data
+        # v = v.data
+        # tex_Ix = tex_Ix.data
+        # data = zeros_like(tex_Ix)
+        # len_x = tex_Ix.shape[0]
+        # len_y = tex_Ix.shape[1]
+        # for x in range(len_x):
+        #     for y in range(len_y):
+        #         index = (x, y)
+        #         my_x = int(u[index])
+        #         my_y = int(v[index])
+        #         xfrac = u[index] - float(my_x)
+        #         yfrac = v[index] - float(my_y)
+        #         if u[index] < 0.0:
+        #             my_x -= 1
+        #             xfrac += 1.0
+        #         if v[index] < 0.0:
+        #             my_y -= 1
+        #             yfrac += 1.0
+        #         if x + my_x >= 0 and x + my_x + 1 < len_x and \
+        #            y + my_y >= 0 and y + my_y + 1 < len_y:
+        #             tmp = 0.0
+        #             tmp += tex_Ix[(x + my_x, y + my_y)] * (1.0 - xfrac) * (1.0 - yfrac)
+        #             tmp += tex_Ix[(x + my_x + 1, y + my_y)] * (xfrac) * (1.0 - yfrac)
+        #             tmp += tex_Ix[(x + my_x, y + my_y + 1)] * (1.0 - xfrac) * (yfrac)
+        #             tmp += tex_Ix[(x + my_x + 1, y + my_y + 1)] * (xfrac) * (yfrac)
+        #             data[index] = tmp
+        #         else:
+        #             data[index] = tex_Ix[(clamp(x + my_x, 0, len_x - 1),
+        #                                   clamp(y + my_y, 0, len_y - 1))]
+        # return Array(unique_name(), data)
 
 warp_img2d = WarpImg2D()
