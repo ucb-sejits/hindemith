@@ -96,6 +96,7 @@ output[y * len_x + x] = temp
         ptr = program[entry_point]
         return fn.finalize(ptr, (len_x,len_y))
 
+
 class PyrUp(object):
     def __new__(cls, pure_python=False):
         if pure_python:
