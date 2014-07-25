@@ -52,7 +52,6 @@ def fuse(fn):
             symbol_table[name] = value
             arg_table[name] = value
             a.append(name)
-        return fn(**arg_table)
         tree = get_ast(fn)
         blocks = tree.body[0].body
 
@@ -66,17 +65,17 @@ def fuse(fn):
         tree.body.append(
             ast.Assign(
                 [ast.Subscript(
-                            ast.Name('symbol_table', ast.Load()),
-                            ast.Index(ast.Str('E')),
-                            ast.Store())],
+                    ast.Name('symbol_table', ast.Load()),
+                    ast.Index(ast.Str('E')),
+                    ast.Store())],
                 ast.Call(
                     func=ast.Name(fn.__name__, ast.Load()),
                     args=[],
                     keywords=[ast.keyword(arg, ast.Subscript(
-                            ast.Name('symbol_table', ast.Load()),
-                            ast.Index(ast.Str(arg)),
-                            ast.Load()))
-                            for arg in a]
+                        ast.Name('symbol_table', ast.Load()),
+                        ast.Index(ast.Str(arg)),
+                        ast.Load()))
+                        for arg in a]
                 )
             )
         )
@@ -188,7 +187,6 @@ class BlockBuilder(ast.NodeTransformer):
                                        self.symbol_table[next_tree.targets[0].id].name)
 
         args = []
-        next.get_sources()
         args.append(self.symbol_table[previous.value.args[0].id])
         # args.append(self.symbol_table[previous.value.func.value.id])
         args.append(self.symbol_table[next_tree.value.args[0].id])
