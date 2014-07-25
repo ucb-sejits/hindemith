@@ -16,7 +16,7 @@ from pycl import clCreateProgramWithSource
 LOG = logging.getLogger('Hindemith')
 
 __author__ = 'leonardtruong'
-em
+
 
 def coercer(arg):
     name, value = arg
