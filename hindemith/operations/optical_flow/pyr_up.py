@@ -8,7 +8,7 @@ from ctree.c.nodes import SymbolRef, Constant,FunctionDecl, Assign, ArrayRef, Ad
 from ctree.ocl.nodes import OclFile
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from hindemith.utils import unique_name, clamp, unique_kernel_name
-from hindemith.operations.dense_linear_algebra import Array
+from hindemith.types.common import Array
 from ctree.transformations import PyBasicConversions
 import ast
 __author__ = 'leonardtruong'

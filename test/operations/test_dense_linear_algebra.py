@@ -3,8 +3,9 @@ __author__ = 'leonardtruong'
 import unittest
 import numpy as np
 
-from hindemith.operations.dense_linear_algebra import ArrayAdd, ArrayMul, ArraySub, ArrayDiv, \
-    Array
+from hindemith.operations.dense_linear_algebra.array_op import ArrayAdd, ArrayMul, ArraySub, \
+    ArrayDiv
+from hindemith.types.common import Array
 
 
 class TestArrayOps(unittest.TestCase):

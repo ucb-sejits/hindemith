@@ -5,7 +5,6 @@ from ctree.jit import LazySpecializedFunction
 from numpy.ctypeslib import ct
 from hindemith.types.common import Float32, Int, Scalar, Array
 from hindemith.operations.dense_linear_algebra.array_op import ArrayOpConcrete
-from hindemith.operations.optical_flow import pyr_down
 from hindemith.types.stencil import Stencil
 from numpy import ndarray, zeros, zeros_like
 from hindemith.utils import UnsupportedTypeError, unique_python_name, unique_name

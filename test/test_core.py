@@ -2,7 +2,7 @@ import unittest
 from numpy import array, float32, int32
 import numpy
 from hindemith.core import coercer, fuse
-from hindemith.operations.dense_linear_algebra import Float32, Int, Scalar, Array
+from hindemith.types.common import Float32, Int, Scalar, Array
 from hindemith.types.stencil import Stencil
 from hindemith.utils import unique_name, UnsupportedTypeError
 
