@@ -166,7 +166,7 @@ class ArrayAdd(ArrayOp):
         return super(ArrayAdd, cls).__new__(cls, name, array, backend)
 
     def pure_python(self, input2):
-        return Array(unique_name(), self.array + input2.data)
+        return types.common.Array(unique_name(), self.array + input2.data)
 
 
 class ArraySub(ArrayOp):
@@ -176,7 +176,7 @@ class ArraySub(ArrayOp):
         return super(ArraySub, cls).__new__(cls, name, array, backend)
 
     def pure_python(self, input2):
-        return Array(unique_name(), self.array - input2.data)
+        return types.common.Array(unique_name(), self.array - input2.data)
 
 
 class ArrayMul(ArrayOp):
@@ -186,7 +186,7 @@ class ArrayMul(ArrayOp):
         return super(ArrayMul, cls).__new__(cls, name, array, backend)
 
     def pure_python(self, input2):
-        return Array(unique_name(), self.array * input2.data)
+        return types.common.Array(unique_name(), self.array * input2.data)
 
 
 class ArrayDiv(ArrayOp):
@@ -196,8 +196,8 @@ class ArrayDiv(ArrayOp):
         return super(ArrayDiv, cls).__new__(cls, name, array, backend)
 
     def pure_python(self, input2):
-        return Array(unique_name(), self.array / input2.data)
+        return types.common.Array(unique_name(), self.array / input2.data)
 
 
 def square(input):
-    return Array(unique_name(), input.data * input.data)
+    return types.common.Array(unique_name(), input.data * input.data)
