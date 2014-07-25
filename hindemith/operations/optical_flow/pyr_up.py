@@ -1,14 +1,16 @@
-from _ctypes import sizeof
+from ctypes import c_float, c_int
+from _ctypes import sizeof, POINTER
+from ctree.ocl.macros import get_global_id
 from numpy import zeros, zeros_like, array
 from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
     clEnqueueNDRangeKernel, buffer_to_ndarray, clCreateProgramWithSource
-from ctree.c.nodes import SymbolRef, Constant
+from ctree.c.nodes import SymbolRef, Constant,FunctionDecl, Assign, ArrayRef, Add, Sub, Mul, Div, FunctionCall
 from ctree.ocl.nodes import OclFile
-from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from hindemith.utils import unique_name, clamp
+from hindemith.utils import unique_name, clamp, unique_kernel_name
 from hindemith.operations.dense_linear_algebra import Array
-
+from ctree.transformations import PyBasicConversions
+import ast
 __author__ = 'leonardtruong'
 
 
@@ -46,47 +48,53 @@ class PyrUpLazy(LazySpecializedFunction):
 
     def transform(self, tree, program_config):
         arg_cfg = program_config[0]
-
-        body = StringTemplate("""
-            void __kernel pyr_up(__global const $type* input, __global $type* output) {
-                int x = get_global_id(0);
-                int y = get_global_id(1);
-                output[y * $len_x + x] = .5 * input[
-                        clamp(x/2, 0, ($len_x / 2) - 1) +
-                        clamp(y/2, 0, ($len_y / 2) - 1) * $len_x];
-                if (x & 0x1) {
-                    output[y * $len_x + x] += .25 * input[
-                        clamp(x/2 + 1, 0, ($len_x / 2) - 1) +
-                        clamp(y/2, 0, ($len_y /  2) - 1) * $len_x];
-                } else {
-                    output[y * $len_x + x] += .25 * input[
-                        clamp(x/2 - 1, 0, ($len_x / 2) - 1) +
-                        clamp(y/2, 0, ($len_y / 2) - 1) * $len_x];
-                }
-
-                if (y & 0x1) {
-                    output[y * $len_x + x] += .25 * input[
-                        clamp(x/2, 0, ($len_x / 2) - 1) +
-                        clamp(y/2 + 1, 0, ($len_y / 2) - 1) * $len_x];
-                } else {
-                    output[y * $len_x + x] += .25 * input[
-                        clamp(x/2, 0, ($len_x / 2) - 1) +
-                        clamp(y/2 - 1, 0, ($len_y / 2) - 1) * $len_x];
-                }
-            }
-        """,
-                              {
-                                  'type': SymbolRef('float'),
-                                  'len_x': Constant(arg_cfg[0][1][1]),
-                                  'len_y': Constant(arg_cfg[0][1][0])
-                              }
-        )
+        entry_point = unique_kernel_name()
+        ctypeObject = c_float()
+        ctype = c_float
+        len_x = arg_cfg[0][1][1]
+        len_y = arg_cfg[0][1][0]
+        output = unique_name()
+        params = [
+            SymbolRef("input", POINTER(ctype)(), _global=True, _const=True),
+            SymbolRef(output, POINTER(ctype)(), _global=True)
+        ]
+        defn = []
+        defn.extend([
+            Assign(SymbolRef('x',c_int()),get_global_id(0)),
+            Assign(SymbolRef('y',c_int()),get_global_id(1)),
+            Assign(SymbolRef('temp', ctypeObject),0),
+        ])
+        body = \
+"""
+temp = .5 * input[clamp(x/2, 0, (len_x / 2) - 1) + clamp(y/2, 0, (len_y / 2) - 1)*len_x]
+if (x & 0x1):
+    temp += .25 * input[clamp(x/2 + 1, 0, (len_x / 2) - 1) + clamp(y/2, 0, (len_y /  2) - 1) * len_x]
+else:
+    temp += .25 * input[clamp(x/2 - 1, 0, (len_x / 2) - 1) +clamp(y/2, 0, (len_y / 2) - 1) * len_x]
+if (y & 0x1):
+    temp += .25 * input[clamp(x/2, 0, (len_x / 2) - 1) + clamp(y/2 + 1, 0, (len_y / 2) - 1) * len_x]
+else:
+    temp += .25 * input[clamp(x/2, 0, (len_x / 2) - 1) + clamp(y/2 - 1, 0, (len_y / 2) - 1) * len_x]
+output[y * len_x + x] = temp
+"""
+        body = ast.parse(body).body
+        name_dict = {
+            'output': output
+        }
+        const_dict = {
+            'len_x': len_x,
+            'len_y': len_y,
+        }
+        transformation = PyBasicConversions(name_dict,const_dict)
+        for statement in body:
+            defn.append(transformation.visit(statement))
+        tree = FunctionDecl(None,entry_point,params,defn)
+        tree.set_kernel()
+        kernel = OclFile("kernel",[tree])
         fn = OclFunc2()
-        kernel = OclFile("kernel", [body])
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
-        ptr = program['pyr_up']
-        return fn.finalize(ptr, (arg_cfg[0][1][1], arg_cfg[0][1][0]))
-
+        ptr = program[entry_point]
+        return fn.finalize(ptr, (len_x,len_y))
 
 class PyrUp(object):
     def __new__(cls, pure_python=False):
@@ -118,4 +126,3 @@ class PyrUp(object):
         return Array(unique_name(), output)
 
 pyr_up = PyrUp()
-
