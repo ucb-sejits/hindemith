@@ -10,7 +10,7 @@ from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from hindemith.core import fuse
 from hindemith.utils import unique_name, unique_kernel_name
-from hindemith.operations.dense_linear_algebra import Array
+from hindemith.types.common import Array
 
 __author__ = 'leonardtruong'
 
