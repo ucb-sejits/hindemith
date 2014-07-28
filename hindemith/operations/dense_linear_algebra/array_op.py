@@ -61,6 +61,10 @@ class ArrayOpConcrete(ConcreteSpecializedFunction):
             del buf
         return result
 
+    def __del__(self):
+        del self.context
+        del self.queue
+
 
 class ArrayOpLazy(LazySpecializedFunction):
     def __init__(self, tree, name, array=None):

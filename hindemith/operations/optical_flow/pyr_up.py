@@ -44,6 +44,10 @@ class OclFunc2(ConcreteSpecializedFunction):
         del out_buf
         return Array(unique_name(), output)
 
+    def __del__(self):
+        del self.context
+        del self.queue
+
 
 class PyrUpLazy(LazySpecializedFunction):
     def args_to_subconfig(self, args):
