@@ -4,7 +4,7 @@ from ctree.ocl.macros import get_global_id
 from numpy import zeros_like
 from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, \
     cl_mem, buffer_from_ndarray, clEnqueueNDRangeKernel, buffer_to_ndarray, \
-    clCreateProgramWithSource, clReleaseMemObject
+    clCreateProgramWithSource
 from ctree.c.nodes import SymbolRef, FunctionDecl, Assign
 from ctree.ocl.nodes import OclFile
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
@@ -40,6 +40,8 @@ class OclFunc2(ConcreteSpecializedFunction):
         evt.wait()
         _, evt = buffer_to_ndarray(self.queue, out_buf, output)
         evt.wait()
+        del in_buf
+        del out_buf
         return Array(unique_name(), output)
 
 
