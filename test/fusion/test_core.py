@@ -53,9 +53,9 @@ class TestDecorator(unittest.TestCase):
             E = C - D
             return E
 
-        A = Array('A', numpy.random.rand(200, 200).astype(numpy.float32))
-        B = Array('B', numpy.random.rand(200, 200).astype(numpy.float32))
-        C = Array('C', numpy.random.rand(200, 200).astype(numpy.float32))
+        A = Array('A', numpy.random.rand(60, 60).astype(numpy.float32))
+        B = Array('B', numpy.random.rand(60, 60).astype(numpy.float32))
+        C = Array('C', numpy.random.rand(60, 60).astype(numpy.float32))
         actual = test_func(A=A, B=B, C=C)
         expected = C.data - (A.data * B.data)
         try:
@@ -139,10 +139,10 @@ class TestDecorator(unittest.TestCase):
                 dv = vbar - (Iy * num) / den
             return du, dv
 
-        im1 = numpy.random.rand(120, 80).astype(numpy.float32)
-        im2 = numpy.random.rand(120, 80).astype(numpy.float32)
-        u = numpy.zeros((120, 80), numpy.float32)
-        v = numpy.zeros((120, 80), numpy.float32)
+        im1 = numpy.random.rand(60, 40).astype(numpy.float32)
+        im2 = numpy.random.rand(60, 40).astype(numpy.float32)
+        u = numpy.zeros((60, 40), numpy.float32)
+        v = numpy.zeros((60, 40), numpy.float32)
         zero = 0.0
         alpha = 0.1
         lam2 = alpha ** 2
