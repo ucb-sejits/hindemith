@@ -24,7 +24,6 @@ def fuse(fn):
             symbol_table[name] = value
             arg_table[name] = value
             a.append(name)
-        return fn(**arg_table)
         tree = get_ast(fn)
         blocks = tree.body[0].body
 
@@ -102,12 +101,15 @@ class BlockBuilder(ast.NodeTransformer):
         self.prev = None
 
     def get_if_specializer(self, name, attr):
-        func = self.symbol_table[name]
-        if attr is not None:
-            func = getattr(func, attr)
-        if isinstance(func, LazySpecializedFunction):
-            self.result = func
-        else:
+        try:
+            func = self.symbol_table[name]
+            if attr is not None:
+                func = getattr(func, attr)
+            if isinstance(func, LazySpecializedFunction):
+                self.result = func
+            else:
+                self.result = None
+        except KeyError:
             self.result = None
 
     def get_specializer(self, node):
@@ -116,26 +118,17 @@ class BlockBuilder(ast.NodeTransformer):
                 arg = getattr(
                     self.symbol_table[node.func.value.id], node.func.attr
                 )
-                name = ast.Str(node.func.value.id)
-                attr = ast.Str(node.func.attr)
+                name = node.func.value.id
+                attr = node.func.attr
             else:
-                name = ast.Str(node.func.id)
+                name = node.func.id
                 attr = None
         else:
             return False
-        expr = ast.Expression(
-            ast.Call(
-                func=ast.Attribute(
-                    value=ast.Name('self', ast.Load()),
-                    attr='get_if_specializer',
-                    ctx=ast.Load()
-                ),
-                args=[name, attr],
-                keywords=[]
-            )
-        )
-        ast.fix_missing_locations(expr)
-        exec(compile(expr, filename='', mode='eval')) in globals(), locals()
+        eval("self.get_if_specializer('{0}', '{1}')".format(name, attr),
+             globals(),
+             dict(locals(), **self.symbol_table)
+             )
         return self.result
 
     def attempt_fusion(self, previous, next_tree):
