@@ -125,10 +125,10 @@ class BlockBuilder(ast.NodeTransformer):
         else:
             return False
         result = None
-        exec("result = self.get_if_specializer('{0}', '{1}')".format(name, attr),
-             globals(),
-             dict(locals(), **self.symbol_table)
-             )
+        exec(
+            "result = self.get_if_specializer('{0}', '{1}')".format(name, attr),
+            globals(), dict(locals(), **self.symbol_table)
+        )
         return result
 
     def attempt_fusion(self, previous, next_tree):
