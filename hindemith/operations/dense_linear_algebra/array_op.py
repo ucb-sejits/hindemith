@@ -1,6 +1,7 @@
 from _ctypes import sizeof, POINTER
 from ctypes import c_float, c_int
-from ctree.c.nodes import SymbolRef, Assign, Constant, ArrayRef, FunctionDecl, Add, Sub, Mul, Div
+from ctree.c.nodes import SymbolRef, Assign, Constant, ArrayRef, FunctionDecl, \
+    Add, Sub, Mul, Div
 from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
 from ctree.ocl.macros import get_global_id
 from ctree.ocl.nodes import OclFile
@@ -8,9 +9,11 @@ from ctree.templates.nodes import StringTemplate
 from numpy import zeros_like
 from numpy.ctypeslib import ndpointer
 import hindemith.types as types
-from hindemith.utils import unique_name, unique_kernel_name, UnsupportedBackendError
-from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
-    clWaitForEvents, buffer_to_ndarray, clEnqueueNDRangeKernel, clCreateProgramWithSource
+from hindemith.utils import unique_name, unique_kernel_name, \
+    UnsupportedBackendError
+from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, \
+    cl_mem, buffer_from_ndarray, clWaitForEvents, buffer_to_ndarray, \
+    clEnqueueNDRangeKernel, clCreateProgramWithSource
 
 __author__ = 'leonardtruong'
 
@@ -47,14 +50,16 @@ class ArrayOpConcrete(ConcreteSpecializedFunction):
         evt.wait()
         return output
 
-
     def __call__(self, *args):
         args = (self.array,) + args + (self.output,)
         bufs = self.process_inputs(*args)
 
         evt = clEnqueueNDRangeKernel(self.queue, self.kernel, self.global_size)
         evt.wait()
-        return self.process_output(bufs[-1], args[-1])
+        result = self.process_output(bufs[-1], args[-1])
+        for buf in bufs:
+            del buf
+        return result
 
 
 class ArrayOpLazy(LazySpecializedFunction):
@@ -67,18 +72,24 @@ class ArrayOpLazy(LazySpecializedFunction):
     def args_to_subconfig(self, args):
         def process_arg(arg):
             if isinstance(arg, types.common.Array):
-                return arg.name, ndpointer(arg.dtype, arg.data.ndim, arg.shape), arg.shape
+                return (
+                    arg.name,
+                    ndpointer(arg.dtype, arg.data.ndim, arg.shape),
+                    arg.shape
+                )
             elif isinstance(arg, types.common.Scalar):
                 return arg.name, type(arg.value)
         return tuple(map(process_arg, args))
 
     def transform(self, tree, program_config):
-        #TODO: Have to flip indices, figure out why
+        # TODO: Have to flip indices, figure out why
         arg_cfg, tune_cfg = program_config
         output_name = unique_name()
         params = [
-            SymbolRef(self.array_name, POINTER(c_float)(), _global=True, _const=True),
-            SymbolRef(arg_cfg[0][0], POINTER(c_float)(), _global=True, _const=True),
+            SymbolRef(self.array_name, POINTER(c_float)(), _global=True,
+                      _const=True),
+            SymbolRef(arg_cfg[0][0], POINTER(c_float)(), _global=True,
+                      _const=True),
             SymbolRef(output_name, POINTER(c_float)(), _global=True)
         ]
         defn = []
@@ -86,8 +97,8 @@ class ArrayOpLazy(LazySpecializedFunction):
             Assign(SymbolRef('element_id%d' % d, c_int()), get_global_id(d))
             for d in range(len(arg_cfg[0][2]))
         ])
-        index = StringTemplate('element_id1 * $len_x + element_id0', {'len_x': Constant(
-            arg_cfg[0][2][1])})
+        index = StringTemplate('element_id1 * $len_x + element_id0',
+                               {'len_x': Constant(arg_cfg[0][2][1])})
         defn.append(
             Assign(
                 ArrayRef(SymbolRef(params[-1].name), index),
@@ -102,13 +113,16 @@ class ArrayOpLazy(LazySpecializedFunction):
         tree.set_kernel()
         fn = ArrayOpConcrete(self.array, self.generate_output(output_name))
         kernel = OclFile("kernel", [tree])
-        program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
+        program = clCreateProgramWithSource(
+            fn.context, kernel.codegen()
+        ).build()
         ptr = program[entry_point]
         return fn.finalize(ptr, (arg_cfg[0][2][1], arg_cfg[0][2][0]))
 
     def get_semantic_tree(self, arg, output_name):
         params = [
-            SymbolRef(self.array_name, POINTER(c_float)(), _global=True, _const=True),
+            SymbolRef(self.array_name, POINTER(c_float)(), _global=True,
+                      _const=True),
             SymbolRef(arg.name, POINTER(c_float)(), _global=True, _const=True),
             SymbolRef(output_name, POINTER(c_float)(), _global=True)
         ]
@@ -117,8 +131,8 @@ class ArrayOpLazy(LazySpecializedFunction):
             Assign(SymbolRef('element_id%d' % d, c_int()), get_global_id(d))
             for d in range(len(arg.data.shape))
         ])
-        index = StringTemplate('element_id1 * $len_x + element_id0', {'len_x': Constant(
-            arg.data.shape[1])})
+        index = StringTemplate('element_id1 * $len_x + element_id0',
+                               {'len_x': Constant(arg.data.shape[1])})
         defn.append(
             Assign(
                 ArrayRef(SymbolRef(params[-1].name), index),
