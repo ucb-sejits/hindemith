@@ -97,7 +97,6 @@ class BlockBuilder(ast.NodeTransformer):
     def __init__(self, symbol_table, decls):
         self.symbol_table = symbol_table
         self.decls = decls
-        self.result = False
         self.prev = None
 
     def get_if_specializer(self, name, attr):
@@ -106,11 +105,11 @@ class BlockBuilder(ast.NodeTransformer):
             if attr is not None:
                 func = getattr(func, attr)
             if isinstance(func, LazySpecializedFunction):
-                self.result = func
+                return func
             else:
-                self.result = None
+                return None
         except KeyError:
-            self.result = None
+            return None
 
     def get_specializer(self, node):
         if hasattr(node, 'func'):
@@ -125,11 +124,12 @@ class BlockBuilder(ast.NodeTransformer):
                 attr = None
         else:
             return False
-        eval("self.get_if_specializer('{0}', '{1}')".format(name, attr),
+        result = None
+        exec("result = self.get_if_specializer('{0}', '{1}')".format(name, attr),
              globals(),
              dict(locals(), **self.symbol_table)
              )
-        return self.result
+        return result
 
     def attempt_fusion(self, previous, next_tree):
         prev = self.get_specializer(previous.value)
