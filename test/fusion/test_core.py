@@ -33,8 +33,8 @@ class StencilB(StencilKernel):
             for y in input.neighbors(x, 1):
                 output[x] = input[y] * .333333333
 
-stencil_a = StencilA(backend='omp').kernel
-stencil_b = StencilB(backend='omp').kernel
+stencil_a = StencilA(backend='c').kernel
+stencil_b = StencilB(backend='c').kernel
 
 
 class TestDecorator(unittest.TestCase):
