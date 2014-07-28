@@ -44,7 +44,7 @@ install:
   - cd ${TRAVIS_BUILD_DIR}
 
 script:
-  - nosetests --verbose --with-coverage --cover-package=teller --cover-erase
+  - nosetests --verbose --with-coverage --cover-package=hindemith --cover-erase
 
 after_success:
   # publish coverage report

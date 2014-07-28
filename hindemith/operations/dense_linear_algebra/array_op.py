@@ -1,94 +1,60 @@
-from ctypes import c_int, c_float
+from _ctypes import sizeof, POINTER
+from ctypes import c_float, c_int
+from ctree.c.nodes import SymbolRef, Assign, Constant, ArrayRef, FunctionDecl, Add, Sub, Mul, Div
+from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
 from ctree.ocl.macros import get_global_id
-from docutils.parsers.rst.directives import body
+from ctree.ocl.nodes import OclFile
+from ctree.templates.nodes import StringTemplate
+from numpy import zeros_like
+from numpy.ctypeslib import ndpointer
+import hindemith.types as types
+from hindemith.utils import unique_name, unique_kernel_name, UnsupportedBackendError
+from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
+    clWaitForEvents, buffer_to_ndarray, clEnqueueNDRangeKernel, clCreateProgramWithSource
 
 __author__ = 'leonardtruong'
 
-from _ctypes import sizeof, POINTER
-from numpy import zeros_like
-from numpy.ctypeslib import ndpointer
-from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
-    clEnqueueNDRangeKernel, buffer_to_ndarray, clCreateProgramWithSource, clWaitForEvents
-from ctree.c.nodes import SymbolRef, Constant, FunctionDecl, Assign, ArrayRef, Add, Sub, Mul, Div
-from ctree.ocl.nodes import OclFile
-from ctree.templates.nodes import StringTemplate
-from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from hindemith.types.common import HMType
-from hindemith.utils import unique_name, UnsupportedBackendError, unique_kernel_name
-
-
-class Scalar(HMType):
-    def __init__(self, name, value):
-        self.name = name
-        self.value = value
-
-    def __mul__(self, other):
-        if isinstance(other, Array):
-            return Array(unique_name(), self.value * other.data)
-        print(type(other))
-        raise NotImplementedError()
-
-
-class Float32(Scalar):
-    pass
-
-
-class Int(Scalar):
-    pass
-
-
-class Array(HMType):
-    def __new__(cls, name, data):
-        class ArrayInstance(cls):
-            def __new__(cls, *args, **kwargs):
-                return object.__new__(cls)
-
-            def __init__(self, name, data):
-                self.name = name
-                self.data = data
-                self.shape = data.shape
-                self.dtype = data.dtype
-        ArrayInstance.__add__ = ArrayAdd(name, data)
-        ArrayInstance.__sub__ = ArraySub(name, data)
-        ArrayInstance.__mul__ = ArrayMul(name, data)
-        ArrayInstance.__div__ = ArrayDiv(name, data)
-        return ArrayInstance(name, data)
-
 
 class ArrayOpConcrete(ConcreteSpecializedFunction):
-    def __init__(self, array, output_name):
+    def __init__(self, array, output):
         self.device = clGetDeviceIDs()[-1]
         self.context = clCreateContext([self.device])
         self.queue = clCreateCommandQueue(self.context)
         self.array = array
-        self.output_name = output_name
+        self.output = output
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
-        self.kernel.argtypes = (cl_mem, cl_mem, cl_mem)
         self.global_size = global_size
         return self
 
-    def __call__(self, input2):
-        output = zeros_like(self.array)
+    def process_inputs(self, *args):
         events = []
-        in_buf1, in_evt = buffer_from_ndarray(self.queue, self.array, blocking=False)
-        events.append(in_evt)
-        self.kernel.setarg(0, in_buf1, sizeof(cl_mem))
-
-        in_buf2, in_evt = buffer_from_ndarray(self.queue, input2.data, blocking=False)
-        events.append(in_evt)
-        self.kernel.setarg(1, in_buf2, sizeof(cl_mem))
-
-        out_buf, out_evt = buffer_from_ndarray(self.queue, output, blocking=False)
-        events.append(out_evt)
-        self.kernel.setarg(2, out_buf, sizeof(cl_mem))
+        processed = []
+        self.kernel.argtypes = tuple(cl_mem for _ in args)
+        for index, arg in enumerate(args):
+            if isinstance(arg, types.common.Array):
+                arg = arg.data
+            buf, evt = buffer_from_ndarray(self.queue, arg, blocking=False)
+            processed.append(buf)
+            events.append(evt)
+            self.kernel.setarg(index, buf, sizeof(cl_mem))
         clWaitForEvents(*events)
+        return processed
+
+    def process_output(self, out_buf, output):
+        _, evt = buffer_to_ndarray(self.queue, out_buf, output.data)
+        evt.wait()
+        return output
+
+
+    def __call__(self, *args):
+        args = (self.array,) + args + (self.output,)
+        bufs = self.process_inputs(*args)
+
         evt = clEnqueueNDRangeKernel(self.queue, self.kernel, self.global_size)
         evt.wait()
-        _, evt = buffer_to_ndarray(self.queue, out_buf, output)
-        evt.wait()
-        return Array(self.output_name, output)
+        return self.process_output(bufs[-1], args[-1])
 
 
 class ArrayOpLazy(LazySpecializedFunction):
@@ -96,12 +62,13 @@ class ArrayOpLazy(LazySpecializedFunction):
         super(ArrayOpLazy, self).__init__(tree)
         self.array = array
         self.array_name = name
+        self.fusable_nodes = []
 
     def args_to_subconfig(self, args):
         def process_arg(arg):
-            if isinstance(arg, Array):
+            if isinstance(arg, types.common.Array):
                 return arg.name, ndpointer(arg.dtype, arg.data.ndim, arg.shape), arg.shape
-            elif isinstance(arg, Scalar):
+            elif isinstance(arg, types.common.Scalar):
                 return arg.name, type(arg.value)
         return tuple(map(process_arg, args))
 
@@ -133,11 +100,46 @@ class ArrayOpLazy(LazySpecializedFunction):
         entry_point = unique_kernel_name()
         tree = FunctionDecl(None, entry_point, params, defn)
         tree.set_kernel()
-        fn = ArrayOpConcrete(self.array, output_name)
+        fn = ArrayOpConcrete(self.array, self.generate_output(output_name))
         kernel = OclFile("kernel", [tree])
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
         ptr = program[entry_point]
         return fn.finalize(ptr, (arg_cfg[0][2][1], arg_cfg[0][2][0]))
+
+    def get_semantic_tree(self, arg, output_name):
+        params = [
+            SymbolRef(self.array_name, POINTER(c_float)(), _global=True, _const=True),
+            SymbolRef(arg.name, POINTER(c_float)(), _global=True, _const=True),
+            SymbolRef(output_name, POINTER(c_float)(), _global=True)
+        ]
+        defn = []
+        defn.extend([
+            Assign(SymbolRef('element_id%d' % d, c_int()), get_global_id(d))
+            for d in range(len(arg.data.shape))
+        ])
+        index = StringTemplate('element_id1 * $len_x + element_id0', {'len_x': Constant(
+            arg.data.shape[1])})
+        defn.append(
+            Assign(
+                ArrayRef(SymbolRef(params[-1].name), index),
+                self.original_tree(
+                    ArrayRef(SymbolRef(params[0].name), index),
+                    ArrayRef(SymbolRef(params[1].name), index),
+                    )
+            )
+        )
+        entry_point = unique_kernel_name()
+        tree = FunctionDecl(None, entry_point, params, defn)
+        tree.set_kernel()
+        kernel = OclFile("kernel", [tree])
+        return kernel
+
+    def get_fusable_nodes(self, arg, output_name):
+        return [self.get_semantic_tree(arg, output_name)]
+
+    def generate_output(self, name):
+        self.output = types.common.Array(name, zeros_like(self.array))
+        return self.output
 
 
 class ArrayOp(object):
@@ -164,7 +166,7 @@ class ArrayAdd(ArrayOp):
         return super(ArrayAdd, cls).__new__(cls, name, array, backend)
 
     def pure_python(self, input2):
-        return Array(unique_name(), self.array + input2.data)
+        return types.common.Array(unique_name(), self.array + input2.data)
 
 
 class ArraySub(ArrayOp):
@@ -174,7 +176,7 @@ class ArraySub(ArrayOp):
         return super(ArraySub, cls).__new__(cls, name, array, backend)
 
     def pure_python(self, input2):
-        return Array(unique_name(), self.array - input2.data)
+        return types.common.Array(unique_name(), self.array - input2.data)
 
 
 class ArrayMul(ArrayOp):
@@ -184,7 +186,7 @@ class ArrayMul(ArrayOp):
         return super(ArrayMul, cls).__new__(cls, name, array, backend)
 
     def pure_python(self, input2):
-        return Array(unique_name(), self.array * input2.data)
+        return types.common.Array(unique_name(), self.array * input2.data)
 
 
 class ArrayDiv(ArrayOp):
@@ -194,5 +196,8 @@ class ArrayDiv(ArrayOp):
         return super(ArrayDiv, cls).__new__(cls, name, array, backend)
 
     def pure_python(self, input2):
-        return Array(unique_name(), self.array / input2.data)
+        return types.common.Array(unique_name(), self.array / input2.data)
 
+
+def square(input):
+    return types.common.Array(unique_name(), input.data * input.data)
