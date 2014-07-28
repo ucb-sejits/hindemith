@@ -45,6 +45,10 @@ class OclFunc(ConcreteSpecializedFunction):
         evt.wait()
         return Array(self.output_name, output)
 
+    def __del__(self):
+        del self.context
+        del self.queue
+
 
 class PyrDownLazy(LazySpecializedFunction):
     def args_to_subconfig(self, args):
