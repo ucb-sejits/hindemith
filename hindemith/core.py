@@ -1,9 +1,11 @@
-from _ctypes import sizeof
-from ctree import get_ast
-from hindemith.operations.dense_linear_algebra import Float32, Int, Scalar, Array
+from hindemith.types.common import Float32, Int, Scalar, Array
 from hindemith.types.stencil import Stencil
-from numpy import ndarray
 from hindemith.utils import UnsupportedTypeError
+from numpy import ndarray
+from stencil_code.stencil_grid import StencilGrid
+
+import logging
+LOG = logging.getLogger('Hindemith')
 
 __author__ = 'leonardtruong'
 
@@ -17,6 +19,8 @@ def coercer(arg):
     elif isinstance(value, Stencil):
         value.name = name
         return name, value
+    elif isinstance(value, StencilGrid):
+        return name, value
     elif isinstance(value, Array):
         value.name = name
         return name, value
@@ -26,14 +30,6 @@ def coercer(arg):
     elif isinstance(value, ndarray):
         return name, Array(name, value)
     else:
-        raise UnsupportedTypeError("Teller found unsupported type: {0}".format(type(value)))
-
-
-def fuse(fn):
-    def fused_fn(*args, **kwargs):
-        coerced_args = {}
-        for name, value in map(coercer, kwargs.items()):
-            coerced_args[name] = value
-        return fn(**coerced_args)
-    return fused_fn
-
+        raise UnsupportedTypeError(
+            "Hindemith found unsupported type: {0}".format(type(value))
+        )
