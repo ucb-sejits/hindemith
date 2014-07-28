@@ -8,7 +8,7 @@ from ctree.c.nodes import SymbolRef, Constant, Assign, ArrayRef, Add, Div, Funct
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from hindemith.core import fuse
+from hindemith.fusion.core import fuse
 from hindemith.utils import unique_name, unique_kernel_name
 from hindemith.types.common import Array
 
