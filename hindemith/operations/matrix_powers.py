@@ -79,7 +79,7 @@ class MatrixPowersLazy(LazySpecializedFunction):
         call_args = program_config[0]
 
         base_size = call_args.base_shape[0] * call_args.base_shape[1]
-        border = 1
+        border = 0
 
         body = StringTemplate("""
             void __kernel matrix_powers_copy_base_layer(__global const $type* input, __global $type* output) {
@@ -94,19 +94,19 @@ class MatrixPowersLazy(LazySpecializedFunction):
 
                 matrix[(power+1) * $base_size + y * $len_x + x] =
                     0.1f * matrix[
-                        power * $base_size + clamp(y-1, $border, $len_y-$border) * $len_x +  clamp(x, $border, $len_x-$border)
+                        power * $base_size + clamp(y-1, $border, $len_y-$border-1) * $len_x +  clamp(x, $border, $len_x-$border-1)
                     ] +
                     0.1f * matrix[
-                        power * $base_size + clamp(y+1, $border, $len_y-$border) * $len_x +  clamp(x, $border, $len_x-$border)
+                        power * $base_size + clamp(y+1, $border, $len_y-$border-1) * $len_x +  clamp(x, $border, $len_x-$border-1)
                     ] +
                     0.4f * matrix[
-                        power * $base_size + clamp(y, $border, $len_y-$border) * $len_x +  clamp(x-1, $border, $len_x-$border)
+                        power * $base_size + clamp(y, $border, $len_y-$border-1) * $len_x +  clamp(x-1, $border, $len_x-$border-1)
                     ] +
                     0.4f * matrix[
-                        power * $base_size + clamp(y, $border, $len_y-$border) * $len_x +  clamp(x+1, $border, $len_x-$border)
+                        power * $base_size + clamp(y, $border, $len_y-$border-1) * $len_x +  clamp(x+1, $border, $len_x-$border-1)
                     ] +
                     1.0f * matrix[
-                        power * $base_size + clamp(y, $border, $len_y-$border) * $len_x +  clamp(x, $border, $len_x-$border)
+                        power * $base_size + clamp(y, $border, $len_y-$border-1) * $len_x +  clamp(x, $border, $len_x-$border-1)
                     ];
             }
         """, {
@@ -170,7 +170,7 @@ class MatrixPowers(object):
             return MatrixPowersLazy(None)
 
     def pure_python(self, source, destination):
-        border = 1
+        border = 2
         depth, height, width = destination.shape
         wb = width - border - 1
         hb = height - border - 1
