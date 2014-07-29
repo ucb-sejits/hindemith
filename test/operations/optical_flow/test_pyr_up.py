@@ -1,4 +1,4 @@
-from hindemith.operations.dense_linear_algebra import Array
+from hindemith.types.common import Array
 
 __author__ = 'leonardtruong'
 

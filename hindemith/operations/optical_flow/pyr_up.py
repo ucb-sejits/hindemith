@@ -8,7 +8,7 @@ from ctree.c.nodes import SymbolRef, Constant,FunctionDecl, Assign, ArrayRef, Ad
 from ctree.ocl.nodes import OclFile
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from hindemith.utils import unique_name, clamp, unique_kernel_name
-from hindemith.operations.dense_linear_algebra import Array
+from hindemith.types.common import Array
 from ctree.transformations import PyBasicConversions
 import ast
 __author__ = 'leonardtruong'
@@ -38,7 +38,13 @@ class OclFunc2(ConcreteSpecializedFunction):
         evt.wait()
         _, evt = buffer_to_ndarray(self.queue, out_buf, output)
         evt.wait()
+        del in_buf
+        del out_buf
         return Array(unique_name(), output)
+
+    def __del__(self):
+        del self.context
+        del self.queue
 
 
 class PyrUpLazy(LazySpecializedFunction):
@@ -59,9 +65,9 @@ class PyrUpLazy(LazySpecializedFunction):
         ]
         defn = []
         defn.extend([
-            Assign(SymbolRef('x',c_int()),get_global_id(0)),
-            Assign(SymbolRef('y',c_int()),get_global_id(1)),
-            Assign(SymbolRef('temp', ctypeObject),0),
+            Assign(SymbolRef('x', c_int()), get_global_id(0)),
+            Assign(SymbolRef('y', c_int()), get_global_id(1)),
+            Assign(SymbolRef('temp', ctypeObject), 0),
         ])
         body = \
 """
@@ -94,7 +100,7 @@ output[x * len_y + y] = temp
         print kernel
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
         ptr = program[entry_point]
-        return fn.finalize(ptr, (len_x,len_y))
+        return fn.finalize(ptr, (len_x, len_y))
 
 class PyrUp(object):
     def __new__(cls, pure_python=False):
@@ -109,20 +115,30 @@ class PyrUp(object):
         output = zeros_like(im)
         for x in range(im.shape[0]):
             for y in range(im.shape[1]):
-                output[(x, y)] = .5 * im[(clamp(int(x/2),0, im.shape[0] / 2 - 1),
-                                          clamp(int((y/2)), 0, im.shape[1] / 2 - 1))]
+                output[(x, y)] = .5 * im[(
+                    clamp(int(x/2), 0, im.shape[0] / 2 - 1),
+                    clamp(int((y/2)), 0, im.shape[1] / 2 - 1)
+                )]
                 if x & 0x1:  # if x is odd
-                    output[(x, y)] += .25 * im[(clamp(int(x/2 + 1),0, im.shape[0] / 2 - 1),
-                                                clamp(int((y/2)), 0, im.shape[1] / 2 - 1))]
+                    output[(x, y)] += .25 * im[(
+                        clamp(int(x/2 + 1), 0, im.shape[0] / 2 - 1),
+                        clamp(int((y/2)), 0, im.shape[1] / 2 - 1)
+                    )]
                 else:
-                    output[(x, y)] += .25 * im[(clamp(int(x/2 - 1),0, im.shape[0] / 2 - 1),
-                                                clamp(int((y/2)), 0, im.shape[1] / 2 - 1))]
+                    output[(x, y)] += .25 * im[(
+                        clamp(int(x/2 - 1), 0, im.shape[0] / 2 - 1),
+                        clamp(int((y/2)), 0, im.shape[1] / 2 - 1)
+                    )]
                 if y & 0x1:  # if y is odd
-                    output[(x, y)] += .25 * im[(clamp(int(x/2),0, im.shape[0] / 2 - 1),
-                                                clamp(int((y/2 + 1)), 0, im.shape[1] / 2 - 1))]
+                    output[(x, y)] += .25 * im[(
+                        clamp(int(x/2), 0, im.shape[0] / 2 - 1),
+                        clamp(int((y/2 + 1)), 0, im.shape[1] / 2 - 1)
+                    )]
                 else:
-                    output[(x, y)] += .25 * im[(clamp(int(x/2),0, im.shape[0] / 2 - 1),
-                                                clamp(int((y/2 - 1)), 0, im.shape[1] / 2 - 1))]
+                    output[(x, y)] += .25 * im[(
+                        clamp(int(x/2), 0, im.shape[0] / 2 - 1),
+                        clamp(int((y/2 - 1)), 0, im.shape[1] / 2 - 1)
+                    )]
         return Array(unique_name(), output)
 
 pyr_up = PyrUp()
