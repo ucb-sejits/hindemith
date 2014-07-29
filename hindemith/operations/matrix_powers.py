@@ -1,7 +1,7 @@
 __author__ = 'chick'
 
 from _ctypes import sizeof
-from numpy import zeros, zeros_like, array
+import numpy as np
 from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
     clEnqueueNDRangeKernel, buffer_to_ndarray, clCreateProgramWithSource, clCreateBuffer, cl_int
 from ctree.c.nodes import SymbolRef, Constant
@@ -31,7 +31,7 @@ class OclMatrixPowers(ConcreteSpecializedFunction):
 
     def __call__(self, im, num_powers, border):
         out_shape = [num_powers] + list(im.shape)
-        output = np.zeros(out_shape, dtype=np.float32)
+        output = np.empty(out_shape, dtype=np.float32)
 
         in_buf, evt = buffer_from_ndarray(self.queue, im.data, blocking=False)
         evt.wait()
@@ -103,7 +103,7 @@ class MatrixPowersLazy(LazySpecializedFunction):
 
         fn = OclMatrixPowers()
         kernel = OclFile("kernel", [body])
-        print(kernel.codegen())
+        # print(kernel.codegen())
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
         ptr = program['matrix_powers_copy_base_layer']
         ptr2 = program['matrix_powers_compute_next_step']
@@ -118,7 +118,9 @@ class MatrixPowers(object):
         else:
             return MatrixPowersLazy(None)
 
-    def pure_python(self, source, destination, border):
+    def pure_python(self, source, num_powers, border):
+        destination_shape = [num_powers] + list(source.shape)
+        destination = np.empty(destination_shape)
         depth, height, width = destination.shape
         wb = width - border - 1
         hb = height - border - 1
@@ -140,17 +142,52 @@ class MatrixPowers(object):
                         0.4 * destination[step, clamp(out_x+1, border, wb), clamp(out_y, border, hb)] + \
                         1.0 * destination[step, clamp(out_x, border, wb), clamp(out_y-1, border, hb)]
 
+        return destination
+
+
+import time
+
+class SimpleTimer(object):
+    def __init__(self, message="Time elapsed", show_time=True):
+        self.show_time = show_time
+        self.message = message
+
+    def __enter__(self):
+        self.start_time = time.clock()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        time_elapsed = time.clock() - self.start_time
+        if self.show_time:
+            print("{} {}".format(self.message, time_elapsed))
+        return time_elapsed
+
+def run(message, shape, depth=2, border=0, iterations=1, pure_python=False):
+    message = "{} shape {} depth {} iterations {}".format(message, shape, depth, iterations)
+    print("{} starting".format(message))
+
+    input = np.ones(shape)
+
+    with SimpleTimer(message):
+        mp = MatrixPowers(pure_python)
+        for iteration in range(iterations):
+            output = mp(input, depth, border)
+
+        if output[depth-1, 0, 0] != 2**depth:
+            print("Error unexpected result {} should be {}".format(output[depth-1, 0, 0]), 2**depth)
 
 if __name__ == '__main__':
-    import numpy as np
+    import sys
 
-    x_size = 5
-    a = np.ones([x_size, 5], dtype=np.float32)
-    mp = MatrixPowers()
-    c = mp(a, 10, 0)
-    print c.data
+    print(sys.argv)
+    start_range = 4 if len(sys.argv) < 2 else int(sys.argv[1])
+    end_range = start_range + 1 if len(sys.argv) < 3 else int(sys.argv[2])
+    depth = 2 if len(sys.argv) < 4 else int(sys.argv[3])
+    iterations = 1 if len(sys.argv) < 5 else int(sys.argv[4])
 
-    # mp = MatrixPowers(pure_python=True)
-    # c = mp(a, b)
-    # print b
+    for base_power in range(start_range, end_range):
+        base_size = 2 ** base_power
+        shape = [base_size, base_size]
 
+        # run("OpenCl", shape, depth, iterations)
+
+        run("Pure Python", shape, depth, iterations, pure_python=True)
