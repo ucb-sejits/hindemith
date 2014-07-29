@@ -22,8 +22,9 @@ class OclMatrixPowers(ConcreteSpecializedFunction):
         self.context = clCreateContext([self.device])
         self.queue = clCreateCommandQueue(self.context)
 
-    def finalize(self, kernel, global_size):
+    def finalize(self, kernel, kernel2, global_size):
         self.kernel = kernel
+        self.kernel2 = kernel2
         self.kernel.argtypes = (cl_mem, cl_mem)
         self.global_size = global_size
         return self
@@ -41,6 +42,14 @@ class OclMatrixPowers(ConcreteSpecializedFunction):
 
         evt = clEnqueueNDRangeKernel(self.queue, self.kernel, self.global_size)
         evt.wait()
+
+        self.kernel2.setarg(0, out_buf, sizeof(cl_mem))
+
+        for power in range(num_powers):
+            self.kernel2.setarg(1, power)
+            evt = clEnqueueNDRangeKernel(self.queue, self.kernel2, self.global_size)
+            evt.wait()
+
         _, evt = buffer_to_ndarray(self.queue, out_buf, output)
         evt.wait()
         return Array(unique_name(), output)
@@ -69,16 +78,25 @@ class MatrixPowersLazy(LazySpecializedFunction):
     def transform(self, tree, program_config):
         call_args = program_config[0]
 
+        base_size = call_args.base_shape[0] * call_args.base_shape[1]
+
         body = StringTemplate("""
-            void __kernel matrix_powers(__global const $type* input, __global $type* output) {
+            void __kernel matrix_powers_copy_base_layer(__global const $type* input, __global $type* output) {
                 int x = get_global_id(0);
                 int y = get_global_id(1);
 
                 output[y * $len_x + x] = input[y * $len_x + x];
             }
+            void __kernel matrix_powers_compute_next_step(__global $type* matrix, const int power) {
+                int x = get_global_id(0);
+                int y = get_global_id(1);
+
+                matrix[(power+1) * $base_size + y * $len_x + x] = 2 * matrix[power * $base_size + y * $len_x + x];
+            }
         """, {
             'type': SymbolRef('float'),
-            'len_x': Constant(call_args.base_shape[1])
+            'len_x': Constant(call_args.base_shape[1]),
+            'base_size': Constant(base_size)
         })
 
         # body = StringTemplate("""
@@ -120,8 +138,9 @@ class MatrixPowersLazy(LazySpecializedFunction):
         kernel = OclFile("kernel", [body])
         print(kernel.codegen())
         program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
-        ptr = program['matrix_powers']
-        return fn.finalize(ptr, (call_args.base_shape[1], call_args.base_shape[0]))
+        ptr = program['matrix_powers_copy_base_layer']
+        ptr2 = program['matrix_powers_compute_next_step']
+        return fn.finalize(ptr, ptr2, (call_args.base_shape[1], call_args.base_shape[0]))
 
 
 class MatrixPowers(object):
