@@ -8,7 +8,7 @@ from ctree.c.nodes import SymbolRef, Constant, Assign, ArrayRef, Add, Div, Funct
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from hindemith.core import fuse
+from hindemith.fusion.core import fuse
 from hindemith.utils import unique_name, unique_kernel_name
 from hindemith.types.common import Array
 
@@ -44,6 +44,10 @@ class OclFunc(ConcreteSpecializedFunction):
         _, evt = buffer_to_ndarray(self.queue, out_buf, output)
         evt.wait()
         return Array(self.output_name, output)
+
+    def __del__(self):
+        del self.context
+        del self.queue
 
 
 class PyrDownLazy(LazySpecializedFunction):
