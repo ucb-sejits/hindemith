@@ -3,7 +3,7 @@ __author__ = 'chick'
 from _ctypes import sizeof
 from numpy import zeros, zeros_like, array
 from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
-    clEnqueueNDRangeKernel, buffer_to_ndarray, clCreateProgramWithSource, clCreateBuffer
+    clEnqueueNDRangeKernel, buffer_to_ndarray, clCreateProgramWithSource, clCreateBuffer, cl_int
 from ctree.c.nodes import SymbolRef, Constant
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
@@ -13,7 +13,7 @@ from hindemith.types.common import Array
 
 from collections import namedtuple
 
-CallArgs = namedtuple('CallArgs', ['base_shape', 'num_powers'])
+CallArgs = namedtuple('CallArgs', ['base_shape', 'num_powers', 'border'])
 
 
 class OclMatrixPowers(ConcreteSpecializedFunction):
@@ -29,7 +29,7 @@ class OclMatrixPowers(ConcreteSpecializedFunction):
         self.global_size = global_size
         return self
 
-    def __call__(self, im, num_powers):
+    def __call__(self, im, num_powers, border):
         out_shape = [num_powers] + list(im.shape)
         output = np.zeros(out_shape, dtype=np.float32)
 
@@ -46,7 +46,7 @@ class OclMatrixPowers(ConcreteSpecializedFunction):
         self.kernel2.setarg(0, out_buf, sizeof(cl_mem))
 
         for power in range(num_powers):
-            self.kernel2.setarg(1, power)
+            self.kernel2.setarg(1, power, sizeof(cl_int))
             evt = clEnqueueNDRangeKernel(self.queue, self.kernel2, self.global_size)
             evt.wait()
 
@@ -57,29 +57,13 @@ class OclMatrixPowers(ConcreteSpecializedFunction):
 
 class MatrixPowersLazy(LazySpecializedFunction):
     def args_to_subconfig(self, args):
-        return CallArgs(args[0].shape, args[1])
+        return CallArgs(args[0].shape, args[1], args[2])
 
-# {
-#   public:
-#     int blksize, bdr;
-#     MpowThreadLevel(int blksize, int bdr) : blksize(blksize), bdr(bdr) {};
-#     void compile(std::stringstream & ss);
-# };
-# void MpowThreadLevel::compile(std::stringstream & ss)
-# {
-#   Array2DOperand * src = dynamic_cast<Array2DOperand*>(sources[0]);
-#   Array3DOperand * dst = dynamic_cast<Array3DOperand*>(sinks[0]);
-#   Array2D * srcvar = dynamic_cast<Array2D*>(src->variable);
-#   Array3D * dstvar = dynamic_cast<Array3D*>(dst->variable);
-#   int width = dstvar->getDim2();
-#   int height = dstvar->getDim1();
-#   int depth = dstvar->getDim0();
-#
     def transform(self, tree, program_config):
         call_args = program_config[0]
 
         base_size = call_args.base_shape[0] * call_args.base_shape[1]
-        border = 0
+        border = call_args.border
 
         body = StringTemplate("""
             void __kernel matrix_powers_copy_base_layer(__global const $type* input, __global $type* output) {
@@ -117,41 +101,6 @@ class MatrixPowersLazy(LazySpecializedFunction):
             'border': Constant(border),
         })
 
-        # body = StringTemplate("""
-        #     void __kernel matrix_powers(__global const $type* input, __global $type* output) {
-        #         for(int out_x = block_id0 * $block_size + get_local_id(0) ; out_x < (block_id0+1) * $block_size ; out_x += get_local_size(0)) {
-        #             for(int out_y = block_id1 * $block_size + get_local_id(1) ; out_y < (block_id1+1) * $block_size ; out_y += get_local_size(1)) {
-        #                 int in_x = out_x - (block_id0 * $2_bdr - $bdr;
-        #                 int in_y = out_y - (block_id1 * $2_bdr - $bdr;
-        #                 dst->get("out_x", "out_y", "0") << " = " << src->getClamp("in_x", 0, srcvar->getDim1()-1, "in_y", 0, srcvar->getDim0()-1) << ";
-        #             }
-        #         }
-        #
-        #         barrier(CLK_LOCAL_MEM_FENCE);
-        #
-        #   // Multiply
-        #   for(int step = 0 ; step < " << depth-1 << " ; step++)
-        #   {
-        #     for(int out_x = block_id0 * $block_size + get_local_id(0) ; out_x < (block_id0+1) * $block_size ; out_x += get_local_size(0))
-        #     {
-        #       for(int out_y = block_id1 * $block_size + get_local_id(1) ; out_y < (block_id1+1) * $block_size ; out_y += get_local_size(1))
-        #       {
-        #   ss <<          dst->get("out_x", "out_y", "step+1") << " = 0.4f* " << dst->getClamp("out_x-1", bdr, width-bdr-1, "out_y", bdr, height-bdr-1, "step")  << std::endl;
-        #   ss <<          " + 0.1f*" << dst->getClamp("out_x", bdr, width-bdr-1, "out_y-1", bdr, height-bdr-1, "step") << std::endl;
-        #   ss <<          " + 0.1f*" << dst->getClamp("out_x", bdr, width-bdr-1, "out_y+1", bdr, height-bdr-1, "step") << std::endl;
-        #   ss <<          " + 0.4f*" << dst->getClamp("out_x+1", bdr, width-bdr-1, "out_y", bdr, height-bdr-1, "step") << std::endl;
-        #   ss <<          " + 1.0f*" << dst->getClamp("out_x", bdr, width-bdr-1, "out_y", bdr, height-bdr-1, "step") << ";
-        #       }
-        #       barrier(CLK_LOCAL_MEM_FENCE);
-        #     }
-        #   }
-        # """, {
-        #     'type': SymbolRef('float'),
-        #     'block_size': Constant(arg_cfg[0][1][1]),
-        #     'border': Constant(arg_cfg[0][1][2])
-        #     }
-        # )
-
         fn = OclMatrixPowers()
         kernel = OclFile("kernel", [body])
         print(kernel.codegen())
@@ -169,8 +118,7 @@ class MatrixPowers(object):
         else:
             return MatrixPowersLazy(None)
 
-    def pure_python(self, source, destination):
-        border = 2
+    def pure_python(self, source, destination, border):
         depth, height, width = destination.shape
         wb = width - border - 1
         hb = height - border - 1
@@ -199,7 +147,7 @@ if __name__ == '__main__':
     x_size = 5
     a = np.ones([x_size, 5], dtype=np.float32)
     mp = MatrixPowers()
-    c = mp(a, 10)
+    c = mp(a, 10, 0)
     print c.data
 
     # mp = MatrixPowers(pure_python=True)
