@@ -63,9 +63,23 @@ class TestDecorator(unittest.TestCase):
         except AssertionError as e:
             self.fail("Outputs not equal: %s" % e.message)
 
-    @unittest.skip("")
-    def test_hs_jacobi(self):
+    def test_single_line_fusion(self):
         @fuse
+        def test_func(A=None, B=None, C=None):
+            return C - A * B
+
+        A = Array('A', numpy.random.rand(60, 60).astype(numpy.float32))
+        B = Array('B', numpy.random.rand(60, 60).astype(numpy.float32))
+        C = Array('C', numpy.random.rand(60, 60).astype(numpy.float32))
+        actual = test_func(A=A, B=B, C=C)
+        expected = C.data - (A.data * B.data)
+        try:
+            testing.assert_array_almost_equal(actual.data, expected, decimal=3)
+        except AssertionError as e:
+            self.fail("Outputs not equal: %s" % e.message)
+
+    def test_hs_jacobi(self):
+        @fuse(globals(), locals())
         def hs_jacobi_solver(im1_data, im2_data, u, v, zero, lam2, num_iter):
             du = zero * u
             dv = zero * v
@@ -81,7 +95,8 @@ class TestDecorator(unittest.TestCase):
             tex_Iy = Array(unique_name(), tex_Iy.data)
             Ix = warp_img2d(tex_Ix, u, v)
             Iy = warp_img2d(tex_Iy, u, v)
-            It = im1_data - warp_img2d(im2_data, u, v)
+            tmp = warp_img2d(im2_data, u, v)
+            It = im1_data - tmp
             Ix2 = square(Ix)
             Iy2 = square(Iy)
 
@@ -97,11 +112,18 @@ class TestDecorator(unittest.TestCase):
                 ubar = Array(unique_name(), ubar.data)
                 vbar = stencil_b(dv)
                 vbar = Array(unique_name(), vbar.data)
-                num = Ix * ubar + Iy * vbar + It
+                num1 = Ix * ubar
+                num2 = Iy * vbar
+                num3 = num1 + num2
+                num = num3 + It
                 den = Ix2 + Iy2
                 den = lam2 + den
-                du = ubar - (Ix * num) / den
-                dv = vbar - (Iy * num) / den
+                du1 = Ix * num
+                du2 = du1 / den
+                du = ubar - du2
+                dv1 = Iy * num
+                dv2 = dv1 / den
+                dv = vbar - dv2
             return du, dv
 
         def py_hs_jacobi_solver(im1_data, im2_data, u, v, zero, lam2, num_iter):

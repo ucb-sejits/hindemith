@@ -15,48 +15,52 @@ import logging
 LOG = logging.getLogger('Hindemith')
 
 
-def fuse(fn):
-    def fused_fn(*args, **kwargs):
-        symbol_table = {}
-        arg_table = {}
-        a = []
-        for name, value in map(coercer, kwargs.items()):
-            symbol_table[name] = value
-            arg_table[name] = value
-            a.append(name)
-        tree = get_ast(fn)
-        blocks = tree.body[0].body
+def fuse(fn_locals, fn_globals):
+    def wrapped_fuse(fn):
+        def fused_fn(*args, **kwargs):
+            symbol_table = fn_locals
+            arg_table = {}
+            a = []
+            for name, value in map(coercer, kwargs.items()):
+                symbol_table[name] = value
+                arg_table[name] = value
+                a.append(name)
+            tree = get_ast(fn)
+            # from ctree import browser_show_ast
+            # browser_show_ast(tree, 'tmp.png')
+            blocks = tree.body[0].body
 
-        MagicMethodProcessor().visit(tree)
-        decls = []
-        BlockBuilder(symbol_table, decls).visit(tree)
-        # init = [get_specializer(blocks[0], symbol_table)]
-        decls.extend(tree.body[0].body)
-        tree.body[0].body = decls
-        tree.body[0].decorator_list = []
-        tree.body.append(
-            ast.Assign(
-                [ast.Subscript(
-                    ast.Name('symbol_table', ast.Load()),
-                    ast.Index(ast.Str('E')),
-                    ast.Store())],
-                ast.Call(
-                    func=ast.Name(fn.__name__, ast.Load()),
-                    args=[],
-                    keywords=[ast.keyword(arg, ast.Subscript(
+            MagicMethodProcessor().visit(tree)
+            decls = []
+            BlockBuilder(symbol_table, decls).visit(tree)
+            # init = [get_specializer(blocks[0], symbol_table)]
+            decls.extend(tree.body[0].body)
+            tree.body[0].body = decls
+            tree.body[0].decorator_list = []
+            tree.body.append(
+                ast.Assign(
+                    [ast.Subscript(
                         ast.Name('symbol_table', ast.Load()),
-                        ast.Index(ast.Str(arg)),
-                        ast.Load()))
-                        for arg in a]
+                        ast.Index(ast.Str('E')),
+                        ast.Store())],
+                    ast.Call(
+                        func=ast.Name(fn.__name__, ast.Load()),
+                        args=[],
+                        keywords=[ast.keyword(arg, ast.Subscript(
+                            ast.Name('symbol_table', ast.Load()),
+                            ast.Index(ast.Str(arg)),
+                            ast.Load()))
+                            for arg in a]
+                    )
                 )
             )
-        )
-        tree = ast.fix_missing_locations(tree)
-        exec(compile(tree, filename='', mode='exec')) in locals()
-        # from ctree import browser_show_ast
-        # browser_show_ast(tree, 'tmp.png')
-        return symbol_table['E']
-    return fused_fn
+            tree = ast.fix_missing_locations(tree)
+            exec(compile(tree, filename='', mode='exec')) in locals()
+            # from ctree import browser_show_ast
+            # browser_show_ast(tree, 'tmp.png')
+            return symbol_table['E']
+        return fused_fn
+    return wrapped_fuse
 
 
 def fusable(prev, next):
@@ -98,6 +102,7 @@ class BlockBuilder(ast.NodeTransformer):
         self.symbol_table = symbol_table
         self.decls = decls
         self.prev = None
+        self.result = None
 
     def get_if_specializer(self, name, attr):
         try:
@@ -105,11 +110,12 @@ class BlockBuilder(ast.NodeTransformer):
             if attr is not None:
                 func = getattr(func, attr)
             if isinstance(func, LazySpecializedFunction):
-                return func
+                self.result = func
             else:
-                return None
+                self.result = None
         except KeyError:
-            return None
+            eval(name, globals(), locals())
+            self.result = None
 
     def get_specializer(self, node):
         if hasattr(node, 'func'):
@@ -118,18 +124,19 @@ class BlockBuilder(ast.NodeTransformer):
                     self.symbol_table[node.func.value.id], node.func.attr
                 )
                 name = node.func.value.id
-                attr = node.func.attr
+                attr = "'" + node.func.attr + "'"
             else:
                 name = node.func.id
                 attr = None
         else:
             return False
-        result = None
+        # print("Name: " + name)
         exec(
-            "result = self.get_if_specializer('{0}', '{1}')".format(name, attr),
+            "self.get_if_specializer('{0}', {1})".format(name, attr),
             globals(), dict(locals(), **self.symbol_table)
         )
-        return result
+        # print("Result: ", self.result)
+        return self.result
 
     def attempt_fusion(self, previous, next_tree):
         prev = self.get_specializer(previous.value)
@@ -212,9 +219,17 @@ class BlockBuilder(ast.NodeTransformer):
         node.body = body
         return node
 
+    def visit_Call(self, node):
+        for arg in node.args:
+            if isinstance(arg, ast.Call):
+                print("Found single line fusion")
+                pass
+        return node
+
     def visit_Assign(self, node):
         LOG.debug('Found Assign node, attempting type inference.')
         specializer = self.get_specializer(node.value)
+        LOG.debug('Got specializer %s', specializer)
         if specializer:
             output = specializer.generate_output(node.targets[0].id)
             self.symbol_table[output.name] = output
@@ -247,11 +262,11 @@ class MagicMethodProcessor(ast.NodeTransformer):
         attr = attr_map[type(node.op)]
         expr = ast.Call(
             func=ast.Attribute(
-                value=node.left,
+                value=self.visit(node.left),
                 attr=attr,
                 ctx=ast.Load()
             ),
-            args=[node.right],
+            args=[self.visit(node.right)],
             keywords=[]
         )
 
