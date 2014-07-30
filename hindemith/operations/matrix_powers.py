@@ -1,15 +1,20 @@
+from ctree.transformations import PyBasicConversions
+
 __author__ = 'chick'
 
-from _ctypes import sizeof
+from _ctypes import sizeof, POINTER
+from ctypes import c_float, c_int
 import numpy as np
 from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
     clEnqueueNDRangeKernel, buffer_to_ndarray, clCreateProgramWithSource, clCreateBuffer, cl_int
-from ctree.c.nodes import SymbolRef, Constant
+from ctree.c.nodes import SymbolRef, Constant,FunctionDecl, Assign, ArrayRef, Add, Sub, Mul, Div, FunctionCall
 from ctree.ocl.nodes import OclFile
+from ctree.ocl.macros import get_global_id
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from hindemith.utils import unique_name, clamp
+from hindemith.utils import unique_name, clamp, unique_kernel_name
 from hindemith.types.common import Array
+import ast
 
 from collections import namedtuple
 
@@ -60,6 +65,98 @@ class MatrixPowersLazy(LazySpecializedFunction):
         return CallArgs(args[0].shape, args[1], args[2])
 
     def transform(self, tree, program_config):
+        call_args = program_config[0]
+
+        base_size = call_args.base_shape[0] * call_args.base_shape[1]
+        border = call_args.border
+
+        ctype = c_float
+
+        transformer = PyBasicConversions()
+
+        output = unique_name()
+
+        init_entry_point = unique_kernel_name()
+        init_params = [
+            SymbolRef('input', POINTER(ctype)(), _global=True, _const=True),
+            SymbolRef(output, POINTER(ctype)(), _global=True)
+        ]
+
+        init_defn = []
+        init_defn.extend([
+            Assign(SymbolRef('x', c_int()), get_global_id(0)),
+            Assign(SymbolRef('y', c_int()), get_global_id(1)),
+        ])
+
+        body = """{output}[y * {len_x} + x] = input[y * {len_x} + x]""".format(
+            output=output, len_x=call_args.base_shape[0]
+        )
+        print(body)
+        tree_body = ast.parse(body).body
+
+        init_defn.extend(tree_body)
+
+        init_tree = FunctionDecl(None, init_entry_point, init_params, init_defn)
+        init_tree.set_kernel()
+        kernel = OclFile('kernel', [init_tree])
+        kernel = transformer.visit(kernel)
+        print("init kernel codegen")
+        print(kernel.codegen())
+
+        compute_entry_point = unique_kernel_name()
+        compute_params_params = [
+            SymbolRef(output, POINTER(ctype)(), _global=True),
+            SymbolRef('power', int, _const=True),
+        ]
+        compute_defn = []
+        compute_defn.extend([
+            Assign(SymbolRef('x', c_int()), get_global_id(0)),
+            Assign(SymbolRef('y', c_int()), get_global_id(1)),
+        ])
+
+        body = """
+                {matrix}[(power+1) * {base_size} + y * {len_x} + x] =
+                    0.1f * {matrix}[
+                        power * {base_size} + clamp(y-1, {border}, {len_y}-{border}-1) * {len_x} +  clamp(x, {border}, {len_x}-{border}-1)
+                    ] +
+                    0.1f * {matrix}[
+                        power * {base_size} + clamp(y+1, {border}, {len_y}-{border}-1) * {len_x} +  clamp(x, {border}, {len_x}-{border}-1)
+                    ] +
+                    0.4f * {matrix}[
+                        power * {base_size} + clamp(y, {border}, {len_y}-{border}-1) * {len_x} +  clamp(x-1, {border}, {len_x}-{border}-1)
+                    ] +
+                    0.4f * {matrix}[
+                        power * {base_size} + clamp(y, {border}, {len_y}-{border}-1) * {len_x} +  clamp(x+1, {border}, {len_x}-{border}-1)
+                    ] +
+                    1.0f * {matrix}[
+                        power * {base_size} + clamp(y, {border}, {len_y}-{border}-1) * {len_x} +  clamp(x, {border}, {len_x}-{border}-1)
+                    ]
+        """.format(
+            matrix=output,
+            base_size=base_size,
+            len_y=call_args.base_shape[0],
+            len_x=call_args.base_shape[1],
+            border=border,
+        )
+
+        print(body)
+
+        compute_tree = FunctionDecl(None, compute_entry_point, compute_params, compute_defn)
+        compute_tree.set_kernel()
+        kernel = OclFile('kernel', [compute_tree])
+        kernel = transformer.visit(kernel)
+
+        print(kernel)
+
+        fn = OclMatrixPowers()
+        print("kernel codegen")
+        print(kernel.codegen())
+        program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
+        ptr = program['matrix_powers_copy_base_layer']
+        ptr2 = program['matrix_powers_compute_next_step']
+        return fn.finalize(ptr, ptr2, (call_args.base_shape[1], call_args.base_shape[0]))
+
+    def old_transform(self, tree, program_config):
         call_args = program_config[0]
 
         base_size = call_args.base_shape[0] * call_args.base_shape[1]
@@ -121,6 +218,7 @@ class MatrixPowers(object):
     def pure_python(self, source, num_powers, border):
         destination_shape = [num_powers] + list(source.shape)
         destination = np.empty(destination_shape)
+
         depth, height, width = destination.shape
         wb = width - border - 1
         hb = height - border - 1
@@ -188,6 +286,8 @@ if __name__ == '__main__':
         base_size = 2 ** base_power
         shape = [base_size, base_size]
 
-        # run("OpenCl", shape, depth, iterations)
+        print('hello')
+
+        run("OpenCl", shape, depth, iterations)
 
         run("Pure Python", shape, depth, iterations, pure_python=True)
