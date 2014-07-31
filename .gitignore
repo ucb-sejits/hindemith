@@ -15,5 +15,7 @@ teller.egg*
 *.egg
 kernels.cl
 *.swp
+*.ipynb
+.ipynb_checkpoints
 __pycache__
 tmp.png
