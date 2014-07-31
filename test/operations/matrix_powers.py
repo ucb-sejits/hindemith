@@ -1,8 +1,8 @@
 import unittest
-import numpy as np
-from hindemith.operations.matrix_powers import MatrixPowers
 
 from numpy import *
+
+from hindemith.operations.optical_flow.matrix_powers import MatrixPowers
 
 
 class TestMatrixPowers(unittest.TestCase):

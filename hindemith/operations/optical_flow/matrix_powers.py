@@ -1,3 +1,8 @@
+"""
+An in progress MatrixPowers kernel
+This is based on the original code MPow.cpp
+"""
+
 import re
 from ctree.transformations import PyBasicConversions
 
