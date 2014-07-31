@@ -1,3 +1,4 @@
+import re
 from ctree.transformations import PyBasicConversions
 
 __author__ = 'chick'
@@ -31,6 +32,7 @@ class OclMatrixPowers(ConcreteSpecializedFunction):
         self.kernel = kernel
         self.kernel2 = kernel2
         self.kernel.argtypes = (cl_mem, cl_mem)
+        self.kernel2.argtypes = (cl_mem, cl_int)
         self.global_size = global_size
         return self
 
@@ -70,7 +72,8 @@ class MatrixPowersLazy(LazySpecializedFunction):
         base_size = call_args.base_shape[0] * call_args.base_shape[1]
         border = call_args.border
 
-        ctype = c_float
+        c_float_type = c_float
+        c_int_type = c_int
 
         transformer = PyBasicConversions()
 
@@ -78,8 +81,8 @@ class MatrixPowersLazy(LazySpecializedFunction):
 
         init_entry_point = unique_kernel_name()
         init_params = [
-            SymbolRef('input', POINTER(ctype)(), _global=True, _const=True),
-            SymbolRef(output, POINTER(ctype)(), _global=True)
+            SymbolRef('input', POINTER(c_float_type)(), _global=True, _const=True),
+            SymbolRef(output, POINTER(c_float_type)(), _global=True),
         ]
 
         init_defn = []
@@ -98,15 +101,15 @@ class MatrixPowersLazy(LazySpecializedFunction):
 
         init_tree = FunctionDecl(None, init_entry_point, init_params, init_defn)
         init_tree.set_kernel()
-        kernel = OclFile('kernel', [init_tree])
-        kernel = transformer.visit(kernel)
+        init_kernel = OclFile('kernel', [init_tree])
+        init_kernel = transformer.visit(init_kernel)
         print("init kernel codegen")
-        print(kernel.codegen())
+        print(init_kernel.codegen())
 
         compute_entry_point = unique_kernel_name()
-        compute_params_params = [
-            SymbolRef(output, POINTER(ctype)(), _global=True),
-            SymbolRef('power', int, _const=True),
+        compute_params = [
+            SymbolRef(output, POINTER(c_float_type)(), _global=True),
+            SymbolRef('power', c_int(), _const=True),
         ]
         compute_defn = []
         compute_defn.extend([
@@ -114,21 +117,20 @@ class MatrixPowersLazy(LazySpecializedFunction):
             Assign(SymbolRef('y', c_int()), get_global_id(1)),
         ])
 
-        body = """
-                {matrix}[(power+1) * {base_size} + y * {len_x} + x] =
-                    0.1f * {matrix}[
+        body = """{matrix}[(power+1) * {base_size} + y * {len_x} + x] =
+                    0.1 * {matrix}[
                         power * {base_size} + clamp(y-1, {border}, {len_y}-{border}-1) * {len_x} +  clamp(x, {border}, {len_x}-{border}-1)
                     ] +
-                    0.1f * {matrix}[
+                    0.1 * {matrix}[
                         power * {base_size} + clamp(y+1, {border}, {len_y}-{border}-1) * {len_x} +  clamp(x, {border}, {len_x}-{border}-1)
                     ] +
-                    0.4f * {matrix}[
+                    0.4 * {matrix}[
                         power * {base_size} + clamp(y, {border}, {len_y}-{border}-1) * {len_x} +  clamp(x-1, {border}, {len_x}-{border}-1)
                     ] +
-                    0.4f * {matrix}[
+                    0.4 * {matrix}[
                         power * {base_size} + clamp(y, {border}, {len_y}-{border}-1) * {len_x} +  clamp(x+1, {border}, {len_x}-{border}-1)
                     ] +
-                    1.0f * {matrix}[
+                    1.0 * {matrix}[
                         power * {base_size} + clamp(y, {border}, {len_y}-{border}-1) * {len_x} +  clamp(x, {border}, {len_x}-{border}-1)
                     ]
         """.format(
@@ -139,22 +141,28 @@ class MatrixPowersLazy(LazySpecializedFunction):
             border=border,
         )
 
+        body = re.sub("""\s\s*""", " ", body)
         print(body)
+        tree_body = ast.parse(body).body
+
+        compute_defn.extend(tree_body)
 
         compute_tree = FunctionDecl(None, compute_entry_point, compute_params, compute_defn)
         compute_tree.set_kernel()
-        kernel = OclFile('kernel', [compute_tree])
-        kernel = transformer.visit(kernel)
+        compute_kernel = OclFile('kernel', [compute_tree])
+        compute_kernel = transformer.visit(compute_kernel)
+        print("compute kernel codegen")
+        print(compute_kernel.codegen())
 
-        print(kernel)
 
         fn = OclMatrixPowers()
-        print("kernel codegen")
-        print(kernel.codegen())
-        program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
-        ptr = program['matrix_powers_copy_base_layer']
-        ptr2 = program['matrix_powers_compute_next_step']
-        return fn.finalize(ptr, ptr2, (call_args.base_shape[1], call_args.base_shape[0]))
+        init_program = clCreateProgramWithSource(fn.context, init_kernel.codegen()).build()
+        init_ptr = init_program[init_entry_point]
+
+        compute_program = clCreateProgramWithSource(fn.context, compute_kernel.codegen()).build()
+        compute_ptr = compute_program[compute_entry_point]
+
+        return fn.finalize(init_ptr, compute_ptr, (call_args.base_shape[1], call_args.base_shape[0]))
 
     def old_transform(self, tree, program_config):
         call_args = program_config[0]
@@ -269,6 +277,7 @@ def run(message, shape, depth=2, border=0, iterations=1, pure_python=False):
         mp = MatrixPowers(pure_python)
         for iteration in range(iterations):
             output = mp(input, depth, border)
+            print(output.data)
 
         if output[depth-1, 0, 0] != 2**depth:
             print("Error unexpected result {} should be {}".format(output[depth-1, 0, 0]), 2**depth)
@@ -290,4 +299,4 @@ if __name__ == '__main__':
 
         run("OpenCl", shape, depth, iterations)
 
-        run("Pure Python", shape, depth, iterations, pure_python=True)
+        # run("Pure Python", shape, depth, iterations, pure_python=True)
