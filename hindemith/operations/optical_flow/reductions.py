@@ -56,11 +56,13 @@ class ReduceLazy(LazySpecializedFunction):
 #         ])
 
 class Reduce(object):
+    def __init__(self,pure_python = False):
+        self.pure_python = pure_python
     def __call__(self, array):
-        return ReduceLazy(get_ast(self.func), array)
-    @classmethod
-    def pure_python(cls,array):
-        return reduce(cls.func, array.data.flat)
+        if(self.pure_python):
+            return reduce(self.func, array.data.flat)
+        else:
+            return reduce(self.func, array.data.flat)
     def func(x, y):
         raise NotImplementedError()
 
