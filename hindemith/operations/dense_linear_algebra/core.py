@@ -55,7 +55,9 @@ class DLAConcreteOCL(ConcreteSpecializedFunction):
                     if isinstance(output, ct.c_int):
                         output = ct.c_float()
                 else:
-                    raise NotImplementedError()
+                    raise NotImplementedError(
+                        "UnsupportedType: %s" % type(arg)
+                    )
         if isinstance(output, cl.cl_mem):
             argtypes += (cl.cl_mem,)
             processed.append(output)
@@ -173,7 +175,9 @@ class DLALazy(LazySpecializedFunction):
         elif isinstance(arg, float):
             return HMScalar(ct.c_float(), arg, False)
         else:
-            raise NotImplementedError()
+            raise NotImplementedError(
+                "UnsupportedType: %s" % type(arg)
+            )
 
     def args_to_subconfig(self, args):
         return tuple(map(self._process_arg, args))
