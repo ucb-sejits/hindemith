@@ -3,7 +3,6 @@ from ctree.transformations import PyBasicConversions
 import numpy as np
 import ast
 from ctree.frontend import get_ast
-import astdump
 import inspect
 import textwrap
 from ctypes import *
