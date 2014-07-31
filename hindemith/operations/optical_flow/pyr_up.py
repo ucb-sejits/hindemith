@@ -1,11 +1,10 @@
 from ctypes import c_float, c_int
 from _ctypes import sizeof, POINTER
 from ctree.ocl.macros import get_global_id
-from numpy import zeros_like
-from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, \
-    cl_mem, buffer_from_ndarray, clEnqueueNDRangeKernel, buffer_to_ndarray, \
-    clCreateProgramWithSource
-from ctree.c.nodes import SymbolRef, FunctionDecl, Assign
+from numpy import zeros, zeros_like, array, isfortran
+from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
+    clEnqueueNDRangeKernel, buffer_to_ndarray, clCreateProgramWithSource, clCreateBuffer
+from ctree.c.nodes import SymbolRef, Constant,FunctionDecl, Assign, ArrayRef, Add, Sub, Mul, Div, FunctionCall
 from ctree.ocl.nodes import OclFile
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from hindemith.utils import unique_name, clamp, unique_kernel_name
@@ -33,8 +32,7 @@ class OclFunc2(ConcreteSpecializedFunction):
         evt.wait()
         self.kernel.setarg(0, in_buf, sizeof(cl_mem))
 
-        out_buf, evt = buffer_from_ndarray(self.queue, output, blocking=False)
-        evt.wait()
+        out_buf = clCreateBuffer(self.context, output.nbytes)
         self.kernel.setarg(1, out_buf, sizeof(cl_mem))
         evt = clEnqueueNDRangeKernel(self.queue, self.kernel, self.global_size)
         evt.wait()
@@ -58,8 +56,8 @@ class PyrUpLazy(LazySpecializedFunction):
         entry_point = unique_kernel_name()
         ctypeObject = c_float()
         ctype = c_float
-        len_x = arg_cfg[0][1][1]
-        len_y = arg_cfg[0][1][0]
+        len_x = arg_cfg[0][1][0]
+        len_y = arg_cfg[0][1][1]
         output = unique_name()
         params = [
             SymbolRef("input", POINTER(ctype)(), _global=True, _const=True),
@@ -72,23 +70,18 @@ class PyrUpLazy(LazySpecializedFunction):
             Assign(SymbolRef('temp', ctypeObject), 0),
         ])
         body = \
-            """
-temp = .5 * input[clamp(x/2, 0, (len_x / 2) - 1) +
-                  clamp(y/2, 0, (len_y / 2) - 1)*len_x]
+"""
+temp = .5 * input[clamp(x/2, 0, (len_x / 2) - 1) * len_y + clamp(y/2, 0, (len_y / 2) - 1)]
 if (x & 0x1):
-    temp += .25 * input[clamp(x/2 + 1, 0, (len_x / 2) - 1) +
-                        clamp(y/2, 0, (len_y /  2) - 1) * len_x]
+    temp += .25 * input[clamp(x/2 + 1, 0, (len_x / 2) - 1) * len_y + clamp(y/2, 0, (len_y /  2) - 1)]
 else:
-    temp += .25 * input[clamp(x/2 - 1, 0, (len_x / 2) - 1) +
-                        clamp(y/2, 0, (len_y / 2) - 1) * len_x]
+    temp += .25 * input[clamp(x/2 - 1, 0, (len_x / 2) - 1) * len_y +clamp(y/2, 0, (len_y / 2) - 1)]
 if (y & 0x1):
-    temp += .25 * input[clamp(x/2, 0, (len_x / 2) - 1) +
-                        clamp(y/2 + 1, 0, (len_y / 2) - 1) * len_x]
+    temp += .25 * input[clamp(x/2, 0, (len_x / 2) - 1) * len_y + clamp(y/2 + 1, 0, (len_y / 2) - 1)]
 else:
-    temp += .25 * input[clamp(x/2, 0, (len_x / 2) - 1) +
-                        clamp(y/2 - 1, 0, (len_y / 2) - 1) * len_x]
-output[y * len_x + x] = temp
-            """
+    temp += .25 * input[clamp(x/2, 0, (len_x / 2) - 1) *len_y + clamp(y/2 - 1, 0, (len_y / 2) - 1)]
+output[x * len_y + y] = temp
+"""
         body = ast.parse(body).body
         name_dict = {
             'output': output
@@ -97,19 +90,17 @@ output[y * len_x + x] = temp
             'len_x': len_x,
             'len_y': len_y,
         }
-        transformation = PyBasicConversions(name_dict, const_dict)
-        for statement in body:
-            defn.append(transformation.visit(statement))
-        tree = FunctionDecl(None, entry_point, params, defn)
+        transformation = PyBasicConversions(name_dict,const_dict)
+        defn.extend(body)
+        tree = FunctionDecl(None,entry_point,params,defn)
         tree.set_kernel()
-        kernel = OclFile("kernel", [tree])
+        kernel = OclFile("kernel",[tree])
+        kernel = transformation.visit(kernel)
         fn = OclFunc2()
-        program = clCreateProgramWithSource(
-            fn.context, kernel.codegen()
-        ).build()
+        print kernel
+        program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
         ptr = program[entry_point]
         return fn.finalize(ptr, (len_x, len_y))
-
 
 class PyrUp(object):
     def __new__(cls, pure_python=False):
