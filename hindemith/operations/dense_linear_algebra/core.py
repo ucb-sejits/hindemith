@@ -21,10 +21,13 @@ __author__ = 'leonardtruong'
 
 
 class DLAConcreteOCL(ConcreteSpecializedFunction):
+    device = cl.clGetDeviceIDs()[-1]
+    context = cl.clCreateContext([device])
+    queue = cl.clCreateCommandQueue(context)
+
     def __init__(self):
-        self.device = cl.clGetDeviceIDs()[-1]
-        self.context = cl.clCreateContext([self.device])
-        self.queue = cl.clCreateCommandQueue(self.context)
+        self.context = DLAConcreteOCL.context
+        self.queue = DLAConcreteOCL.queue
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
