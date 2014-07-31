@@ -77,6 +77,9 @@ class DLAConcreteOCL(ConcreteSpecializedFunction):
         processed, argtypes, output, out_like = self.process_args(*args)
         self.kernel.argtypes = argtypes
         run_evt = self.kernel(*processed).on(self.queue, self.global_size)
+        return self.process_output(output, out_like)
+
+    def process_output(self, output, out_like=None):
         if isinstance(output, cl.cl_mem):
             out, evt = cl.buffer_to_ndarray(self.queue, output,
                                             wait_for=run_evt, like=out_like)
