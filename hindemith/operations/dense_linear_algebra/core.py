@@ -258,24 +258,23 @@ class ScalarArrayDiv(DLAOp):
 
 class ArrayScalarAdd(DLAOp):
     def op(input1, input2, output):
-        for x in input2.points():
+        for x in input1.points():
             output[x] = input1[x] + input2
 
 
 class ArrayScalarMul(DLAOp):
     def op(input1, input2, output):
-        for x in input2.points():
+        for x in input1.points():
             output[x] = input1[x] * input2
 
 
 class ArrayScalarSub(DLAOp):
     def op(input1, input2, output):
-        for x in input2.points():
+        for x in input1.points():
             output[x] = input1[x] - input2
 
 
 class ArrayScalarDiv(DLAOp):
     def op(input1, input2, output):
-        for x in input2.points():
+        for x in input1.points():
             output[x] = input1[x] / input2
-
