@@ -106,9 +106,9 @@ class BlockBuilder(ast.NodeTransformer):
             func = self.symbol_table[name]
             if attr is not None:
                 func = getattr(func, attr)
-            print(func.__call__)
-            if isinstance(func.__call__, LazySpecializedFunction):
-                return func
+            if hasattr(func, 'specialized') and \
+               isinstance(func.specialized, LazySpecializedFunction):
+                return func.specialized
             else:
                 return None
         except KeyError:
@@ -127,16 +127,16 @@ class BlockBuilder(ast.NodeTransformer):
                 attr = None
         else:
             return False
-        result = None
         exec(
-            "result = self.get_if_specializer('{0}', {1})".format(name, attr),
+            "self.result = self.get_if_specializer('{0}', {1})".format(name, attr),
             globals(), dict(self.symbol_table, **{'self': self})
         )
-        return result
+        return self.result
 
     def attempt_fusion(self, previous, next_tree):
         prev = self.get_specializer(previous.value)
         next = self.get_specializer(next_tree.value)
+        print(prev, next)
         if not prev or not next:
             LOG.debug(
                 "Fusing failed because one of the operations is not a \
@@ -219,7 +219,9 @@ class BlockBuilder(ast.NodeTransformer):
         LOG.debug('Found Assign node, attempting type inference.')
         specializer = self.get_specializer(node.value)
         if specializer:
-            output = specializer.generate_output(node.targets[0].id)
+            output = specializer.generate_output(
+                *(self.symbol_table[arg.id] for arg in node.value.args)
+            )
             self.symbol_table[output.name] = output
             LOG.debug('Found specializer that returns type %s', type(output))
         node.value = self.visit(node.value)
