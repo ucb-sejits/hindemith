@@ -26,10 +26,3 @@ class Stencil(object):
         print(type(other))
         raise NotImplementedError()
 
-
-class Stencilator(object):
-    def __init__(self):
-        pass
-
-    def element(self, grid, point):
-        return grid[ point ]
