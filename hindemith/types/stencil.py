@@ -7,7 +7,7 @@ from ..utils import unique_name
 
 
 class Stencil(object):
-    def __init__(self, data, offx, offy):
+    def __init__(self, data, offx=0, offy=0):
         self.data = data
         self.offx = offx
         self.offy = offy
@@ -25,3 +25,11 @@ class Stencil(object):
             return Array(unique_name(), output.data)
         print(type(other))
         raise NotImplementedError()
+
+
+class Stencilator(object):
+    def __init__(self):
+        pass
+
+    def element(self, grid, point):
+        return grid[ point ]
