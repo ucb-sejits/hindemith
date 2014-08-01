@@ -4,11 +4,11 @@ based on original LKLeastSquares.cpp
 """
 from stencil_code.stencil_grid import StencilGrid
 from stencil_code.stencil_kernel import StencilKernel
-from hindemith.types.stencil import Stencil
 from hindemith.utils import clamp
 import numpy as np
 
 __author__ = 'chick'
+
 
 class LKLSGrid(StencilGrid):
     def __init__(self, numpy_array, radius):
@@ -17,9 +17,9 @@ class LKLSGrid(StencilGrid):
             [(x, y) for x in range(-radius, radius + 1) for y in range(-radius, radius + 1)]
         )
 
+
 class LkLeastSquares(object):
     def __init__(self, radius):
-        # super(LkLeastSquares, self).__init__()
         self.radius = radius
 
     class DuComputer(StencilKernel):
@@ -61,7 +61,7 @@ class LkLeastSquares(object):
             for p in image1.interior_points():
                 ix2 = iy2 = ix_iy = ix_it = iy_it = 0.0
 
-                for n_p in image1.neighbor_points():
+                for n_p in image1.neighbors(p, 0):
                     clamp_x = clamp(n_p[0], 0, mx)
                     clamp_y = clamp(n_p[1], 0, my)
                     ix2 += image1[clamp_x, clamp_y] * image1[clamp_x, clamp_y]
@@ -76,18 +76,25 @@ class LkLeastSquares(object):
                 else:
                     dv[p] = 0.0
 
-    def kernel(self, image1, image2, err, du, dv):
+    def kernel(self, image1, image2, err):
         assert len(image1.shape) == 2 and len(image2.shape) == 2
 
         image_1_stencil = LKLSGrid(image1, self.radius)
         image_2_stencil = LKLSGrid(image2, self.radius)
 
+        du = np.empty_like(image1)
+        dv = np.empty_like(image2)
+
         LkLeastSquares.DuComputer().kernel(image_1_stencil, image_2_stencil, err, du)
         LkLeastSquares.DvComputer().kernel(image_1_stencil, image_2_stencil, err, dv)
 
+        return du, dv
+
 
 if __name__ == '__main__':
-    image1 = np.random.random([10, 10])
+    # image1 = np.random.random([10, 10])
+
+    image1 = np.fromfunction(lambda i, j: j * 1.0, [10, 10])
     image2 = image1.copy()
     error = np.zeros([10, 10], dtype=np.float32)
 
@@ -95,17 +102,11 @@ if __name__ == '__main__':
     for i in range(3, 6):
         image2[i][2:7] = list(reversed(image2[i][2:7]))
 
-    print image2
-
-    du = np.empty_like(image1)
-    dv = np.empty_like(image2)
+    print "image1\n{}".format(image1)
+    print "image2\n{}".format(image2)
 
     lk_least_squares = LkLeastSquares(1)
 
-    lk_least_squares.kernel(image1, image2, error, du, dv)
+    du, dv = lk_least_squares.kernel(image1, image2, error)
 
     print du
-
-
-
-
