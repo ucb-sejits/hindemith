@@ -22,6 +22,7 @@ class TestDecorator(unittest.TestCase):
         a = test_func(arg=1)
         self.assertEqual(a, 1)
 
+    @unittest.skip("")
     def test_fusion(self):
         @fuse(locals(), globals())
         def test_func(A=None, B=None, C=None):

@@ -12,6 +12,7 @@ import pycl as cl
 import numpy as np
 import ctypes as ct
 import ast
+from numpy import zeros_like
 from numpy.ctypeslib import ndpointer
 from collections import namedtuple
 
@@ -209,6 +210,14 @@ class DLALazy(LazySpecializedFunction):
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
         return fn.finalize(program[kernel.body[0].name], global_size)
+
+    def generate_output(self, *args):
+        arg_cfg = self.args_to_subconfig(args)
+        for arg in arg_cfg:
+            if hasattr(arg, 'ndpointer'):
+                return zeros_like(arg)
+        return 0
+
 
 
 class DLAOp(object):
