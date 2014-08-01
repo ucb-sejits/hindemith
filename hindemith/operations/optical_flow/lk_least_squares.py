@@ -16,6 +16,8 @@ class LKLSGrid(StencilGrid):
         self.set_neighborhood(0,
             [(x, y) for x in range(-radius, radius + 1) for y in range(-radius, radius + 1)]
         )
+        self.data = numpy_array
+        self.ghost_depth = 0
 
 
 class LkLeastSquares(object):
@@ -29,8 +31,8 @@ class LkLeastSquares(object):
         def kernel(self, image1, image2, err, du):
             assert len(image1.shape) == 2
 
-            mx = image1.shape[0]
-            my = image1.shape[1]
+            mx = image1.shape[0]-1
+            my = image1.shape[1]-1
             for p in image1.interior_points():
                 ix2 = iy2 = ix_iy = ix_it = iy_it = 0.0
 
@@ -45,7 +47,7 @@ class LkLeastSquares(object):
 
                 det = ix2 * iy2 - ix_iy * ix_iy
                 if det != 0:
-                    du[p] = (ix_it * iy2 - ix_iy * ix_it) / det
+                    du[p] = (ix_it * iy2 - ix_iy * iy_it) / det
                 else:
                     du[p] = 0.0
 
@@ -56,8 +58,8 @@ class LkLeastSquares(object):
         def kernel(self, image1, image2, err, dv):
             assert len(image1.shape) == 2
 
-            mx = image1.shape[0]
-            my = image1.shape[1]
+            mx = image1.shape[0]-1
+            my = image1.shape[1]-1
             for p in image1.interior_points():
                 ix2 = iy2 = ix_iy = ix_it = iy_it = 0.0
 
@@ -72,7 +74,7 @@ class LkLeastSquares(object):
 
                 det = ix2 * iy2 - ix_iy * ix_iy
                 if det != 0:
-                    dv[p]= (ix_it * iy2 - ix_iy * ix_it) / det
+                    dv[p]= (ix2 * iy_it - ix_iy * ix_it) / det
                 else:
                     dv[p] = 0.0
 
@@ -92,15 +94,18 @@ class LkLeastSquares(object):
 
 
 if __name__ == '__main__':
-    # image1 = np.random.random([10, 10])
+    image1 = np.random.random([10, 10])
+    # image1 = np.fromfunction(lambda i, j: j * 1.0, [10, 10])
 
-    image1 = np.fromfunction(lambda i, j: j * 1.0, [10, 10])
     image2 = image1.copy()
-    error = np.zeros([10, 10], dtype=np.float32)
-
-    print "image 2 shape {} len {}".format(image2.shape, len(image2.shape))
     for i in range(3, 6):
         image2[i][2:7] = list(reversed(image2[i][2:7]))
+    # image2 = np.random.random([10, 10])
+
+    #error = np.zeros([10, 10], dtype=np.float32)
+    #error = np.random.random([10, 10])
+    error = image1 - image2
+
 
     print "image1\n{}".format(image1)
     print "image2\n{}".format(image2)

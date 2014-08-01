@@ -4,8 +4,16 @@ import numpy as np
 
 
 class Stencilator(object):
-    def __init__(self, neighbor_hood):
+    def __init__(self):
         pass
+
+    def point_mapper(self, point):
+        return point
+
+    # example of override to point_mapper
+    # def point_mapper(self, point):
+    #     return (point[0] * 3) + 1, (point[1] * 3) + 1
+
 
     def create_destination(self, numpy_array):
         """
@@ -13,14 +21,29 @@ class Stencilator(object):
         :param numpy_array:
         :return:
         """
-        return np.empty_like(input)
+        return np.empty_like(numpy_array)
 
     def stencil_function(self, input_arrays, ):
         pass
 
     def kernel(self, input_numpy_array, point):
-        destination = self.create_destination(input_numpy_array)
-        return input_numpy_array[ point ]
+        acc = 0.0
+        for neighbor_point in self.neighbors(point, 0):
+            acc += input_numpy_array[neighbor_point]
+
+        output = acc / 5.0
+
+    def execute(self, *args):
+        input = args[0]
+        output = self.create_destination(input)
+
+        it = np.nditer(a, flags=['multi_index'])
+        while not it.finished:
+            point = it.multi_index
+
+            self.kernel(point)
+
+            it.iternext()
 
     @staticmethod
     def von_neuman_neighborhood(self, dim):
@@ -66,5 +89,16 @@ class Stencilator(object):
         dimension_iterator(0, [])
 
         return neighborhood_list
+
+
+class BlurStencil(Stencilator):
+    pass
+
+if __name__ == '__main__':
+    a = np.random.random([10, 4])
+
+    stencil = BlurStencil()
+
+    b = stencil(a)
 
 
