@@ -15,48 +15,50 @@ import logging
 LOG = logging.getLogger('Hindemith')
 
 
-def fuse(fn):
-    def fused_fn(*args, **kwargs):
-        symbol_table = {}
-        arg_table = {}
-        a = []
-        for name, value in map(coercer, kwargs.items()):
-            symbol_table[name] = value
-            arg_table[name] = value
-            a.append(name)
-        tree = get_ast(fn)
-        blocks = tree.body[0].body
+def fuse(fn_locals, fn_globals):
+    def wrapped_fuser(fn):
+        def fused_fn(*args, **kwargs):
+            symbol_table = dict(fn_locals, **fn_globals)
+            arg_table = {}
+            a = []
+            for name, value in kwargs.items():
+                symbol_table[name] = value
+                arg_table[name] = value
+                a.append(name)
+            tree = get_ast(fn)
+            blocks = tree.body[0].body
 
-        MagicMethodProcessor().visit(tree)
-        decls = []
-        BlockBuilder(symbol_table, decls).visit(tree)
-        # init = [get_specializer(blocks[0], symbol_table)]
-        decls.extend(tree.body[0].body)
-        tree.body[0].body = decls
-        tree.body[0].decorator_list = []
-        tree.body.append(
-            ast.Assign(
-                [ast.Subscript(
-                    ast.Name('symbol_table', ast.Load()),
-                    ast.Index(ast.Str('E')),
-                    ast.Store())],
-                ast.Call(
-                    func=ast.Name(fn.__name__, ast.Load()),
-                    args=[],
-                    keywords=[ast.keyword(arg, ast.Subscript(
+            MagicMethodProcessor().visit(tree)
+            decls = []
+            BlockBuilder(symbol_table, decls).visit(tree)
+            # init = [get_specializer(blocks[0], symbol_table)]
+            decls.extend(tree.body[0].body)
+            tree.body[0].body = decls
+            tree.body[0].decorator_list = []
+            tree.body.append(
+                ast.Assign(
+                    [ast.Subscript(
                         ast.Name('symbol_table', ast.Load()),
-                        ast.Index(ast.Str(arg)),
-                        ast.Load()))
-                        for arg in a]
+                        ast.Index(ast.Str('E')),
+                        ast.Store())],
+                    ast.Call(
+                        func=ast.Name(fn.__name__, ast.Load()),
+                        args=[],
+                        keywords=[ast.keyword(arg, ast.Subscript(
+                            ast.Name('symbol_table', ast.Load()),
+                            ast.Index(ast.Str(arg)),
+                            ast.Load()))
+                            for arg in a]
+                    )
                 )
             )
-        )
-        tree = ast.fix_missing_locations(tree)
-        exec(compile(tree, filename='', mode='exec')) in locals()
-        # from ctree import browser_show_ast
-        # browser_show_ast(tree, 'tmp.png')
-        return symbol_table['E']
-    return fused_fn
+            tree = ast.fix_missing_locations(tree)
+            exec(compile(tree, filename='', mode='exec')) in fn_globals, locals()
+            # from ctree import browser_show_ast
+            # browser_show_ast(tree, 'tmp.png')
+            return symbol_table['E']
+        return fused_fn
+    return wrapped_fuser
 
 
 def fusable(prev, next):
@@ -104,8 +106,9 @@ class BlockBuilder(ast.NodeTransformer):
             func = self.symbol_table[name]
             if attr is not None:
                 func = getattr(func, attr)
-            if isinstance(func, LazySpecializedFunction):
-                return func
+            if hasattr(func, 'specialized') and \
+               isinstance(func.specialized, LazySpecializedFunction):
+                return func.specialized
             else:
                 return None
         except KeyError:
@@ -118,22 +121,22 @@ class BlockBuilder(ast.NodeTransformer):
                     self.symbol_table[node.func.value.id], node.func.attr
                 )
                 name = node.func.value.id
-                attr = node.func.attr
+                attr = "" + node.func.attr
             else:
                 name = node.func.id
                 attr = None
         else:
             return False
-        result = None
         exec(
-            "result = self.get_if_specializer('{0}', '{1}')".format(name, attr),
-            globals(), dict(locals(), **self.symbol_table)
+            "self.result = self.get_if_specializer('{0}', {1})".format(name, attr),
+            globals(), dict(self.symbol_table, **{'self': self})
         )
-        return result
+        return self.result
 
     def attempt_fusion(self, previous, next_tree):
         prev = self.get_specializer(previous.value)
         next = self.get_specializer(next_tree.value)
+        print(prev, next)
         if not prev or not next:
             LOG.debug(
                 "Fusing failed because one of the operations is not a \
@@ -216,7 +219,9 @@ class BlockBuilder(ast.NodeTransformer):
         LOG.debug('Found Assign node, attempting type inference.')
         specializer = self.get_specializer(node.value)
         if specializer:
-            output = specializer.generate_output(node.targets[0].id)
+            output = specializer.generate_output(
+                *(self.symbol_table[arg.id] for arg in node.value.args)
+            )
             self.symbol_table[output.name] = output
             LOG.debug('Found specializer that returns type %s', type(output))
         node.value = self.visit(node.value)

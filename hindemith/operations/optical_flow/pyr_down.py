@@ -140,7 +140,4 @@ class PyrDown(object):
         return Array(unique_name(), retval)
 
 pyr_down = PyrDown()
-
-@fuse
-def pyr_down_fn(im):
-    return pyr_down(im)
+pyr_down_fn = pyr_down
