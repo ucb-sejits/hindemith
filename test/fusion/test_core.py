@@ -2,6 +2,8 @@ import unittest
 import numpy
 from numpy import testing
 
+import ast
+
 from ctree.frontend import get_ast
 
 from stencil_code.stencil_grid import StencilGrid
@@ -14,33 +16,31 @@ from hindemith.operations.optical_flow.warp_img2D import warp_img2d
 from hindemith.operations.dense_linear_algebra.array_op import square
 from hindemith.operations.dense_linear_algebra.core import array_mul, array_sub
 
-class TestKernel(StencilKernel):
-    def kernel(self, in_grid, out_grid):
-        for x in in_grid.interior_points():
-            for y in in_grid.neighbors(x, 1):
-                out_grid[x] = in_grid[y] * .25
-
-specializer = TestKernel(backend='ocl').kernel
 
 class TestBlockBuilder(unittest.TestCase):
     def test_simple(self):
         def f(a):
-            return specializer(a)
+            return array_mul(a)
         tree = get_ast(f)
         blocks = []
         BlockBuilder(blocks).visit(tree)
         self.assertEqual(len(blocks), 1)
+        self.assertIsInstance(blocks[0], ast.Return)
 
     def test_multiline(self):
         def f(a):
-            b = specializer(a)
-            c = specializer(b)
+            b = array_mul(a)
+            c = array_sub(b)
             d = b * c
             return d / 4
         tree = get_ast(f)
         blocks = []
         BlockBuilder(blocks).visit(tree)
         self.assertEqual(len(blocks), 4)
+        self.assertIsInstance(blocks[0], ast.Assign)
+        self.assertIsInstance(blocks[1], ast.Assign)
+        self.assertIsInstance(blocks[2], ast.Assign)
+        self.assertIsInstance(blocks[3], ast.Return)
 
 
 # class TestDecorator(unittest.TestCase):
