@@ -18,6 +18,28 @@ from hindemith.operations.dense_linear_algebra.core import array_mul, \
     array_sub, scalar_array_mul
 
 
+class TestFuser(unittest.TestCase):
+    def test_is_fusable_true(self):
+        def f(a, b):
+            c = array_mul(a, b)
+            d = array_sub(a, c)
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        fuser = Fuser(blocks, locals(), globals())
+        self.assertTrue(fuser._is_fusable(blocks[0], blocks[1]))
+
+    def test_is_fusable_false(self):
+        def f(a, b):
+            c = array_mul(a, b)
+            return c
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        fuser = Fuser(blocks, locals(), globals())
+        self.assertFalse(fuser._is_fusable(blocks[0], blocks[1]))
+
+
 class TestBlockBuilder(unittest.TestCase):
     def test_simple(self):
         def f(a):
