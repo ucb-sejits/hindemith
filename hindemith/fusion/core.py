@@ -85,11 +85,14 @@ class Fuser(object):
         :returns: @todo
 
         """
-        for index, block in enumerate(self._blocks[:-1]):
-            print("Index: %s" % index)
+        fused_blocks = [self._blocks.pop()]
+        for block in self._blocks:
             print(ast.dump(block))
-            if self._is_fusable(block, self._blocks[index + 1]):
-                print("Fusable")
+            if self._is_fusable(fused_blocks[-1], block):
+                self._fuse(fused_blocks[-1], block)
+            else:
+                fused_blocks.append(block)
+        self._blocks = fused_blocks
 
     def _is_fusable(self, block_1, block_2):
         """@todo: Docstring for _is_fusable.
@@ -107,6 +110,16 @@ class Fuser(object):
                 return hasattr(func_1, 'fusable') and func_1.fusable() and \
                        hasattr(func_2, 'fusable') and func_2.fusable()
         return False
+
+    def _fuse(self, block_1, block_2):
+        """@todo: Docstring for _fuse.
+
+        :block_1: @todo
+        :block_2: @todo
+        :returns: @todo
+
+        """
+        pass
 
 
 
