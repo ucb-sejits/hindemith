@@ -25,6 +25,18 @@ def fuse(fn_locals, fn_globals):
     return wrapped_fuser
 
 
+def get_blocks(tree):
+    """Convenience method for getting the blocks from an ast
+
+    :tree: @todo
+    :returns: @todo
+
+    """
+    blocks = []
+    BlockBuilder(blocks).visit(tree)
+    return blocks
+
+
 class BlockBuilder(ast.NodeVisitor):
 
     """Docstring for BlockBuilder. """
@@ -48,6 +60,15 @@ class BlockBuilder(ast.NodeVisitor):
         """
         self._blocks.extend(node.body)
         
+
+def do_fusion(blocks):
+    """@todo: Docstring for do_fusion.
+
+    :blocks: @todo
+    :returns: @todo
+
+    """
+    pass
 
 # def fuse(fn_locals, fn_globals):
 #     def wrapped_fuser(fn):
