@@ -26,7 +26,7 @@ class TestFuser(unittest.TestCase):
         tree = get_ast(f)
         blocks = []
         BlockBuilder(blocks).visit(tree)
-        fuser = Fuser(blocks, locals(), globals())
+        fuser = Fuser(blocks, dict(locals(), **globals()))
         self.assertTrue(fuser._is_fusable(blocks[0], blocks[1]))
 
     def test_is_fusable_false(self):
@@ -36,20 +36,20 @@ class TestFuser(unittest.TestCase):
         tree = get_ast(f)
         blocks = []
         BlockBuilder(blocks).visit(tree)
-        fuser = Fuser(blocks, locals(), globals())
+        fuser = Fuser(blocks, dict(locals(), **globals()))
         self.assertFalse(fuser._is_fusable(blocks[0], blocks[1]))
 
     def test_fuse(self):
+        a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+        b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
         def f(a, b):
             c = array_mul(a, b)
             d = array_sub(a, c)
         tree = get_ast(f)
         blocks = []
         BlockBuilder(blocks).visit(tree)
-        fuser = Fuser(blocks, locals(), globals())
+        fuser = Fuser(blocks, dict(locals(), **globals()))
         result = fuser._fuse([blocks[0], blocks[1]])
-        # import ctree
-        # ctree.browser_show_ast(result, 'tmp.png')
 
 class TestBlockBuilder(unittest.TestCase):
     def test_simple(self):
@@ -78,14 +78,17 @@ class TestBlockBuilder(unittest.TestCase):
 
 
 class TestSimpleFusion(unittest.TestCase):
+    @unittest.skip("Not implemented")
     def test_simple(self):
+        a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+        b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
         def f(a, b):
             c = array_mul(a, b)
             d = scalar_array_mul(4, c)
             return d
         tree = get_ast(f)
         blocks = get_blocks(tree)
-        fuser = Fuser(blocks, locals(), globals())
+        fuser = Fuser(blocks, dict(locals(), **globals()))
         fuser.do_fusion()
         self.assertEqual(len(blocks), 2)
 
