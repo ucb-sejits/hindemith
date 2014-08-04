@@ -39,6 +39,17 @@ class TestFuser(unittest.TestCase):
         fuser = Fuser(blocks, locals(), globals())
         self.assertFalse(fuser._is_fusable(blocks[0], blocks[1]))
 
+    def test_fuse(self):
+        def f(a, b):
+            c = array_mul(a, b)
+            d = array_sub(a, c)
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        fuser = Fuser(blocks, locals(), globals())
+        result = fuser._fuse([blocks[0], blocks[1]])
+        # import ctree
+        # ctree.browser_show_ast(result, 'tmp.png')
 
 class TestBlockBuilder(unittest.TestCase):
     def test_simple(self):

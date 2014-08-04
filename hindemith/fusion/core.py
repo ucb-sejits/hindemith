@@ -77,6 +77,7 @@ class Fuser(object):
         self._locals = _locals
         self._globals = _globals
         self._symbol_table = dict(_locals, **_globals)
+        self._defns = []
 
     def do_fusion(self):
         """@todo: Docstring for do_fusion.
@@ -85,14 +86,14 @@ class Fuser(object):
         :returns: @todo
 
         """
-        fused_blocks = [self._blocks.pop()]
+        fused_blocks = [[self._blocks.pop()]]
         for block in self._blocks:
             print(ast.dump(block))
-            if self._is_fusable(fused_blocks[-1], block):
-                self._fuse(fused_blocks[-1], block)
+            if self._is_fusable(fused_blocks[-1][-1], block):
+                fused_blocks[-1].append(block)
             else:
-                fused_blocks.append(block)
-        self._blocks = fused_blocks
+                fused_blocks.append([block])
+        self._blocks = list(map(self._fuse, fused_blocks))
 
     def _is_fusable(self, block_1, block_2):
         """@todo: Docstring for _is_fusable.
@@ -111,7 +112,7 @@ class Fuser(object):
                        hasattr(func_2, 'fusable') and func_2.fusable()
         return False
 
-    def _fuse(self, block_1, block_2):
+    def _fuse(self, blocks):
         """@todo: Docstring for _fuse.
 
         :block_1: @todo
@@ -119,6 +120,8 @@ class Fuser(object):
         :returns: @todo
 
         """
+        if len(blocks) == 1:
+            return blocks[0] 
         pass
 
 
