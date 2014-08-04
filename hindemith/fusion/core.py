@@ -191,6 +191,7 @@ class FusedFn(ConcreteSpecializedFunction):
         self.context = cl.clCreateContext([self.device])
         self.queue = cl.clCreateCommandQueue(self.context)
         self.orig_args = ()
+        self.arg_buf_map = {}
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
@@ -222,13 +223,18 @@ class FusedFn(ConcreteSpecializedFunction):
         out_like = None
         for arg in args:
             if isinstance(arg, numpy.ndarray):
-                buf, evt = cl.buffer_from_ndarray(self.queue, arg,
-                                                  blocking=False)
-                processed.append(buf)
-                events.append(evt)
-                argtypes += (cl.cl_mem,)
-                output = buf.empty_like_this()
-                out_like = arg
+                if arg.ctypes.data in self.arg_buf_map:
+                    processed.append(self.arg_buf_map[arg.ctypes.data])
+                    argtypes += (cl.cl_mem,)
+                else:
+                    buf, evt = cl.buffer_from_ndarray(self.queue, arg,
+                                                      blocking=False)
+                    processed.append(buf)
+                    self.arg_buf_map[arg.ctypes.data] = buf
+                    events.append(evt)
+                    argtypes += (cl.cl_mem,)
+                    output = buf.empty_like_this()
+                    out_like = arg
             else:
                 processed.append(arg)
                 if isinstance(arg, int):
