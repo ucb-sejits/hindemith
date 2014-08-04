@@ -304,4 +304,4 @@ if __name__ == '__main__':
 
         run("OpenCl", shape, depth, iterations)
 
-        # run("Pure Python", shape, depth, iterations, pure_python=True)
+        run("Pure Python", shape, depth, iterations, pure_python=True)

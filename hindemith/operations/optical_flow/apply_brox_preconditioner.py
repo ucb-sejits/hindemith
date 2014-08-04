@@ -1,5 +1,7 @@
-from stencil_code.stencil_kernel import StencilKernel
-
+"""
+apply a brox preconditioner
+from hindemith/backend/Operations/OpticalFlow/ApplyBroxPreconditioner.cpp
+"""
 __author__ = 'chick'
 
 import numpy as np
