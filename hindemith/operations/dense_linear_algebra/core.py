@@ -211,10 +211,28 @@ class DLALazy(LazySpecializedFunction):
                                                kernel.codegen()).build()
         return fn.finalize(program[kernel.body[0].name], global_size)
 
-    def generate_output(self, *args):
-        arg_cfg = self.args_to_subconfig(args)
+
+    def fuse_transform(self, tree, program_cfg):
+        arg_cfg, tune_cfg = program_cfg
+        # FIXME: Assumes all scalars are floats
+        output_type = (HMScalar(ct.POINTER(ct.c_float)(), 0, True),)
+        global_size = 1
         for arg in arg_cfg:
             if hasattr(arg, 'ndpointer'):
+                output_type = (HMArray(arg.type, arg.ndpointer, arg.shape,
+                                       arg.ndim, arg.length, True),)
+                global_size = arg.length
+                break
+
+        tree = PyBasicConversions().visit(tree)
+        tree = DLASemanticTransformer().visit(tree)
+        tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
+        return tree.files[-1]
+
+    def generate_output(self, *args):
+        arg_cfg = self.args_to_subconfig(args)
+        for arg, cfg in zip(args, arg_cfg):
+            if hasattr(cfg, 'ndpointer'):
                 return zeros_like(arg)
         return 0
 
