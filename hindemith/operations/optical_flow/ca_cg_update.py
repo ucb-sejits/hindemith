@@ -1,3 +1,7 @@
+"""
+Communication avoiding conjugage gradient
+from: hindemith/backend/Operations/OpticalFlow/CACGUpdate.cpp
+"""
 __author__ = 'chick'
 
 import numpy as np
@@ -50,6 +54,7 @@ if __name__ == '__main__':
 
 
 """
+  Original OpenCL code
   for(int in_x = block_id0 * blksize + get_local_id(0) + bdr ; in_x < (block_id0+1) * blksize - bdr ; in_x += get_local_size(0)) {
     for(int in_y = block_id1 * blksize + get_local_id(1) + bdr ; in_y < (block_id1+1) * blksize - bdr ; in_y += get_local_size(1)) {
       int out_x = in_x - (block_id0 * 2*bdr) - bdr;
