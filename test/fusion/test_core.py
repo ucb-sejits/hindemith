@@ -2,43 +2,72 @@ import unittest
 import numpy
 from numpy import testing
 
+from ctree.frontend import get_ast
+
 from stencil_code.stencil_grid import StencilGrid
 from stencil_code.stencil_kernel import StencilKernel
 
-from hindemith.fusion.core import fuse
+from hindemith.fusion.core import fuse, BlockBuilder
 from hindemith.types.common import Array
 from hindemith.utils import unique_name
 from hindemith.operations.optical_flow.warp_img2D import warp_img2d
 from hindemith.operations.dense_linear_algebra.array_op import square
 from hindemith.operations.dense_linear_algebra.core import array_mul, array_sub
 
+class TestKernel(StencilKernel):
+    def kernel(self, in_grid, out_grid):
+        for x in in_grid.interior_points():
+            for y in in_grid.neighbors(x, 1):
+                out_grid[x] = in_grid[y] * .25
 
-class TestDecorator(unittest.TestCase):
-    def test_dec(self):
-        @fuse(locals(), globals())
-        def test_func(arg=None):
-            return arg
+specializer = TestKernel(backend='ocl').kernel
 
-        a = test_func(arg=1)
-        self.assertEqual(a, 1)
+class TestBlockBuilder(unittest.TestCase):
+    def test_simple(self):
+        def f(a):
+            return specializer(a)
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        self.assertEqual(len(blocks), 1)
 
-    @unittest.skip("")
-    def test_fusion(self):
-        @fuse(locals(), globals())
-        def test_func(A=None, B=None, C=None):
-            D = array_mul(A, B)
-            E = array_sub(C, D)
-            return E
+    def test_multiline(self):
+        def f(a):
+            b = specializer(a)
+            c = specializer(b)
+            d = b * c
+            return d / 4
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        self.assertEqual(len(blocks), 4)
 
-        A = numpy.random.rand(60, 60).astype(numpy.float32)
-        B = numpy.random.rand(60, 60).astype(numpy.float32)
-        C = numpy.random.rand(60, 60).astype(numpy.float32)
-        actual = test_func(A=A, B=B, C=C)
-        expected = C - (A * B)
-        try:
-            testing.assert_array_almost_equal(actual, expected)
-        except AssertionError as e:
-            self.fail("Outputs not equal: %s" % e.message)
+
+# class TestDecorator(unittest.TestCase):
+#     def test_dec(self):
+#         @fuse(locals(), globals())
+#         def test_func(arg=None):
+#             return arg
+
+#         a = test_func(arg=1)
+#         self.assertEqual(a, 1)
+
+#     def test_fusion(self):
+#         @fuse(locals(), globals())
+#         def test_func(A=None, B=None, C=None):
+#             D = array_mul(A, B)
+#             E = array_sub(C, D)
+#             return E
+
+#         A = numpy.random.rand(60, 60).astype(numpy.float32)
+#         B = numpy.random.rand(60, 60).astype(numpy.float32)
+#         C = numpy.random.rand(60, 60).astype(numpy.float32)
+#         actual = test_func(A=A, B=B, C=C)
+#         expected = C - (A * B)
+#         try:
+#             testing.assert_array_almost_equal(actual, expected)
+#         except AssertionError as e:
+#             self.fail("Outputs not equal: %s" % e.message)
 
     # @unittest.skip("")
     # def test_hs_jacobi(self):
