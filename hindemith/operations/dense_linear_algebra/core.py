@@ -107,7 +107,7 @@ class PointsLoop(ast.AST):
                                                     self.iter_target)
 
 
-class DLASemanticTransformer(ast.NodeTransformer):
+class DLASemanticTransformer(PyBasicConversions):
     def visit_For(self, node):
         if isinstance(node.iter, ast.Call) and\
            isinstance(node.iter.func, ast.Attribute):
@@ -207,6 +207,7 @@ class DLALazy(LazySpecializedFunction):
         tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
         fn = DLAConcreteOCL()
         kernel = tree.files[-1]
+        print(kernel)
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
         return fn.finalize(program[kernel.body[0].name], global_size)
@@ -224,7 +225,6 @@ class DLALazy(LazySpecializedFunction):
                 global_size = arg.length
                 break
 
-        tree = PyBasicConversions().visit(tree)
         tree = DLASemanticTransformer().visit(tree)
         tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
         return tree.files[-1]
