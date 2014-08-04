@@ -49,7 +49,11 @@ class TestFuser(unittest.TestCase):
         blocks = []
         BlockBuilder(blocks).visit(tree)
         fuser = Fuser(blocks, dict(locals(), **globals()))
-        result = fuser._fuse([blocks[0], blocks[1]])
+        actual_c, actual_d = fuser._fuse([blocks[0], blocks[1]])
+        try:
+            numpy.testing.assert_array_almost_equal(actual_d, a - a * b)
+        except Exception as e:
+            self.fail("Arrays not almost equal: {0}".format(e.message))
 
 class TestBlockBuilder(unittest.TestCase):
     def test_simple(self):
