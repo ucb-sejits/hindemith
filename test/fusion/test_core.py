@@ -9,12 +9,13 @@ from ctree.frontend import get_ast
 from stencil_code.stencil_grid import StencilGrid
 from stencil_code.stencil_kernel import StencilKernel
 
-from hindemith.fusion.core import fuse, BlockBuilder
+from hindemith.fusion.core import fuse, BlockBuilder, get_blocks, do_fusion
 from hindemith.types.common import Array
 from hindemith.utils import unique_name
 from hindemith.operations.optical_flow.warp_img2D import warp_img2d
 from hindemith.operations.dense_linear_algebra.array_op import square
-from hindemith.operations.dense_linear_algebra.core import array_mul, array_sub
+from hindemith.operations.dense_linear_algebra.core import array_mul, \
+    array_sub, scalar_array_mul
 
 
 class TestBlockBuilder(unittest.TestCase):
@@ -28,11 +29,11 @@ class TestBlockBuilder(unittest.TestCase):
         self.assertIsInstance(blocks[0], ast.Return)
 
     def test_multiline(self):
-        def f(a):
-            b = array_mul(a)
-            c = array_sub(b)
-            d = b * c
-            return d / 4
+        def f(a, b):
+            c = array_mul(a, b)
+            d = array_sub(a, c)
+            e = d * c
+            return e / 4
         tree = get_ast(f)
         blocks = []
         BlockBuilder(blocks).visit(tree)
@@ -41,6 +42,19 @@ class TestBlockBuilder(unittest.TestCase):
         self.assertIsInstance(blocks[1], ast.Assign)
         self.assertIsInstance(blocks[2], ast.Assign)
         self.assertIsInstance(blocks[3], ast.Return)
+
+
+class TestSimpleFusion(unittest.TestCase):
+    def test_simple(self):
+        def f(a, b):
+            c = array_mul(a, b)
+            d = scalar_array_mul(4, c)
+            return d
+        tree = get_ast(f)
+        blocks = get_blocks(tree)
+        do_fusion(blocks)
+        self.assertEqual(len(blocks), 2)
+
 
 
 # class TestDecorator(unittest.TestCase):
