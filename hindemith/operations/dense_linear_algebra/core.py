@@ -227,6 +227,9 @@ class DLAOp(object):
     def __call__(self, input1, input2):
         return self.specialized(input1, input2)
 
+    def fusable(self):
+        return True
+
 
 class ArrayAdd(DLAOp):
     def op(input1, input2, output):

@@ -9,7 +9,7 @@ from ctree.frontend import get_ast
 from stencil_code.stencil_grid import StencilGrid
 from stencil_code.stencil_kernel import StencilKernel
 
-from hindemith.fusion.core import fuse, BlockBuilder, get_blocks, do_fusion
+from hindemith.fusion.core import fuse, BlockBuilder, get_blocks, Fuser
 from hindemith.types.common import Array
 from hindemith.utils import unique_name
 from hindemith.operations.optical_flow.warp_img2D import warp_img2d
@@ -52,7 +52,8 @@ class TestSimpleFusion(unittest.TestCase):
             return d
         tree = get_ast(f)
         blocks = get_blocks(tree)
-        do_fusion(blocks)
+        fuser = Fuser(blocks, locals(), globals())
+        fuser.do_fusion()
         self.assertEqual(len(blocks), 2)
 
 
