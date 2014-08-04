@@ -14,17 +14,17 @@ class Scalar(HMType):
         self.name = name
         self.value = value
 
-    def __mul__(self, other):
-        if isinstance(other, Array):
-            return Array(unique_name(), self.value * other.data)
-        print(type(other))
-        raise NotImplementedError()
+    # def __mul__(self, other):
+    #     if isinstance(other, Array):
+    #         return Array(unique_name(), self.value * other.data)
+    #     print(type(other))
+    #     raise NotImplementedError()
 
-    def __add__(self, other):
-        if isinstance(other, Array):
-            return Array(unique_name(), self.value + other.data)
-        print(type(other))
-        raise NotImplementedError()
+    # def __add__(self, other):
+    #     if isinstance(other, Array):
+    #         return Array(unique_name(), self.value + other.data)
+    #     print(type(other))
+    #     raise NotImplementedError()
 
 
 class Float32(Scalar):
