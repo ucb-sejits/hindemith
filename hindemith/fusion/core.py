@@ -61,14 +61,54 @@ class BlockBuilder(ast.NodeVisitor):
         self._blocks.extend(node.body)
         
 
-def do_fusion(blocks):
-    """@todo: Docstring for do_fusion.
+class Fuser(object):
 
-    :blocks: @todo
-    :returns: @todo
+    """Docstring for Fuser. """
 
-    """
-    pass
+    def __init__(self, blocks, _locals, _globals):
+        """@todo: to be defined1.
+
+        :blocks: @todo
+        :_locals: @todo
+        :_globals: @todo
+
+        """
+        self._blocks = blocks
+        self._locals = _locals
+        self._globals = _globals
+        self._symbol_table = dict(_locals, **_globals)
+
+    def do_fusion(self):
+        """@todo: Docstring for do_fusion.
+
+        :blocks: @todo
+        :returns: @todo
+
+        """
+        for index, block in enumerate(self._blocks[:-1]):
+            print("Index: %s" % index)
+            print(ast.dump(block))
+            if self._is_fusable(block, self._blocks[index + 1]):
+                print("Fusable")
+
+    def _is_fusable(self, block_1, block_2):
+        """@todo: Docstring for _is_fusable.
+
+        :block_1: @todo
+        :block_2: @todo
+        :returns: @todo
+
+        """
+        if isinstance(block_1, ast.Assign) and isinstance(block_2, ast.Assign):
+            if isinstance(block_1.value, ast.Call) and \
+               isinstance(block_2.value, ast.Call):
+                func_1 = self._symbol_table[block_1.value.func.id]
+                func_2 = self._symbol_table[block_2.value.func.id]
+                return hasattr(func_1, 'fusable') and func_1.fusable() and \
+                       hasattr(func_2, 'fusable') and func_2.fusable()
+        return False
+
+
 
 # def fuse(fn_locals, fn_globals):
 #     def wrapped_fuser(fn):
