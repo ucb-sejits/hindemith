@@ -43,6 +43,7 @@ class TestFuser(unittest.TestCase):
         fuser = Fuser(blocks, dict(locals(), **globals()))
         self.assertFalse(fuser._is_fusable(blocks[0], blocks[1]))
 
+    @unittest.skip("Not implemented")
     def test_fuse(self):
         a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
         b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
