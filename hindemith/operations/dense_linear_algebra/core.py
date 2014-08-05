@@ -26,9 +26,10 @@ class DLAConcreteOCL(ConcreteSpecializedFunction):
     context = cl.clCreateContext([device])
     queue = cl.clCreateCommandQueue(context)
 
-    def __init__(self):
+    def __init__(self, output=None):
         self.context = DLAConcreteOCL.context
         self.queue = DLAConcreteOCL.queue
+        self.output = output
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
@@ -62,6 +63,11 @@ class DLAConcreteOCL(ConcreteSpecializedFunction):
                     raise NotImplementedError(
                         "UnsupportedType: %s" % type(arg)
                     )
+        if self.output is not None:
+            output, evt = cl.buffer_from_ndarray(self.queue, self.output,
+                                                 blocking=False)
+            out_like = self.output
+            evt.wait()
         if isinstance(output, cl.cl_mem):
             argtypes += (cl.cl_mem,)
             processed.append(output)
@@ -171,6 +177,7 @@ class DLALazy(LazySpecializedFunction):
     def __init__(self, tree, backend):
         super(DLALazy, self).__init__(tree)
         self.backend = backend
+        self.output = None
 
     def _process_arg(self, arg):
         if isinstance(arg, np.ndarray):
@@ -205,7 +212,7 @@ class DLALazy(LazySpecializedFunction):
 
         tree = DLASemanticTransformer().visit(tree)
         tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
-        fn = DLAConcreteOCL()
+        fn = DLAConcreteOCL(self.output)
         kernel = tree.files[-1]
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
@@ -232,7 +239,8 @@ class DLALazy(LazySpecializedFunction):
         arg_cfg = self.args_to_subconfig(args)
         for arg, cfg in zip(args, arg_cfg):
             if hasattr(cfg, 'ndpointer'):
-                return zeros_like(arg)
+                self.output = zeros_like(arg)
+                return self.output
         return 0
 
 
