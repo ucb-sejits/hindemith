@@ -143,12 +143,15 @@ class Fuser(object):
         specializers = []
         kernels = []
         arg_list = []
+        outputs = []
         for block in blocks:
             specializer = self._symbol_table[block.value.func.id].specialized
             args = tuple(self._symbol_table[arg.id] for arg in block.value.args)
             arg_list.extend(args)
-            self._symbol_table[block.targets[0].id] = \
-                specializer.generate_output(*args)
+            output = specializer.generate_output(*args)
+            arg_list.append(output)
+            self._symbol_table[block.targets[0].id] = output
+            outputs.append(output)
             kernels.append(
                 specializer.fuse_transform(
                     specializer.original_tree,
@@ -169,19 +172,21 @@ class Fuser(object):
             kernel.body[0].defn.extend(kern.body[0].defn)
             kernel.body[0].params.extend(kern.body[0].params)
 
-        fn = FusedFn(specializers, num_args)
+        fn = FusedFn(specializers, num_args, outputs)
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
         # FIXME: Assuming OpenCL
-        return fn.finalize(program[kernel.body[0].name],
-                           arg_list[0].shape)(*arg_list)
+        return fn.finalize(
+            program[kernel.body[0].name],
+            reduce(lambda x, y: x * y, arg_list[0].shape, 1)
+        )(*arg_list)
 
 
 class FusedFn(ConcreteSpecializedFunction):
 
     """Docstring for FusedFn. """
 
-    def __init__(self, specializers, num_args):
+    def __init__(self, specializers, num_args, outputs):
         """@todo: to be defined1. """
         ConcreteSpecializedFunction.__init__(self)
         self.specializers = specializers
@@ -191,6 +196,7 @@ class FusedFn(ConcreteSpecializedFunction):
         self.queue = cl.clCreateCommandQueue(self.context)
         self.orig_args = ()
         self.arg_buf_map = {}
+        self.outputs = outputs
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
@@ -198,21 +204,36 @@ class FusedFn(ConcreteSpecializedFunction):
         return self
 
     def _process_args(self, args):
-        offset = 0
-        processed_args = []
-        processed_types = ()
-        outputs = []
-        output_like = []
-        self.orig_args = args
-        for num_args, specializer in zip(self.num_args, self.specializers):
-            processed, argtypes, output, out_like = \
-                self.tmp_process_args(*args[offset:offset + num_args])
-            offset += num_args
-            processed_args.extend(processed)
-            processed_types += argtypes
-            outputs.append(output)
-            output_like.append(out_like)
-        return processed_args, processed_types, outputs, output_like
+        processed = ()
+        argtypes = ()
+        for arg in args:
+            if isinstance(arg, numpy.ndarray):
+                if arg.ctypes.data in self.arg_buf_map:
+                    processed += (self.arg_buf_map[arg.ctypes.data],)
+                else:
+                    buf, evt = cl.buffer_from_ndarray(self.queue, arg,
+                                                      blocking=False)
+                    evt.wait()
+                    processed += (buf,)
+                    self.arg_buf_map[arg.ctypes.data] = buf
+                argtypes += (cl.cl_mem,)
+        return processed, argtypes
+
+        # offset = 0
+        # processed_args = []
+        # processed_types = ()
+        # outputs = []
+        # output_like = []
+        # self.orig_args = args
+        # for num_args, specializer in zip(self.num_args, self.specializers):
+        #     processed, argtypes, output, out_like = \
+        #         self.tmp_process_args(*args[offset:offset + num_args])
+        #     offset += num_args
+        #     processed_args.extend(processed)
+        #     processed_types += argtypes
+        #     outputs.append(output)
+        #     output_like.append(out_like)
+        # return processed_args, processed_types, outputs, output_like
 
     def tmp_process_args(self, *args):
         processed = []
@@ -259,21 +280,31 @@ class FusedFn(ConcreteSpecializedFunction):
         return processed, argtypes, output, out_like
 
     def __call__(self, *args):
-        processed, argtypes, outputs, out_likes = \
-            self._process_args(args)
+        processed, argtypes = self._process_args(args)
         self.kernel.argtypes = argtypes
         run_evt = self.kernel(*processed).on(self.queue, self.global_size)
         run_evt.wait()
-        return self._process_outputs(outputs, out_likes)
+        return self._process_outputs()
 
-    def _process_outputs(self, outputs, out_likes):
-        ret_vals = []
-        for output, out_like in zip(outputs, out_likes):
-            if isinstance(output, cl.cl_mem):
-                out, evt = cl.buffer_to_ndarray(self.queue, output,
-                                                like=out_like)
+    def _process_outputs(self):
+        retvals = ()
+        for output in self.outputs:
+            try:
+                buf = self.arg_buf_map[output.ctypes.data]
+                out, evt = cl.buffer_to_ndarray(self.queue, buf, output)
                 evt.wait()
-                ret_vals.append(out)
-            else:
-                ret_vals.append(output.value)
-        return ret_vals
+                retvals += (out,)
+            except KeyError as e:
+                # TODO: Make this a better exception
+                raise Exception("Could not find corresponding buffer")
+        return retvals
+        # ret_vals = []
+        # for output, out_like in zip(outputs, out_likes):
+        #     if isinstance(output, cl.cl_mem):
+        #         out, evt = cl.buffer_to_ndarray(self.queue, output,
+        #                                         like=out_like)
+        #         evt.wait()
+        #         ret_vals.append(out)
+        #     else:
+        #         ret_vals.append(output.value)
+        # return ret_vals
