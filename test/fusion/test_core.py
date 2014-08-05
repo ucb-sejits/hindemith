@@ -15,12 +15,11 @@ from hindemith.fusion.core import BlockBuilder, get_blocks, Fuser
 # from hindemith.operations.optical_flow.warp_img2D import warp_img2d
 # from hindemith.operations.dense_linear_algebra.array_op import square
 from hindemith.operations.dense_linear_algebra.core import array_mul, \
-    array_sub, scalar_array_mul
+    array_sub, scalar_array_mul, array_add
 
 
 class TestFuser(unittest.TestCase):
     def test_is_fusable_true(self):
-
         def f(a, b):
             c = array_mul(a, b)
             d = array_sub(a, c)
@@ -43,7 +42,7 @@ class TestFuser(unittest.TestCase):
         fuser = Fuser(blocks, dict(locals(), **globals()))
         self.assertFalse(fuser._is_fusable(blocks[0], blocks[1]))
 
-    def test_fuse(self):
+    def test_fuse_2(self):
         a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
         b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
 
@@ -57,8 +56,37 @@ class TestFuser(unittest.TestCase):
         BlockBuilder(blocks).visit(tree)
         fuser = Fuser(blocks, dict(locals(), **globals()))
         actual_c, actual_d = fuser._fuse([blocks[0], blocks[1]])
+        expected_c = a * b
+        expected_d = a - expected_c
         try:
-            testing.assert_array_almost_equal(actual_d, a - a * b)
+            testing.assert_array_almost_equal(actual_c, expected_c)
+            testing.assert_array_almost_equal(actual_d, expected_d)
+        except Exception as e:
+            self.fail("Arrays not almost equal: {0}".format(e.message))
+
+    def test_fuse_3(self):
+        a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+        b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+
+        def f(a, b):
+            c = array_mul(a, b)
+            d = array_sub(a, c)
+            e = array_add(c, d)
+            return e
+
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        fuser = Fuser(blocks, dict(locals(), **globals()))
+        actual_c, actual_d, actual_e = \
+            fuser._fuse([blocks[0], blocks[1], blocks[2]])
+        expected_c = a * b
+        expected_d = a - expected_c
+        expected_e = expected_c + expected_d
+        try:
+            testing.assert_array_almost_equal(actual_c, expected_c)
+            testing.assert_array_almost_equal(actual_d, expected_d)
+            testing.assert_array_almost_equal(actual_e, expected_e)
         except Exception as e:
             self.fail("Arrays not almost equal: {0}".format(e.message))
 
