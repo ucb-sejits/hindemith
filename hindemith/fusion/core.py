@@ -8,6 +8,8 @@ from ctree.jit import ConcreteSpecializedFunction
 import ctree
 import ctree.np
 
+from hindemith.utils import unique_kernel_name
+
 ctree.np  # Make PEP happy
 
 import logging
@@ -102,14 +104,25 @@ class Fuser(object):
         :returns: @todo
 
         """
-        fused_blocks = [[self._blocks.pop()]]
+        fused_blocks = [[self._blocks.pop(0)]]
         for block in self._blocks:
-            print(ast.dump(block))
             if self._is_fusable(fused_blocks[-1][-1], block):
                 fused_blocks[-1].append(block)
             else:
                 fused_blocks.append([block])
-        self._blocks = list(map(self._fuse, fused_blocks))
+        results = {}
+        python = []
+        for blocks in fused_blocks:
+            output = self._fuse(blocks)
+            if not isinstance(output, tuple):
+                python.append(output)
+                continue
+            for block in blocks:
+                if isinstance(block, ast.Assign):
+                    for target in block.targets:
+                        results[target.id] = output[0]
+                        output = output[1:]
+        # self._blocks = list(map(self._fuse, fused_blocks))
 
     def _is_fusable(self, block_1, block_2):
         """@todo: Docstring for _is_fusable.
@@ -143,14 +156,20 @@ class Fuser(object):
         specializers = []
         kernels = []
         arg_list = []
+        arg_nodes_list = []
         outputs = []
         for block in blocks:
             specializer = self._symbol_table[block.value.func.id].specialized
-            args = tuple(self._symbol_table[arg.id] for arg in block.value.args)
+            arg_nodes_list.extend(block.value.args)
+            args = tuple(
+                self._symbol_table[arg.id] if isinstance(arg, ast.Name) else
+                arg.n for arg in block.value.args
+            )
             arg_list.extend(args)
             output = specializer.generate_output(*args)
             arg_list.append(output)
             self._symbol_table[block.targets[0].id] = output
+            arg_nodes_list.append(ast.Name(block.targets[0].id, ast.Load()))
             outputs.append(output)
             kernels.append(
                 specializer.fuse_transform(
@@ -175,11 +194,21 @@ class Fuser(object):
         fn = FusedFn(specializers, num_args, outputs)
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
+        print(arg_list)
         # FIXME: Assuming OpenCL
-        return fn.finalize(
+        func_name = unique_kernel_name()
+        self._symbol_table[func_name] = fn.finalize(
             program[kernel.body[0].name],
             reduce(lambda x, y: x * y, arg_list[0].shape, 1)
-        )(*arg_list)
+        )
+        return ast.Call(
+            func=ast.Name(id=func_name, ctx=ast.Load()),
+            args=arg_nodes_list, keywords=[]
+        )
+        # return fn.finalize(
+        #     program[kernel.body[0].name],
+        #     reduce(lambda x, y: x * y, arg_list[0].shape, 1)
+        # )(*arg_list)
 
 
 class FusedFn(ConcreteSpecializedFunction):
@@ -217,6 +246,16 @@ class FusedFn(ConcreteSpecializedFunction):
                     processed += (buf,)
                     self.arg_buf_map[arg.ctypes.data] = buf
                 argtypes += (cl.cl_mem,)
+            else:
+                processed += (arg,)
+                if isinstance(arg, int):
+                    argtypes += (cl.cl_int,)
+                elif isinstance(arg, float):
+                    argtypes += (cl.cl_float,)
+                else:
+                    raise NotImplementedError(
+                        "UnsupportedType: %s" % type(arg)
+                    )
         return processed, argtypes
 
         # offset = 0
@@ -294,7 +333,7 @@ class FusedFn(ConcreteSpecializedFunction):
                 out, evt = cl.buffer_to_ndarray(self.queue, buf, output)
                 evt.wait()
                 retvals += (out,)
-            except KeyError as e:
+            except KeyError:
                 # TODO: Make this a better exception
                 raise Exception("Could not find corresponding buffer")
         return retvals
