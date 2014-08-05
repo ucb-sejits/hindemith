@@ -55,7 +55,11 @@ class TestFuser(unittest.TestCase):
         blocks = []
         BlockBuilder(blocks).visit(tree)
         fuser = Fuser(blocks, dict(locals(), **globals()))
-        actual_c, actual_d = fuser._fuse([blocks[0], blocks[1]])
+        fused = fuser._fuse([blocks[0], blocks[1]])
+        actual_c, actual_d = fuser._symbol_table[fused.func.id](
+            *(fuser._symbol_table[arg.id] if isinstance(arg, ast.Name) else
+              arg.n for arg in fused.args)
+        )
         expected_c = a * b
         expected_d = a - expected_c
         try:
@@ -78,8 +82,11 @@ class TestFuser(unittest.TestCase):
         blocks = []
         BlockBuilder(blocks).visit(tree)
         fuser = Fuser(blocks, dict(locals(), **globals()))
-        actual_c, actual_d, actual_e = \
-            fuser._fuse([blocks[0], blocks[1], blocks[2]])
+        fused = fuser._fuse([blocks[0], blocks[1], blocks[2]])
+        actual_c, actual_d, actual_e = fuser._symbol_table[fused.func.id](
+            *(fuser._symbol_table[arg.id] if isinstance(arg, ast.Name) else
+              arg.n for arg in fused.args)
+        )
         expected_c = a * b
         expected_d = a - expected_c
         expected_e = expected_c + expected_d
@@ -118,7 +125,7 @@ class TestBlockBuilder(unittest.TestCase):
 
 
 class TestSimpleFusion(unittest.TestCase):
-    @unittest.skip("Not implemented")
+    @unittest.skip("")
     def test_simple(self):
         a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
         b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
@@ -132,7 +139,7 @@ class TestSimpleFusion(unittest.TestCase):
         blocks = get_blocks(tree)
         fuser = Fuser(blocks, dict(locals(), **globals()))
         fuser.do_fusion()
-        self.assertEqual(len(blocks), 2)
+        self.fail()
 
 
 # class TestDecorator(unittest.TestCase):
