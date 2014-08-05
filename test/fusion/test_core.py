@@ -6,23 +6,26 @@ import ast
 
 from ctree.frontend import get_ast
 
-from stencil_code.stencil_grid import StencilGrid
-from stencil_code.stencil_kernel import StencilKernel
+# from stencil_code.stencil_grid import StencilGrid
+# from stencil_code.stencil_kernel import StencilKernel
 
-from hindemith.fusion.core import fuse, BlockBuilder, get_blocks, Fuser
-from hindemith.types.common import Array
-from hindemith.utils import unique_name
-from hindemith.operations.optical_flow.warp_img2D import warp_img2d
-from hindemith.operations.dense_linear_algebra.array_op import square
+from hindemith.fusion.core import BlockBuilder, get_blocks, Fuser
+# from hindemith.types.common import Array
+# from hindemith.utils import unique_name
+# from hindemith.operations.optical_flow.warp_img2D import warp_img2d
+# from hindemith.operations.dense_linear_algebra.array_op import square
 from hindemith.operations.dense_linear_algebra.core import array_mul, \
     array_sub, scalar_array_mul
 
 
 class TestFuser(unittest.TestCase):
     def test_is_fusable_true(self):
+
         def f(a, b):
             c = array_mul(a, b)
             d = array_sub(a, c)
+            return d
+
         tree = get_ast(f)
         blocks = []
         BlockBuilder(blocks).visit(tree)
@@ -33,6 +36,7 @@ class TestFuser(unittest.TestCase):
         def f(a, b):
             c = array_mul(a, b)
             return c
+
         tree = get_ast(f)
         blocks = []
         BlockBuilder(blocks).visit(tree)
@@ -42,18 +46,22 @@ class TestFuser(unittest.TestCase):
     def test_fuse(self):
         a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
         b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+
         def f(a, b):
             c = array_mul(a, b)
             d = array_sub(a, c)
+            return d
+
         tree = get_ast(f)
         blocks = []
         BlockBuilder(blocks).visit(tree)
         fuser = Fuser(blocks, dict(locals(), **globals()))
         actual_c, actual_d = fuser._fuse([blocks[0], blocks[1]])
         try:
-            numpy.testing.assert_array_almost_equal(actual_d, a - a * b)
+            testing.assert_array_almost_equal(actual_d, a - a * b)
         except Exception as e:
             self.fail("Arrays not almost equal: {0}".format(e.message))
+
 
 class TestBlockBuilder(unittest.TestCase):
     def test_simple(self):
@@ -86,16 +94,17 @@ class TestSimpleFusion(unittest.TestCase):
     def test_simple(self):
         a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
         b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+
         def f(a, b):
             c = array_mul(a, b)
             d = scalar_array_mul(4, c)
             return d
+
         tree = get_ast(f)
         blocks = get_blocks(tree)
         fuser = Fuser(blocks, dict(locals(), **globals()))
         fuser.do_fusion()
         self.assertEqual(len(blocks), 2)
-
 
 
 # class TestDecorator(unittest.TestCase):
@@ -165,7 +174,8 @@ class TestSimpleFusion(unittest.TestCase):
     #             dv = vbar - (Iy * num) / den
     #         return du, dv
 
-    #     def py_hs_jacobi_solver(im1_data, im2_data, u, v, zero, lam2, num_iter):
+    #     def py_hs_jacobi_solver(im1_data, im2_data, u, v, zero, lam2,
+    #                             num_iter):
     #         du = zero * u
     #         dv = zero * v
 
@@ -220,7 +230,6 @@ class TestSimpleFusion(unittest.TestCase):
 
     #     testing.assert_array_almost_equal(du.data, py_du)
     #     testing.assert_array_almost_equal(dv.data, py_dv)
-
 
 
 # class StencilA(StencilKernel):
