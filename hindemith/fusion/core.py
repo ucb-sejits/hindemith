@@ -1,28 +1,24 @@
+import numpy
 import ast
-from pycl import clCreateProgramWithSource
-
-from ctree.frontend import get_ast
-from ctree.c.nodes import SymbolRef, Op
-from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-import ctree
-import ctree.np
-
-from hindemith.core import coercer
-from hindemith.utils import unique_python_name, unique_name
-from hindemith.operations.dense_linear_algebra.array_op import ArrayOpConcrete
-
 import ctypes as ct
 import pycl as cl
 
-import numpy
+from ctree.frontend import get_ast
+from ctree.jit import ConcreteSpecializedFunction
+import ctree
+import ctree.np
+
+ctree.np  # Make PEP happy
 
 import logging
 LOG = logging.getLogger('Hindemith')
+
 
 def fuse(fn_locals, fn_globals):
     def wrapped_fuser(fn):
         def fused(*args, **kwargs):
             tree = get_ast(fn)
+            tree
             # ctree.browser_show_ast(tree, 'tmp.png')
             return fn(*args, **kwargs)
         return fused
@@ -63,7 +59,26 @@ class BlockBuilder(ast.NodeVisitor):
 
         """
         self._blocks.extend(node.body)
-        
+
+
+class UniqueNamer(ast.NodeTransformer):
+    uid = 0
+
+    def __init__(self):
+        ast.NodeTransformer.__init__(self)
+        self.seen = {}
+
+    def visit_FunctionCall(self, node):
+        # Don't rename functions
+        return node
+
+    def visit_SymbolRef(self, node):
+        if node.name not in self.seen:
+            UniqueNamer.uid += 1
+            self.seen[node.name] = '_f%d' % UniqueNamer.uid
+        node.name = self.seen[node.name]
+        return node
+
 
 class Fuser(object):
 
@@ -110,7 +125,7 @@ class Fuser(object):
                 func_1 = self._symbol_table[block_1.value.func.id]
                 func_2 = self._symbol_table[block_2.value.func.id]
                 return hasattr(func_1, 'fusable') and func_1.fusable() and \
-                       hasattr(func_2, 'fusable') and func_2.fusable()
+                    hasattr(func_2, 'fusable') and func_2.fusable()
         return False
 
     def _fuse(self, blocks):
@@ -122,7 +137,7 @@ class Fuser(object):
 
         """
         if len(blocks) == 1:
-            return blocks[0] 
+            return blocks[0]
 
         num_args = []
         specializers = []
@@ -148,24 +163,6 @@ class Fuser(object):
             )
             num_args.append(len(block.value.args))
 
-        class UniqueNamer(ast.NodeTransformer):
-            uid = 0
-
-            def __init__(self):
-                ast.NodeTransformer.__init__(self)
-                self.seen = {}
-
-            def visit_FunctionCall(self, node):
-                # Don't rename functions
-                return node
-
-            def visit_SymbolRef(self, node):
-                if node.name not in self.seen:
-                    UniqueNamer.uid += 1
-                    self.seen[node.name] = '_f%d' % UniqueNamer.uid
-                node.name = self.seen[node.name]
-                return node
-
         kernel = UniqueNamer().visit(kernels[0])
         for kern in kernels[1:]:
             UniqueNamer().visit(kern)
@@ -175,8 +172,10 @@ class Fuser(object):
         fn = FusedFn(specializers, num_args)
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
-        # FIXME: Assuming OpenCL 
-        return fn.finalize(program[kernel.body[0].name], arg_list[0].shape)(*arg_list)
+        # FIXME: Assuming OpenCL
+        return fn.finalize(program[kernel.body[0].name],
+                           arg_list[0].shape)(*arg_list)
+
 
 class FusedFn(ConcreteSpecializedFunction):
 
