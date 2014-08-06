@@ -55,7 +55,7 @@ class TestFuser(unittest.TestCase):
         blocks = []
         BlockBuilder(blocks).visit(tree)
         fuser = Fuser(blocks, dict(locals(), **globals()))
-        fused = fuser._fuse([blocks[0], blocks[1]])
+        fused = fuser._fuse([blocks[0], blocks[1]]).value
         actual_c, actual_d = fuser._symbol_table[fused.func.id](
             *(fuser._symbol_table[arg.id] if isinstance(arg, ast.Name) else
               arg.n for arg in fused.args)
@@ -82,7 +82,7 @@ class TestFuser(unittest.TestCase):
         blocks = []
         BlockBuilder(blocks).visit(tree)
         fuser = Fuser(blocks, dict(locals(), **globals()))
-        fused = fuser._fuse([blocks[0], blocks[1], blocks[2]])
+        fused = fuser._fuse([blocks[0], blocks[1], blocks[2]]).value
         actual_c, actual_d, actual_e = fuser._symbol_table[fused.func.id](
             *(fuser._symbol_table[arg.id] if isinstance(arg, ast.Name) else
               arg.n for arg in fused.args)
@@ -125,7 +125,6 @@ class TestBlockBuilder(unittest.TestCase):
 
 
 class TestSimpleFusion(unittest.TestCase):
-    @unittest.skip("")
     def test_simple(self):
         a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
         b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
@@ -135,11 +134,23 @@ class TestSimpleFusion(unittest.TestCase):
             d = scalar_array_mul(4, c)
             return d
 
+        orig_f = f
         tree = get_ast(f)
         blocks = get_blocks(tree)
         fuser = Fuser(blocks, dict(locals(), **globals()))
-        fuser.do_fusion()
-        self.fail()
+        fused_blocks = fuser.do_fusion()
+        tree.body[0].body = fused_blocks
+        tree.body.append(ast.Expr(ast.Call(func=ast.Name('f', ast.Load()),
+                                  args=[ast.Name('a', ast.Load()),
+                                  ast.Name('b', ast.Load())],
+                                  keywords=[])))
+        tree = ast.fix_missing_locations(tree)
+        exec(compile(tree, '', 'exec')) in fuser._symbol_table
+        try:
+            testing.assert_array_almost_equal(fuser._symbol_table['f'](a, b),
+                                              orig_f(a, b))
+        except Exception as e:
+            self.fail("Arrays not almost equal: {0}".format(e.message))
 
 
 # class TestDecorator(unittest.TestCase):
