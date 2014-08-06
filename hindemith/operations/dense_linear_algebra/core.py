@@ -218,17 +218,16 @@ class DLALazy(LazySpecializedFunction):
                                                kernel.codegen()).build()
         return fn.finalize(program[kernel.body[0].name], global_size)
 
-
     def fuse_transform(self, tree, program_cfg):
         arg_cfg, tune_cfg = program_cfg
         # FIXME: Assumes all scalars are floats
         output_type = (HMScalar(ct.POINTER(ct.c_float)(), 0, True),)
-        global_size = 1
+        # global_size = 1
         for arg in arg_cfg:
             if hasattr(arg, 'ndpointer'):
                 output_type = (HMArray(arg.type, arg.ndpointer, arg.shape,
                                        arg.ndim, arg.length, True),)
-                global_size = arg.length
+                # global_size = arg.length
                 break
 
         tree = DLASemanticTransformer().visit(tree)
@@ -243,17 +242,17 @@ class DLALazy(LazySpecializedFunction):
                 return self.output
         return 0
 
+    def fusable(self):
+        return True
 
 
 class DLAOp(object):
     def __init__(self, backend='ocl'):
-        self.specialized = DLALazy(get_ast(self.op), backend)
+        pass
 
-    def __call__(self, input1, input2):
-        return self.specialized(input1, input2)
-
-    def fusable(self):
-        return True
+    def __new__(cls, backend='ocl'):
+        cls.__call__ = DLALazy(get_ast(cls.op), backend)
+        return super(DLAOp, cls).__new__(cls, backend)
 
 
 class ArrayAdd(DLAOp):

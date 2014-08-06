@@ -129,8 +129,8 @@ class Fuser(object):
         if isinstance(block_1, ast.Assign) and isinstance(block_2, ast.Assign):
             if isinstance(block_1.value, ast.Call) and \
                isinstance(block_2.value, ast.Call):
-                func_1 = self._symbol_table[block_1.value.func.id]
-                func_2 = self._symbol_table[block_2.value.func.id]
+                func_1 = self._symbol_table[block_1.value.func.id].__call__
+                func_2 = self._symbol_table[block_2.value.func.id].__call__
                 return hasattr(func_1, 'fusable') and func_1.fusable() and \
                     hasattr(func_2, 'fusable') and func_2.fusable()
         return False
@@ -153,7 +153,7 @@ class Fuser(object):
         arg_nodes_list = []
         outputs = []
         for block in blocks:
-            specializer = self._symbol_table[block.value.func.id].specialized
+            specializer = self._symbol_table[block.value.func.id].__call__
             arg_nodes_list.extend(block.value.args)
             args = tuple(
                 self._symbol_table[arg.id] if isinstance(arg, ast.Name) else
@@ -198,10 +198,6 @@ class Fuser(object):
             func=ast.Name(id=func_name, ctx=ast.Load()),
             args=arg_nodes_list, keywords=[]
         ))
-        # return fn.finalize(
-        #     program[kernel.body[0].name],
-        #     reduce(lambda x, y: x * y, arg_list[0].shape, 1)
-        # )(*arg_list)
 
 
 class FusedFn(ConcreteSpecializedFunction):
@@ -250,22 +246,6 @@ class FusedFn(ConcreteSpecializedFunction):
                         "UnsupportedType: %s" % type(arg)
                     )
         return processed, argtypes
-
-        # offset = 0
-        # processed_args = []
-        # processed_types = ()
-        # outputs = []
-        # output_like = []
-        # self.orig_args = args
-        # for num_args, specializer in zip(self.num_args, self.specializers):
-        #     processed, argtypes, output, out_like = \
-        #         self.tmp_process_args(*args[offset:offset + num_args])
-        #     offset += num_args
-        #     processed_args.extend(processed)
-        #     processed_types += argtypes
-        #     outputs.append(output)
-        #     output_like.append(out_like)
-        # return processed_args, processed_types, outputs, output_like
 
     def tmp_process_args(self, *args):
         processed = []
