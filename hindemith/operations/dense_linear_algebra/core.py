@@ -247,12 +247,9 @@ class DLALazy(LazySpecializedFunction):
 
 
 class DLAOp(object):
-    def __init__(self, backend='ocl'):
-        pass
-
     def __new__(cls, backend='ocl'):
         cls.__call__ = DLALazy(get_ast(cls.op), backend)
-        return super(DLAOp, cls).__new__(cls, backend)
+        return super(DLAOp, cls).__new__(cls)
 
 
 class ArrayAdd(DLAOp):
