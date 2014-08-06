@@ -6,3 +6,4 @@ cross pattern analyzer that performs loop fusion across specializer where possib
 
 [![Build Status](https://travis-ci.org/ucb-sejits/hindemith.svg)](https://travis-ci.org/ucb-sejits/hindemith)
 [![Coverage Status](https://coveralls.io/repos/ucb-sejits/hindemith/badge.png)](https://coveralls.io/r/ucb-sejits/hindemith)
+[![Docs](https://readthedocs.org/projects/hindemith/badge/?version=latest)](http://hindemith.readthedocs.org/en/latest/)
