@@ -225,6 +225,25 @@ class TestDecorator(unittest.TestCase):
         except AssertionError as e:
             self.fail("Outputs not equal: %s" % e.message)
 
+    def test_non_fusable(self):
+        A = numpy.random.rand(60, 60).astype(numpy.float32)
+        B = numpy.random.rand(60, 60).astype(numpy.float32)
+        C = numpy.random.rand(60, 60).astype(numpy.float32)
+
+        @fuse(locals(), globals())
+        def test_func(A, B, C):
+            D = array_mul(A, B)
+            E = array_sub(C, D)
+            F = (C * 495) / 394
+            return array_add(E, F)
+
+        actual = test_func(A, B, C)
+        expected = (C - (A * B)) + ((C * 495) / 394)
+        try:
+            testing.assert_array_almost_equal(actual, expected)
+        except AssertionError as e:
+            self.fail("Outputs not equal: %s" % e.message)
+
     # @unittest.skip("")
     # def test_hs_jacobi(self):
     #     @fuse
