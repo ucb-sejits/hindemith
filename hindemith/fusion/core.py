@@ -110,19 +110,7 @@ class Fuser(object):
                 fused_blocks[-1].append(block)
             else:
                 fused_blocks.append([block])
-        results = {}
-        python = []
-        for blocks in fused_blocks:
-            output = self._fuse(blocks)
-            if not isinstance(output, tuple):
-                python.append(output)
-                continue
-            for block in blocks:
-                if isinstance(block, ast.Assign):
-                    for target in block.targets:
-                        results[target.id] = output[0]
-                        output = output[1:]
-        # self._blocks = list(map(self._fuse, fused_blocks))
+        return list(map(self._fuse, fused_blocks))
 
     def _is_fusable(self, block_1, block_2):
         """@todo: Docstring for _is_fusable.
@@ -194,17 +182,16 @@ class Fuser(object):
         fn = FusedFn(specializers, num_args, outputs)
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
-        print(arg_list)
         # FIXME: Assuming OpenCL
         func_name = unique_kernel_name()
         self._symbol_table[func_name] = fn.finalize(
             program[kernel.body[0].name],
             reduce(lambda x, y: x * y, arg_list[0].shape, 1)
         )
-        return ast.Call(
+        return ast.Expr(ast.Call(
             func=ast.Name(id=func_name, ctx=ast.Load()),
             args=arg_nodes_list, keywords=[]
-        )
+        ))
         # return fn.finalize(
         #     program[kernel.body[0].name],
         #     reduce(lambda x, y: x * y, arg_list[0].shape, 1)
