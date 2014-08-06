@@ -9,7 +9,7 @@ from ctree.frontend import get_ast
 # from stencil_code.stencil_grid import StencilGrid
 # from stencil_code.stencil_kernel import StencilKernel
 
-from hindemith.fusion.core import BlockBuilder, get_blocks, Fuser
+from hindemith.fusion.core import BlockBuilder, get_blocks, Fuser, fuse
 # from hindemith.types.common import Array
 # from hindemith.utils import unique_name
 # from hindemith.operations.optical_flow.warp_img2D import warp_img2d
@@ -140,10 +140,6 @@ class TestSimpleFusion(unittest.TestCase):
         fuser = Fuser(blocks, dict(locals(), **globals()))
         fused_blocks = fuser.do_fusion()
         tree.body[0].body = fused_blocks
-        tree.body.append(ast.Expr(ast.Call(func=ast.Name('f', ast.Load()),
-                                  args=[ast.Name('a', ast.Load()),
-                                  ast.Name('b', ast.Load())],
-                                  keywords=[])))
         tree = ast.fix_missing_locations(tree)
         exec(compile(tree, '', 'exec')) in fuser._symbol_table
         try:
@@ -168,10 +164,6 @@ class TestSimpleFusion(unittest.TestCase):
         fuser = Fuser(blocks, dict(locals(), **globals()))
         fused_blocks = fuser.do_fusion()
         tree.body[0].body = fused_blocks
-        tree.body.append(ast.Expr(ast.Call(func=ast.Name('f', ast.Load()),
-                                  args=[ast.Name('a', ast.Load()),
-                                  ast.Name('b', ast.Load())],
-                                  keywords=[])))
         tree = ast.fix_missing_locations(tree)
         exec(compile(tree, '', 'exec')) in fuser._symbol_table
         try:
@@ -197,10 +189,6 @@ class TestSimpleFusion(unittest.TestCase):
         fuser = Fuser(blocks, dict(locals(), **globals()))
         fused_blocks = fuser.do_fusion()
         tree.body[0].body = fused_blocks
-        tree.body.append(ast.Expr(ast.Call(func=ast.Name('f', ast.Load()),
-                                  args=[ast.Name('a', ast.Load()),
-                                  ast.Name('b', ast.Load())],
-                                  keywords=[])))
         tree = ast.fix_missing_locations(tree)
         exec(compile(tree, '', 'exec')) in fuser._symbol_table
         try:
@@ -209,31 +197,33 @@ class TestSimpleFusion(unittest.TestCase):
         except Exception as e:
             self.fail("Arrays not almost equal: {0}".format(e.message))
 
-# class TestDecorator(unittest.TestCase):
-#     def test_dec(self):
-#         @fuse(locals(), globals())
-#         def test_func(arg=None):
-#             return arg
 
-#         a = test_func(arg=1)
-#         self.assertEqual(a, 1)
+class TestDecorator(unittest.TestCase):
+    def test_dec_no_fusion(self):
+        @fuse(locals(), globals())
+        def test_func(arg):
+            return arg
 
-#     def test_fusion(self):
-#         @fuse(locals(), globals())
-#         def test_func(A=None, B=None, C=None):
-#             D = array_mul(A, B)
-#             E = array_sub(C, D)
-#             return E
+        a = test_func(1)
+        self.assertEqual(a, 1)
 
-#         A = numpy.random.rand(60, 60).astype(numpy.float32)
-#         B = numpy.random.rand(60, 60).astype(numpy.float32)
-#         C = numpy.random.rand(60, 60).astype(numpy.float32)
-#         actual = test_func(A=A, B=B, C=C)
-#         expected = C - (A * B)
-#         try:
-#             testing.assert_array_almost_equal(actual, expected)
-#         except AssertionError as e:
-#             self.fail("Outputs not equal: %s" % e.message)
+    def test_fusion(self):
+        A = numpy.random.rand(60, 60).astype(numpy.float32)
+        B = numpy.random.rand(60, 60).astype(numpy.float32)
+        C = numpy.random.rand(60, 60).astype(numpy.float32)
+
+        @fuse(locals(), globals())
+        def test_func(A, B, C):
+            D = array_mul(A, B)
+            E = array_sub(C, D)
+            return E
+
+        actual = test_func(A, B, C)
+        expected = C - (A * B)
+        try:
+            testing.assert_array_almost_equal(actual, expected)
+        except AssertionError as e:
+            self.fail("Outputs not equal: %s" % e.message)
 
     # @unittest.skip("")
     # def test_hs_jacobi(self):

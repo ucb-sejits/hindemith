@@ -20,9 +20,15 @@ def fuse(fn_locals, fn_globals):
     def wrapped_fuser(fn):
         def fused(*args, **kwargs):
             tree = get_ast(fn)
-            tree
-            # ctree.browser_show_ast(tree, 'tmp.png')
-            return fn(*args, **kwargs)
+            blocks = get_blocks(tree)
+            fuser = Fuser(blocks, dict(fn_locals, **fn_globals))
+            fused_blocks = fuser.do_fusion()
+            tree.body[0].body = fused_blocks
+            # Remove Decorator
+            tree.body[0].decorator_list = []
+            tree = ast.fix_missing_locations(tree)
+            exec(compile(tree, '', 'exec')) in fuser._symbol_table
+            return fuser._symbol_table[fn.__name__](*args, **kwargs)
         return fused
     return wrapped_fuser
 
