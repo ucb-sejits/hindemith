@@ -1,7 +1,7 @@
-teller
-======
+hindemith
+=========
 
 .. toctree::
    :maxdepth: 4
 
-   teller
+   hindemith
