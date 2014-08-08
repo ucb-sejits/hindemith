@@ -132,10 +132,10 @@ class Fuser(object):
                 isinstance(block_2, ast.Return):
             if isinstance(block_1.value, ast.Call) and \
                isinstance(block_2.value, ast.Call):
-                func_1 = self._symbol_table[block_1.value.func.id].__call__
-                func_2 = self._symbol_table[block_2.value.func.id].__call__
+                func_1 = self._symbol_table[block_1.value.func.id]
+                func_2 = self._symbol_table[block_2.value.func.id]
                 return hasattr(func_1, 'fusable') and func_1.fusable() and \
-                    hasattr(func_2, 'fusable') and func_2.fusable()
+                       hasattr(func_2, 'fusable') and func_2.fusable()
         return False
 
     def _fuse(self, blocks):
@@ -159,14 +159,15 @@ class Fuser(object):
         for block in blocks:
             if isinstance(block, ast.Return):
                 is_return = True
-            specializer = self._symbol_table[block.value.func.id].__call__
+            specializer = self._symbol_table[block.value.func.id]
             arg_nodes_list.extend(block.value.args)
             args = tuple(
                 self._symbol_table[arg.id] if isinstance(arg, ast.Name) else
                 arg.n for arg in block.value.args
             )
             arg_list.extend(args)
-            output = specializer.generate_output(*args)
+            program_cfg = (specializer.args_to_subconfig(args), None)
+            output = specializer.generate_output(program_cfg)
             arg_list.append(output)
             if not is_return:
                 target = block.targets[0].id
