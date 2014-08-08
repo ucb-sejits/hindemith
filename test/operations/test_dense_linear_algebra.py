@@ -8,6 +8,7 @@ from hindemith.operations.dense_linear_algebra.array_op import ArrayAdd, ArrayMu
 from hindemith.types.common import Array
 
 
+@unittest.skip("Deprecated")
 class TestArrayOps(unittest.TestCase):
     def _check(self, specializer):
         rand1 = Array(
@@ -40,6 +41,7 @@ class TestArrayOps(unittest.TestCase):
         self._check(ArrayDiv)
 
 
+@unittest.skip("Deprecated")
 class TestNativeArrayOps(unittest.TestCase):
     def _check(self, actual, expected):
         try:

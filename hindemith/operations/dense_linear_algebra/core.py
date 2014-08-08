@@ -8,6 +8,8 @@ from ctree.ocl.macros import get_global_id
 
 import ctree.np
 
+ctree.np  # Make PEP8 happy
+
 import pycl as cl
 import numpy as np
 import ctypes as ct
@@ -202,37 +204,28 @@ class DLALazy(LazySpecializedFunction):
         arg_cfg, tune_cfg = program_cfg
         # FIXME: Assumes all scalars are floats
         output_type = (HMScalar(ct.POINTER(ct.c_float)(), 0, True),)
-        global_size = 1
         for arg in arg_cfg:
             if hasattr(arg, 'ndpointer'):
                 output_type = (HMArray(arg.type, arg.ndpointer, arg.shape,
                                        arg.ndim, arg.length, True),)
-                global_size = arg.length
                 break
 
         tree = DLASemanticTransformer().visit(tree)
         tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
+        return tree
+
+    def finalize(self, tree, program_cfg):
+        arg_cfg, tune_cfg = program_cfg
+        global_size = 1
+        for arg in arg_cfg:
+            if hasattr(arg, 'ndpointer'):
+                global_size = arg.length
+                break
         fn = DLAConcreteOCL(self.output)
         kernel = tree.files[-1]
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
         return fn.finalize(program[kernel.body[0].name], global_size)
-
-    def fuse_transform(self, tree, program_cfg):
-        arg_cfg, tune_cfg = program_cfg
-        # FIXME: Assumes all scalars are floats
-        output_type = (HMScalar(ct.POINTER(ct.c_float)(), 0, True),)
-        # global_size = 1
-        for arg in arg_cfg:
-            if hasattr(arg, 'ndpointer'):
-                output_type = (HMArray(arg.type, arg.ndpointer, arg.shape,
-                                       arg.ndim, arg.length, True),)
-                # global_size = arg.length
-                break
-
-        tree = DLASemanticTransformer().visit(tree)
-        tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
-        return tree.files[-1]
 
     def generate_output(self, *args):
         arg_cfg = self.args_to_subconfig(args)

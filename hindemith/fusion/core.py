@@ -166,14 +166,17 @@ class Fuser(object):
             arg_nodes_list.append(ast.Name(block.targets[0].id, ast.Load()))
             outputs.append(output)
             kernels.append(
-                specializer.fuse_transform(
-                    specializer.original_tree,
-                    (specializer.args_to_subconfig(args), None)
-                )
-            )
-            specializers.append(
                 specializer.transform(
                     specializer.original_tree,
+                    (specializer.args_to_subconfig(args), None)
+                ).files[-1]  # TODO: This needs to be more general
+            )
+            specializers.append(
+                specializer.finalize(
+                    specializer.transform(
+                        specializer.original_tree,
+                        (specializer.args_to_subconfig(args), None)
+                    ),
                     (specializer.args_to_subconfig(args), None)
                 )
             )
