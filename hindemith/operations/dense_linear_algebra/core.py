@@ -171,7 +171,7 @@ class DLAOclTransformer(ast.NodeTransformer):
 
 
 HMArray = namedtuple("HMArray", ['type', 'ndpointer', 'shape', 'ndim',
-                                 'length', 'is_global'])
+                                 'length', 'is_global', 'data'])
 HMScalar = namedtuple("HMScalar", ['type', 'value', 'is_global'])
 
 
@@ -186,7 +186,7 @@ class DLALazy(LazySpecializedFunction):
             return HMArray(
                 ndpointer(arg.dtype, arg.ndim, arg.shape)(),
                 ndpointer(arg.dtype, arg.ndim, arg.shape), arg.shape, arg.ndim,
-                reduce(lambda x, y: x * y, arg.shape, 1), True
+                reduce(lambda x, y: x * y, arg.shape, 1), True, arg
             )
         elif isinstance(arg, int):
             return HMScalar(ct.c_int(), arg, False)
@@ -203,11 +203,14 @@ class DLALazy(LazySpecializedFunction):
     def transform(self, tree, program_cfg):
         arg_cfg, tune_cfg = program_cfg
         # FIXME: Assumes all scalars are floats
+        if self.output is None:
+            self.generate_output(program_cfg)
         output_type = (HMScalar(ct.POINTER(ct.c_float)(), 0, True),)
         for arg in arg_cfg:
             if hasattr(arg, 'ndpointer'):
-                output_type = (HMArray(arg.type, arg.ndpointer, arg.shape,
-                                       arg.ndim, arg.length, True),)
+                output_type = (
+                    HMArray(arg.type, arg.ndpointer, arg.shape,
+                            arg.ndim, arg.length, True, self.output),)
                 break
 
         tree = DLASemanticTransformer().visit(tree)
@@ -222,16 +225,17 @@ class DLALazy(LazySpecializedFunction):
                 global_size = arg.length
                 break
         fn = DLAConcreteOCL(self.output)
+        self.output = None
         kernel = tree.files[-1]
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
         return fn.finalize(program[kernel.body[0].name], global_size)
 
-    def generate_output(self, *args):
-        arg_cfg = self.args_to_subconfig(args)
-        for arg, cfg in zip(args, arg_cfg):
-            if hasattr(cfg, 'ndpointer'):
-                self.output = zeros_like(arg)
+    def generate_output(self, program_cfg):
+        arg_cfg, tune_cfg = program_cfg
+        for arg in arg_cfg:
+            if hasattr(arg, 'ndpointer'):
+                self.output = zeros_like(arg.data)
                 return self.output
         return 0
 
@@ -241,8 +245,7 @@ class DLALazy(LazySpecializedFunction):
 
 class DLAOp(object):
     def __new__(cls, backend='ocl'):
-        cls.__call__ = DLALazy(get_ast(cls.op), backend)
-        return super(DLAOp, cls).__new__(cls)
+        return DLALazy(get_ast(cls.op), backend)
 
 
 class ArrayAdd(DLAOp):

@@ -15,7 +15,7 @@ from hindemith.fusion.core import BlockBuilder, get_blocks, Fuser, fuse
 # from hindemith.operations.optical_flow.warp_img2D import warp_img2d
 # from hindemith.operations.dense_linear_algebra.array_op import square
 from hindemith.operations.dense_linear_algebra.core import array_mul, \
-    array_sub, scalar_array_mul, array_add
+    array_sub, scalar_array_mul, array_add, array_scalar_add
 
 
 class TestFuser(unittest.TestCase):
@@ -262,6 +262,24 @@ class TestDecorator(unittest.TestCase):
 
         actual = test_func(A, B, C)
         expected = (C - (A * B)) + ((C * 495) / 394)
+        try:
+            testing.assert_array_almost_equal(actual, expected)
+        except AssertionError as e:
+            self.fail("Outputs not equal: %s" % e.message)
+
+    def test_fuse_with_return(self):
+        A = numpy.random.rand(60, 60).astype(numpy.float32)
+        B = numpy.random.rand(60, 60).astype(numpy.float32)
+        C = numpy.random.rand(60, 60).astype(numpy.float32)
+
+        @fuse(locals(), globals())
+        def test_func(A, B, C):
+            D = array_mul(A, B)
+            E = array_sub(C, D)
+            return array_scalar_add(E, 3)
+
+        actual = test_func(A, B, C)
+        expected = (C - A * B) + 3
         try:
             testing.assert_array_almost_equal(actual, expected)
         except AssertionError as e:
