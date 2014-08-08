@@ -197,6 +197,29 @@ class TestSimpleFusion(unittest.TestCase):
         except Exception as e:
             self.fail("Arrays not almost equal: {0}".format(e.message))
 
+    def test_fuse_with_return(self):
+        a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+        b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+
+        def f(a, b):
+            c = array_mul(a, b)
+            d = scalar_array_mul(4, c)
+            return array_sub(c, d)
+
+        orig_f = f
+        tree = get_ast(f)
+        blocks = get_blocks(tree)
+        fuser = Fuser(blocks, dict(locals(), **globals()))
+        fused_blocks = fuser.do_fusion()
+        tree.body[0].body = fused_blocks
+        tree = ast.fix_missing_locations(tree)
+        exec(compile(tree, '', 'exec')) in fuser._symbol_table
+        try:
+            testing.assert_array_almost_equal(fuser._symbol_table['f'](a, b),
+                                              orig_f(a, b))
+        except Exception as e:
+            self.fail("Arrays not almost equal: {0}".format(e.message))
+
 
 class TestDecorator(unittest.TestCase):
     def test_dec_no_fusion(self):

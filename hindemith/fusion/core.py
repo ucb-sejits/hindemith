@@ -8,7 +8,7 @@ from ctree.jit import ConcreteSpecializedFunction
 import ctree
 import ctree.np
 
-from hindemith.utils import unique_kernel_name
+from hindemith.utils import unique_kernel_name, unique_name
 
 ctree.np  # Make PEP happy
 
@@ -116,6 +116,7 @@ class Fuser(object):
                 fused_blocks[-1].append(block)
             else:
                 fused_blocks.append([block])
+        print(fused_blocks)
         return list(map(self._fuse, fused_blocks))
 
     def _is_fusable(self, block_1, block_2):
@@ -126,7 +127,9 @@ class Fuser(object):
         :returns: @todo
 
         """
-        if isinstance(block_1, ast.Assign) and isinstance(block_2, ast.Assign):
+        if isinstance(block_1, ast.Assign) and \
+                isinstance(block_2, ast.Assign) or \
+                isinstance(block_2, ast.Return):
             if isinstance(block_1.value, ast.Call) and \
                isinstance(block_2.value, ast.Call):
                 func_1 = self._symbol_table[block_1.value.func.id].__call__
@@ -152,7 +155,10 @@ class Fuser(object):
         arg_list = []
         arg_nodes_list = []
         outputs = []
+        is_return = False
         for block in blocks:
+            if isinstance(block, ast.Return):
+                is_return = True
             specializer = self._symbol_table[block.value.func.id].__call__
             arg_nodes_list.extend(block.value.args)
             args = tuple(
@@ -162,8 +168,14 @@ class Fuser(object):
             arg_list.extend(args)
             output = specializer.generate_output(*args)
             arg_list.append(output)
-            self._symbol_table[block.targets[0].id] = output
-            arg_nodes_list.append(ast.Name(block.targets[0].id, ast.Load()))
+            if not is_return:
+                target = block.targets[0].id
+            else:
+                target = unique_name()
+
+            self._symbol_table[target] = output
+            arg_nodes_list.append(ast.Name(target, ast.Load()))
+
             outputs.append(output)
             kernels.append(
                 specializer.transform(
@@ -188,7 +200,7 @@ class Fuser(object):
             kernel.body[0].defn.extend(kern.body[0].defn)
             kernel.body[0].params.extend(kern.body[0].params)
 
-        fn = FusedFn(specializers, num_args, outputs)
+        fn = FusedFn(specializers, num_args, outputs, is_return)
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
         # FIXME: Assuming OpenCL
@@ -197,17 +209,22 @@ class Fuser(object):
             program[kernel.body[0].name],
             reduce(lambda x, y: x * y, arg_list[0].shape, 1)
         )
-        return ast.Expr(ast.Call(
+        tree = ast.Call(
             func=ast.Name(id=func_name, ctx=ast.Load()),
             args=arg_nodes_list, keywords=[]
-        ))
+        )
+        if is_return:
+            tree = ast.Return(tree)
+        else:
+            tree = ast.Expr(tree)
+        return tree
 
 
 class FusedFn(ConcreteSpecializedFunction):
 
     """Docstring for FusedFn. """
 
-    def __init__(self, specializers, num_args, outputs):
+    def __init__(self, specializers, num_args, outputs, is_return):
         """@todo: to be defined1. """
         ConcreteSpecializedFunction.__init__(self)
         self.specializers = specializers
@@ -218,6 +235,7 @@ class FusedFn(ConcreteSpecializedFunction):
         self.orig_args = ()
         self.arg_buf_map = {}
         self.outputs = outputs
+        self.is_return = is_return
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
@@ -303,6 +321,12 @@ class FusedFn(ConcreteSpecializedFunction):
 
     def _process_outputs(self):
         retvals = ()
+        if self.is_return:
+            output = self.outputs[-1]
+            buf = self.arg_buf_map[output.ctypes.data]
+            out, evt = cl.buffer_to_ndarray(self.queue, buf, output)
+            evt.wait()
+            return out
         for output in self.outputs:
             try:
                 buf = self.arg_buf_map[output.ctypes.data]
