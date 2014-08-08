@@ -2,39 +2,243 @@ import unittest
 import numpy
 from numpy import testing
 
-from stencil_code.stencil_grid import StencilGrid
-from stencil_code.stencil_kernel import StencilKernel
+import ast
 
-from hindemith.fusion.core import fuse
-from hindemith.types.common import Array
-from hindemith.utils import unique_name
-from hindemith.operations.optical_flow.warp_img2D import warp_img2d
-from hindemith.operations.dense_linear_algebra.array_op import square
-from hindemith.operations.dense_linear_algebra.core import array_mul, array_sub
+from ctree.frontend import get_ast
+
+# from stencil_code.stencil_grid import StencilGrid
+# from stencil_code.stencil_kernel import StencilKernel
+
+from hindemith.fusion.core import BlockBuilder, get_blocks, Fuser, fuse
+# from hindemith.types.common import Array
+# from hindemith.utils import unique_name
+# from hindemith.operations.optical_flow.warp_img2D import warp_img2d
+# from hindemith.operations.dense_linear_algebra.array_op import square
+from hindemith.operations.dense_linear_algebra.core import array_mul, \
+    array_sub, scalar_array_mul, array_add
+
+
+class TestFuser(unittest.TestCase):
+    def test_is_fusable_true(self):
+        def f(a, b):
+            c = array_mul(a, b)
+            d = array_sub(a, c)
+            return d
+
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        fuser = Fuser(blocks, dict(locals(), **globals()))
+        self.assertTrue(fuser._is_fusable(blocks[0], blocks[1]))
+
+    def test_is_fusable_false(self):
+        def f(a, b):
+            c = array_mul(a, b)
+            return c
+
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        fuser = Fuser(blocks, dict(locals(), **globals()))
+        self.assertFalse(fuser._is_fusable(blocks[0], blocks[1]))
+
+    def test_fuse_2(self):
+        a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+        b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+
+        def f(a, b):
+            c = array_mul(a, b)
+            d = array_sub(a, c)
+            return d
+
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        fuser = Fuser(blocks, dict(locals(), **globals()))
+        fused = fuser._fuse([blocks[0], blocks[1]]).value
+        actual_c, actual_d = fuser._symbol_table[fused.func.id](
+            *(fuser._symbol_table[arg.id] if isinstance(arg, ast.Name) else
+              arg.n for arg in fused.args)
+        )
+        expected_c = a * b
+        expected_d = a - expected_c
+        try:
+            testing.assert_array_almost_equal(actual_c, expected_c)
+            testing.assert_array_almost_equal(actual_d, expected_d)
+        except Exception as e:
+            self.fail("Arrays not almost equal: {0}".format(e.message))
+
+    def test_fuse_3(self):
+        a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+        b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+
+        def f(a, b):
+            c = array_mul(a, b)
+            d = array_sub(a, c)
+            e = array_add(c, d)
+            return e
+
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        fuser = Fuser(blocks, dict(locals(), **globals()))
+        fused = fuser._fuse([blocks[0], blocks[1], blocks[2]]).value
+        actual_c, actual_d, actual_e = fuser._symbol_table[fused.func.id](
+            *(fuser._symbol_table[arg.id] if isinstance(arg, ast.Name) else
+              arg.n for arg in fused.args)
+        )
+        expected_c = a * b
+        expected_d = a - expected_c
+        expected_e = expected_c + expected_d
+        try:
+            testing.assert_array_almost_equal(actual_c, expected_c)
+            testing.assert_array_almost_equal(actual_d, expected_d)
+            testing.assert_array_almost_equal(actual_e, expected_e)
+        except Exception as e:
+            self.fail("Arrays not almost equal: {0}".format(e.message))
+
+
+class TestBlockBuilder(unittest.TestCase):
+    def test_simple(self):
+        def f(a):
+            return array_mul(a)
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        self.assertEqual(len(blocks), 1)
+        self.assertIsInstance(blocks[0], ast.Return)
+
+    def test_multiline(self):
+        def f(a, b):
+            c = array_mul(a, b)
+            d = array_sub(a, c)
+            e = d * c
+            return e / 4
+        tree = get_ast(f)
+        blocks = []
+        BlockBuilder(blocks).visit(tree)
+        self.assertEqual(len(blocks), 4)
+        self.assertIsInstance(blocks[0], ast.Assign)
+        self.assertIsInstance(blocks[1], ast.Assign)
+        self.assertIsInstance(blocks[2], ast.Assign)
+        self.assertIsInstance(blocks[3], ast.Return)
+
+
+class TestSimpleFusion(unittest.TestCase):
+    def test_simple(self):
+        a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+        b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+
+        def f(a, b):
+            c = array_mul(a, b)
+            d = scalar_array_mul(4, c)
+            return d
+
+        orig_f = f
+        tree = get_ast(f)
+        blocks = get_blocks(tree)
+        fuser = Fuser(blocks, dict(locals(), **globals()))
+        fused_blocks = fuser.do_fusion()
+        tree.body[0].body = fused_blocks
+        tree = ast.fix_missing_locations(tree)
+        exec(compile(tree, '', 'exec')) in fuser._symbol_table
+        try:
+            testing.assert_array_almost_equal(fuser._symbol_table['f'](a, b),
+                                              orig_f(a, b))
+        except Exception as e:
+            self.fail("Arrays not almost equal: {0}".format(e.message))
+
+    def test_simple2(self):
+        a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+        b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+
+        def f(a, b):
+            c = array_mul(a, b)
+            d = scalar_array_mul(4, c)
+            e = array_sub(d, b)
+            return e
+
+        orig_f = f
+        tree = get_ast(f)
+        blocks = get_blocks(tree)
+        fuser = Fuser(blocks, dict(locals(), **globals()))
+        fused_blocks = fuser.do_fusion()
+        tree.body[0].body = fused_blocks
+        tree = ast.fix_missing_locations(tree)
+        exec(compile(tree, '', 'exec')) in fuser._symbol_table
+        try:
+            testing.assert_array_almost_equal(fuser._symbol_table['f'](a, b),
+                                              orig_f(a, b))
+        except Exception as e:
+            self.fail("Arrays not almost equal: {0}".format(e.message))
+
+    def test_non_fusable(self):
+        a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+        b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+
+        def f(a, b):
+            c = array_mul(a, b)
+            d = scalar_array_mul(4, c)
+            b = d * 3
+            e = array_sub(d, b)
+            return e
+
+        orig_f = f
+        tree = get_ast(f)
+        blocks = get_blocks(tree)
+        fuser = Fuser(blocks, dict(locals(), **globals()))
+        fused_blocks = fuser.do_fusion()
+        tree.body[0].body = fused_blocks
+        tree = ast.fix_missing_locations(tree)
+        exec(compile(tree, '', 'exec')) in fuser._symbol_table
+        try:
+            testing.assert_array_almost_equal(fuser._symbol_table['f'](a, b),
+                                              orig_f(a, b))
+        except Exception as e:
+            self.fail("Arrays not almost equal: {0}".format(e.message))
 
 
 class TestDecorator(unittest.TestCase):
-    def test_dec(self):
+    def test_dec_no_fusion(self):
         @fuse(locals(), globals())
-        def test_func(arg=None):
+        def test_func(arg):
             return arg
 
-        a = test_func(arg=1)
+        a = test_func(1)
         self.assertEqual(a, 1)
 
-    @unittest.skip("")
     def test_fusion(self):
+        A = numpy.random.rand(60, 60).astype(numpy.float32)
+        B = numpy.random.rand(60, 60).astype(numpy.float32)
+        C = numpy.random.rand(60, 60).astype(numpy.float32)
+
         @fuse(locals(), globals())
-        def test_func(A=None, B=None, C=None):
+        def test_func(A, B, C):
             D = array_mul(A, B)
             E = array_sub(C, D)
             return E
 
+        actual = test_func(A, B, C)
+        expected = C - (A * B)
+        try:
+            testing.assert_array_almost_equal(actual, expected)
+        except AssertionError as e:
+            self.fail("Outputs not equal: %s" % e.message)
+
+    def test_non_fusable(self):
         A = numpy.random.rand(60, 60).astype(numpy.float32)
         B = numpy.random.rand(60, 60).astype(numpy.float32)
         C = numpy.random.rand(60, 60).astype(numpy.float32)
-        actual = test_func(A=A, B=B, C=C)
-        expected = C - (A * B)
+
+        @fuse(locals(), globals())
+        def test_func(A, B, C):
+            D = array_mul(A, B)
+            E = array_sub(C, D)
+            F = (C * 495) / 394
+            return array_add(E, F)
+
+        actual = test_func(A, B, C)
+        expected = (C - (A * B)) + ((C * 495) / 394)
         try:
             testing.assert_array_almost_equal(actual, expected)
         except AssertionError as e:
@@ -81,7 +285,8 @@ class TestDecorator(unittest.TestCase):
     #             dv = vbar - (Iy * num) / den
     #         return du, dv
 
-    #     def py_hs_jacobi_solver(im1_data, im2_data, u, v, zero, lam2, num_iter):
+    #     def py_hs_jacobi_solver(im1_data, im2_data, u, v, zero, lam2,
+    #                             num_iter):
     #         du = zero * u
     #         dv = zero * v
 
@@ -136,7 +341,6 @@ class TestDecorator(unittest.TestCase):
 
     #     testing.assert_array_almost_equal(du.data, py_du)
     #     testing.assert_array_almost_equal(dv.data, py_dv)
-
 
 
 # class StencilA(StencilKernel):

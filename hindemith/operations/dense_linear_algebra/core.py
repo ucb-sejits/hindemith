@@ -26,9 +26,10 @@ class DLAConcreteOCL(ConcreteSpecializedFunction):
     context = cl.clCreateContext([device])
     queue = cl.clCreateCommandQueue(context)
 
-    def __init__(self):
+    def __init__(self, output=None):
         self.context = DLAConcreteOCL.context
         self.queue = DLAConcreteOCL.queue
+        self.output = output
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
@@ -62,6 +63,11 @@ class DLAConcreteOCL(ConcreteSpecializedFunction):
                     raise NotImplementedError(
                         "UnsupportedType: %s" % type(arg)
                     )
+        if self.output is not None:
+            output, evt = cl.buffer_from_ndarray(self.queue, self.output,
+                                                 blocking=False)
+            out_like = self.output
+            evt.wait()
         if isinstance(output, cl.cl_mem):
             argtypes += (cl.cl_mem,)
             processed.append(output)
@@ -107,13 +113,14 @@ class PointsLoop(ast.AST):
                                                     self.iter_target)
 
 
-class DLASemanticTransformer(ast.NodeTransformer):
+class DLASemanticTransformer(PyBasicConversions):
     def visit_For(self, node):
         if isinstance(node.iter, ast.Call) and\
            isinstance(node.iter.func, ast.Attribute):
             if node.iter.func.attr == 'points':
                 return PointsLoop(
-                    node.target.id, node.iter.func.value.id, node.body
+                    node.target.id, node.iter.func.value.id,
+                    list(map(self.visit, node.body))
                 )
         return node
 
@@ -170,6 +177,7 @@ class DLALazy(LazySpecializedFunction):
     def __init__(self, tree, backend):
         super(DLALazy, self).__init__(tree)
         self.backend = backend
+        self.output = None
 
     def _process_arg(self, arg):
         if isinstance(arg, np.ndarray):
@@ -202,30 +210,46 @@ class DLALazy(LazySpecializedFunction):
                 global_size = arg.length
                 break
 
-        tree = PyBasicConversions().visit(tree)
         tree = DLASemanticTransformer().visit(tree)
         tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
-        fn = DLAConcreteOCL()
+        fn = DLAConcreteOCL(self.output)
         kernel = tree.files[-1]
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
         return fn.finalize(program[kernel.body[0].name], global_size)
 
-    def generate_output(self, *args):
-        arg_cfg = self.args_to_subconfig(args)
+    def fuse_transform(self, tree, program_cfg):
+        arg_cfg, tune_cfg = program_cfg
+        # FIXME: Assumes all scalars are floats
+        output_type = (HMScalar(ct.POINTER(ct.c_float)(), 0, True),)
+        # global_size = 1
         for arg in arg_cfg:
             if hasattr(arg, 'ndpointer'):
-                return zeros_like(arg)
+                output_type = (HMArray(arg.type, arg.ndpointer, arg.shape,
+                                       arg.ndim, arg.length, True),)
+                # global_size = arg.length
+                break
+
+        tree = DLASemanticTransformer().visit(tree)
+        tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
+        return tree.files[-1]
+
+    def generate_output(self, *args):
+        arg_cfg = self.args_to_subconfig(args)
+        for arg, cfg in zip(args, arg_cfg):
+            if hasattr(cfg, 'ndpointer'):
+                self.output = zeros_like(arg)
+                return self.output
         return 0
 
+    def fusable(self):
+        return True
 
 
 class DLAOp(object):
-    def __init__(self, backend='ocl'):
-        self.specialized = DLALazy(get_ast(self.op), backend)
-
-    def __call__(self, input1, input2):
-        return self.specialized(input1, input2)
+    def __new__(cls, backend='ocl'):
+        cls.__call__ = DLALazy(get_ast(cls.op), backend)
+        return super(DLAOp, cls).__new__(cls)
 
 
 class ArrayAdd(DLAOp):
