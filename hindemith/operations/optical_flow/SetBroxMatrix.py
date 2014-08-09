@@ -1,4 +1,5 @@
 import numpy as np
+# pragma: no cover
 class SetBroxMatrix(object):
     def __init__(self, pure_python=False):
         self.pure_python = pure_python

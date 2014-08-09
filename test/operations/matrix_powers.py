@@ -5,6 +5,7 @@ from hindemith.operations.matrix_powers import MatrixPowers
 from numpy import *
 
 
+# pragma: no cover
 class TestMatrixPowers(unittest.TestCase):
     def test_pure_python(self):
         a = np.ones([5, 5])
