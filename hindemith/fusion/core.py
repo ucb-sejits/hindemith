@@ -1,6 +1,5 @@
 import numpy
 import ast
-import ctypes as ct
 import pycl as cl
 
 from ctree.frontend import get_ast
@@ -135,7 +134,7 @@ class Fuser(object):
                 func_1 = self._symbol_table[block_1.value.func.id]
                 func_2 = self._symbol_table[block_2.value.func.id]
                 return hasattr(func_1, 'fusable') and func_1.fusable() and \
-                       hasattr(func_2, 'fusable') and func_2.fusable()
+                    hasattr(func_2, 'fusable') and func_2.fusable()
         return False
 
     def _fuse(self, blocks):
@@ -268,50 +267,6 @@ class FusedFn(ConcreteSpecializedFunction):
                         "UnsupportedType: %s" % type(arg)
                     )
         return processed, argtypes
-
-    def tmp_process_args(self, *args):
-        processed = []
-        events = []
-        argtypes = ()
-        output = ct.c_int()
-        out_like = None
-        for arg in args:
-            if isinstance(arg, numpy.ndarray):
-                if arg.ctypes.data in self.arg_buf_map:
-                    processed.append(self.arg_buf_map[arg.ctypes.data])
-                    argtypes += (cl.cl_mem,)
-                else:
-                    buf, evt = cl.buffer_from_ndarray(self.queue, arg,
-                                                      blocking=False)
-                    processed.append(buf)
-                    self.arg_buf_map[arg.ctypes.data] = buf
-                    events.append(evt)
-                    argtypes += (cl.cl_mem,)
-                    output = buf.empty_like_this()
-                    out_like = arg
-            else:
-                processed.append(arg)
-                if isinstance(arg, int):
-                    argtypes += (cl.cl_int,)
-                elif isinstance(arg, float):
-                    argtypes += (cl.cl_float,)
-                    if isinstance(output, ct.c_int):
-                        output = ct.c_float()
-                else:
-                    raise NotImplementedError(
-                        "UnsupportedType: %s" % type(arg)
-                    )
-        if isinstance(output, cl.cl_mem):
-            argtypes += (cl.cl_mem,)
-            processed.append(output)
-        else:
-            processed.append(output.byref)
-            if isinstance(output, ct.c_float):
-                argtypes += (cl.cl_float,)
-            else:
-                argtypes += (cl.cl_int,)
-        cl.clWaitForEvents(*events)
-        return processed, argtypes, output, out_like
 
     def __call__(self, *args):
         processed, argtypes = self._process_args(args)
