@@ -6,8 +6,7 @@ import ast
 
 from ctree.frontend import get_ast
 
-# from stencil_code.stencil_grid import StencilGrid
-# from stencil_code.stencil_kernel import StencilKernel
+from stencil_code.stencil_kernel import StencilKernel
 
 from hindemith.fusion.core import BlockBuilder, get_blocks, Fuser, fuse
 # from hindemith.types.common import Array
@@ -221,7 +220,41 @@ class TestSimpleFusion(unittest.TestCase):
             self.fail("Arrays not almost equal: {0}".format(e.message))
 
 
+stdev_d = 3
+stdev_s = 70
+radius = 1
+width = 64 + radius * 2
+height = width
+
+
+class Stencil(StencilKernel):
+    @property
+    def dim(self):
+        return 2
+
+    @property
+    def ghost_depth(self):
+        return 1
+
+    def neighbors(self, pt, defn=0):
+        if defn == 0:
+            for x in range(-radius, radius+1):
+                for y in range(-radius, radius+1):
+                    yield (pt[0] - x, pt[1] - y)
+
+    def kernel(self, in_grid, out_grid):
+        for x in self.interior_points(out_grid):
+            for y in self.neighbors(x, 0):
+                out_grid[x] += in_grid[y]
+
+
 class TestDecorator(unittest.TestCase):
+    def _check(self, actual, expected):
+        try:
+            testing.assert_array_almost_equal(actual, expected)
+        except AssertionError as e:
+            self.fail("Outputs not equal: %s" % e.message)
+
     def test_dec_no_fusion(self):
         @fuse(locals(), globals())
         def test_func(arg):
@@ -243,10 +276,7 @@ class TestDecorator(unittest.TestCase):
 
         actual = test_func(A, B, C)
         expected = C - (A * B)
-        try:
-            testing.assert_array_almost_equal(actual, expected)
-        except AssertionError as e:
-            self.fail("Outputs not equal: %s" % e.message)
+        self._check(actual, expected)
 
     def test_non_fusable(self):
         A = numpy.random.rand(60, 60).astype(numpy.float32)
@@ -262,10 +292,7 @@ class TestDecorator(unittest.TestCase):
 
         actual = test_func(A, B, C)
         expected = (C - (A * B)) + ((C * 495) / 394)
-        try:
-            testing.assert_array_almost_equal(actual, expected)
-        except AssertionError as e:
-            self.fail("Outputs not equal: %s" % e.message)
+        self._check(actual, expected)
 
     def test_fuse_with_return(self):
         A = numpy.random.rand(60, 60).astype(numpy.float32)
@@ -280,10 +307,20 @@ class TestDecorator(unittest.TestCase):
 
         actual = test_func(A, B, C)
         expected = (C - A * B) + 3
-        try:
-            testing.assert_array_almost_equal(actual, expected)
-        except AssertionError as e:
-            self.fail("Outputs not equal: %s" % e.message)
+        self._check(actual, expected)
+
+    def test_fusing_stencils(self):
+        in_grid = numpy.random.rand(width, width).astype(numpy.float32) * 100
+        kernel = Stencil(backend='ocl').kernel
+
+        @fuse(locals(), globals())
+        def f(in_grid):
+            out = kernel(in_grid)
+            return array_scalar_add(out, 4)
+
+        actual = f(in_grid)
+        expected = kernel(in_grid) + 4
+        self._check(actual, expected)
 
     # @unittest.skip("")
     # def test_hs_jacobi(self):
