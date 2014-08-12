@@ -1,10 +1,11 @@
 from ctypes import c_float, c_int
 from _ctypes import sizeof, POINTER
 from ctree.ocl.macros import get_global_id
-from numpy import zeros, zeros_like, array, isfortran
-from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
-    clEnqueueNDRangeKernel, buffer_to_ndarray, clCreateProgramWithSource, clCreateBuffer
-from ctree.c.nodes import SymbolRef, Constant,FunctionDecl, Assign, ArrayRef, Add, Sub, Mul, Div, FunctionCall
+from numpy import zeros_like
+from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, \
+    buffer_from_ndarray, clEnqueueNDRangeKernel, buffer_to_ndarray, cl_mem, \
+    clCreateProgramWithSource, clCreateBuffer
+from ctree.c.nodes import SymbolRef, Assign, FunctionDecl
 from ctree.ocl.nodes import OclFile
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from hindemith.utils import unique_name, clamp, unique_kernel_name
@@ -53,7 +54,7 @@ class PyrUpLazy(LazySpecializedFunction):
 
     def transform(self, tree, program_config):
         arg_cfg = program_config[0]
-        entry_point = unique_kernel_name()
+        self.entry_point = unique_kernel_name()
         ctypeObject = c_float()
         ctype = c_float
         len_x = arg_cfg[0][1][0]
@@ -70,16 +71,21 @@ class PyrUpLazy(LazySpecializedFunction):
             Assign(SymbolRef('temp', ctypeObject), 0),
         ])
         body = \
-"""
-temp = .5 * input[clamp(x/2, 0, (len_x / 2) - 1) * len_y + clamp(y/2, 0, (len_y / 2) - 1)]
+            """
+temp = .5 * input[clamp(x/2, 0, (len_x / 2) - 1) * len_y +
+                  clamp(y/2, 0, (len_y / 2) - 1)]
 if (x & 0x1):
-    temp += .25 * input[clamp(x/2 + 1, 0, (len_x / 2) - 1) * len_y + clamp(y/2, 0, (len_y /  2) - 1)]
+    temp += .25 * input[clamp(x/2 + 1, 0, (len_x / 2) - 1) * len_y +
+                        clamp(y/2, 0, (len_y /  2) - 1)]
 else:
-    temp += .25 * input[clamp(x/2 - 1, 0, (len_x / 2) - 1) * len_y +clamp(y/2, 0, (len_y / 2) - 1)]
+    temp += .25 * input[clamp(x/2 - 1, 0, (len_x / 2) - 1) * len_y +
+                        clamp(y/2, 0, (len_y / 2) - 1)]
 if (y & 0x1):
-    temp += .25 * input[clamp(x/2, 0, (len_x / 2) - 1) * len_y + clamp(y/2 + 1, 0, (len_y / 2) - 1)]
+    temp += .25 * input[clamp(x/2, 0, (len_x / 2) - 1) * len_y +
+                        clamp(y/2 + 1, 0, (len_y / 2) - 1)]
 else:
-    temp += .25 * input[clamp(x/2, 0, (len_x / 2) - 1) *len_y + clamp(y/2 - 1, 0, (len_y / 2) - 1)]
+    temp += .25 * input[clamp(x/2, 0, (len_x / 2) - 1) *len_y +
+                        clamp(y/2 - 1, 0, (len_y / 2) - 1)]
 output[x * len_y + y] = temp
 """
         body = ast.parse(body).body
@@ -90,17 +96,23 @@ output[x * len_y + y] = temp
             'len_x': len_x,
             'len_y': len_y,
         }
-        transformation = PyBasicConversions(name_dict,const_dict)
+        transformation = PyBasicConversions(name_dict, const_dict)
         defn.extend(body)
-        tree = FunctionDecl(None,entry_point,params,defn)
+        tree = FunctionDecl(None, self.entry_point, params, defn)
         tree.set_kernel()
-        kernel = OclFile("kernel",[tree])
+        kernel = OclFile("kernel", [tree])
         kernel = transformation.visit(kernel)
+        return kernel
+
+    def finalize(self, tree, program_config):
+        arg_cfg, tune_cfg = program_config
+        len_x = arg_cfg[0][1][0]
+        len_y = arg_cfg[0][1][1]
         fn = OclFunc2()
-        print kernel
-        program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
-        ptr = program[entry_point]
+        program = clCreateProgramWithSource(fn.context, tree.codegen()).build()
+        ptr = program[self.entry_point]
         return fn.finalize(ptr, (len_x, len_y))
+
 
 class PyrUp(object):
     def __new__(cls, pure_python=False):

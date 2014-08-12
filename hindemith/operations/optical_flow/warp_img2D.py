@@ -4,11 +4,12 @@ from ctree.ocl.macros import get_global_id
 from numpy import zeros_like
 import numpy as np
 from ctree.nodes import Project
-from hindemith.utils import unique_name, unique_kernel_name, clamp, UnsupportedBackendError
+from hindemith.utils import unique_name, unique_kernel_name, \
+    UnsupportedBackendError
 from hindemith.types.common import Array
-from pycl import clCreateCommandQueue, cl_mem, clGetDeviceIDs, clCreateContext, \
-    buffer_from_ndarray, clEnqueueNDRangeKernel, buffer_to_ndarray, \
-    clCreateProgramWithSource, clWaitForEvents
+from pycl import clCreateCommandQueue, cl_mem, clGetDeviceIDs, \
+    clCreateContext, buffer_from_ndarray, clEnqueueNDRangeKernel, \
+    buffer_to_ndarray, clCreateProgramWithSource, clWaitForEvents
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
@@ -36,7 +37,8 @@ class WarpImg2DConcreteOcl(ConcreteSpecializedFunction):
     def __call__(self, input, u, v):
         output = zeros_like(input.data)
         events = []
-        in_buf, in_evt = buffer_from_ndarray(self.queue, input.data, blocking=False)
+        in_buf, in_evt = buffer_from_ndarray(self.queue, input.data,
+                                             blocking=False)
         events.append(in_evt)
         self.kernel.setarg(0, in_buf, sizeof(cl_mem))
 
@@ -48,7 +50,8 @@ class WarpImg2DConcreteOcl(ConcreteSpecializedFunction):
         events.append(v_evt)
         self.kernel.setarg(2, v_buf, sizeof(cl_mem))
 
-        out_buf, out_evt = buffer_from_ndarray(self.queue, output, blocking=False)
+        out_buf, out_evt = buffer_from_ndarray(self.queue, output,
+                                               blocking=False)
         events.append(out_evt)
         self.kernel.setarg(3, out_buf, sizeof(cl_mem))
         clWaitForEvents(*events)
@@ -69,13 +72,14 @@ class WarpImg2DLazyOcl(LazySpecializedFunction):
         len_x = Constant(arg_cfg[0][1][0])
         len_y = Constant(arg_cfg[0][1][1])
 
-        entry_point = unique_kernel_name()
+        self.entry_point = unique_kernel_name()
 
         body = FunctionDecl(
             None,
-            entry_point,
+            self.entry_point,
             [
-                SymbolRef('input', POINTER(c_float)(), _global=True, _const=True),
+                SymbolRef('input', POINTER(c_float)(), _global=True,
+                          _const=True),
                 SymbolRef('u', POINTER(c_float)(), _global=True, _const=True),
                 SymbolRef('v', POINTER(c_float)(), _global=True, _const=True),
                 SymbolRef('output', POINTER(c_float)(), _global=True)
@@ -86,45 +90,63 @@ class WarpImg2DLazyOcl(LazySpecializedFunction):
                 Assign(
                     SymbolRef('my_x', c_int()),
                     Cast(c_int(),
-                         ArrayRef(SymbolRef('u'), Add(SymbolRef('x'), Mul(SymbolRef('y'), len_x))))),
+                         ArrayRef(SymbolRef('u'),
+                                  Add(SymbolRef('x'),
+                                      Mul(SymbolRef('y'), len_x))))),
                 Assign(
                     SymbolRef('my_y', c_int()),
                     Cast(c_int(),
-                         ArrayRef(SymbolRef('v'), Add(SymbolRef('x'), Mul(SymbolRef('y'), len_x))))),
+                         ArrayRef(SymbolRef('v'),
+                                  Add(SymbolRef('x'),
+                                      Mul(SymbolRef('y'), len_x))))),
                 Assign(
                     SymbolRef('xfrac', c_float()),
-                    Sub(ArrayRef(SymbolRef('u'), Add(SymbolRef('x'), Mul(len_x, SymbolRef('y')))),
+                    Sub(ArrayRef(SymbolRef('u'),
+                                 Add(SymbolRef('x'),
+                                     Mul(len_x, SymbolRef('y')))),
                         SymbolRef('my_x'))),
                 Assign(
                     SymbolRef('yfrac', c_float()),
-                    Sub(ArrayRef(SymbolRef('v'), Add(SymbolRef('x'), Mul(len_x, SymbolRef('y')))),
+                    Sub(ArrayRef(SymbolRef('v'),
+                                 Add(SymbolRef('x'),
+                                     Mul(len_x, SymbolRef('y')))),
                         SymbolRef('my_y'))),
                 If(Lt(
-                    ArrayRef(SymbolRef('u'), Add(SymbolRef('x'), Mul(len_x, SymbolRef('y')))),
+                    ArrayRef(SymbolRef('u'),
+                             Add(SymbolRef('x'),
+                                 Mul(len_x, SymbolRef('y')))),
                     Constant(0.0)),
-                   [
-                       PostDec('my_x'),
-                       Assign(SymbolRef('xfrac'), Add(Constant(1.0), SymbolRef('xfrac')))
-                   ]
-                ),
+                    [
+                        PostDec('my_x'),
+                        Assign(SymbolRef('xfrac'),
+                               Add(Constant(1.0),
+                                   SymbolRef('xfrac')))
+                    ]),
                 If(Lt(
-                    ArrayRef(SymbolRef('v'), Add(SymbolRef('x'), Mul(len_x, SymbolRef('y')))),
+                    ArrayRef(SymbolRef('v'),
+                             Add(SymbolRef('x'),
+                                 Mul(len_x, SymbolRef('y')))),
                     Constant(0.0)),
-                   [
-                       PostDec('my_y'),
-                       Assign(SymbolRef('yfrac'), Add(Constant(1.0), SymbolRef('yfrac')))
-                   ]
-                ),
+                    [
+                        PostDec('my_y'),
+                        Assign(SymbolRef('yfrac'),
+                               Add(Constant(1.0),
+                                   SymbolRef('yfrac')))
+                    ]),
                 Assign(SymbolRef('tmp', c_float()), Constant(0.0)),
                 If(
                     And(
                         And(
-                            GtE(Add(SymbolRef('x'), SymbolRef('my_x')), Constant(0)),
-                            Lt(Add(SymbolRef('x'), Add(SymbolRef('my_x'), Constant(1))), len_x)
+                            GtE(Add(SymbolRef('x'),
+                                    SymbolRef('my_x')), Constant(0)),
+                            Lt(Add(SymbolRef('x'),
+                                   Add(SymbolRef('my_x'), Constant(1))), len_x)
                         ),
                         And(
-                            GtE(Add(SymbolRef('y'), SymbolRef('my_y')), Constant(0)),
-                            Lt(Add(SymbolRef('y'), Add(SymbolRef('my_y'), Constant(1))), len_y)
+                            GtE(Add(SymbolRef('y'),
+                                    SymbolRef('my_y')), Constant(0)),
+                            Lt(Add(SymbolRef('y'),
+                                   Add(SymbolRef('my_y'), Constant(1))), len_y)
                         )
                     ),
                     [
@@ -140,7 +162,8 @@ class WarpImg2DLazyOcl(LazySpecializedFunction):
                                                 SymbolRef('my_x')),
                                             Mul(
                                                 len_x,
-                                                Add(SymbolRef('y'), SymbolRef('my_y'))))),
+                                                Add(SymbolRef('y'),
+                                                    SymbolRef('my_y'))))),
                                     Sub(Constant(1.0), SymbolRef('xfrac'))),
                                 Sub(Constant(1.0), SymbolRef('yfrac')))),
                         AddAssign(
@@ -151,10 +174,13 @@ class WarpImg2DLazyOcl(LazySpecializedFunction):
                                         SymbolRef('input'),
                                         Add(
                                             Add(
-                                                Add(SymbolRef('x'), SymbolRef('my_x')), Constant(1)),
+                                                Add(SymbolRef('x'),
+                                                    SymbolRef('my_x')),
+                                                Constant(1)),
                                             Mul(
                                                 len_x,
-                                                Add(SymbolRef('y'), SymbolRef('my_y'))))),
+                                                Add(SymbolRef('y'),
+                                                    SymbolRef('my_y'))))),
                                     SymbolRef('xfrac')),
                                 Sub(Constant(1.0), SymbolRef('yfrac')))),
                         AddAssign(
@@ -165,10 +191,12 @@ class WarpImg2DLazyOcl(LazySpecializedFunction):
                                         SymbolRef('input'),
                                         Add(
                                             Add(
-                                                SymbolRef('x'), SymbolRef('my_x')),
+                                                SymbolRef('x'),
+                                                SymbolRef('my_x')),
                                             Mul(
                                                 len_x,
-                                                Add(Add(SymbolRef('y'), SymbolRef('my_y')),
+                                                Add(Add(SymbolRef('y'),
+                                                        SymbolRef('my_y')),
                                                     Constant(1))))),
                                     Sub(Constant(1.0), SymbolRef('xfrac'))),
                                 SymbolRef('yfrac'))),
@@ -179,10 +207,14 @@ class WarpImg2DLazyOcl(LazySpecializedFunction):
                                     SymbolRef('input'),
                                     Add(
                                         Add(
-                                            Add(SymbolRef('x'), SymbolRef('my_x')), Constant(1)),
+                                            Add(SymbolRef('x'),
+                                                SymbolRef('my_x')),
+                                            Constant(1)),
                                         Mul(
                                             len_x,
-                                            Add(Add(SymbolRef('y'), SymbolRef('my_y')), Constant(1))))),
+                                            Add(Add(SymbolRef('y'),
+                                                    SymbolRef('my_y')),
+                                                Constant(1))))),
                                     SymbolRef('xfrac')),
                                 SymbolRef('yfrac'))),
                         ],
@@ -214,17 +246,24 @@ class WarpImg2DLazyOcl(LazySpecializedFunction):
 
                 ),
                 Assign(
-                    ArrayRef(SymbolRef('output'), Add(SymbolRef('x'), Mul(len_x, SymbolRef('y')))),
+                    ArrayRef(SymbolRef('output'),
+                             Add(SymbolRef('x'),
+                                 Mul(len_x, SymbolRef('y')))),
                     SymbolRef('tmp')
                 )
             ]
         )
 
         body.set_kernel()
-        fn = WarpImg2DConcreteOcl()
         kernel = OclFile("kernel", [body])
-        program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
-        ptr = program[entry_point]
+        return kernel
+
+    def finalize(self, tree, program_config):
+        arg_cfg = program_config[0]
+        fn = WarpImg2DConcreteOcl()
+        program = clCreateProgramWithSource(fn.context,
+                                            tree.codegen()).build()
+        ptr = program[self.entry_point]
         return fn.finalize(ptr, arg_cfg[0][1])
 
 
@@ -241,15 +280,11 @@ class WarpImg2DConcreteC(ConcreteSpecializedFunction):
 
 class WarpImg2DLazyC(LazySpecializedFunction):
     def args_to_subconfig(self, args):
-        return tuple((arg.data.dtype, arg.data.shape, arg.data.ndim) for arg in args)
+        return tuple((arg.data.dtype, arg.data.shape, arg.data.ndim)
+                     for arg in args)
 
     def transform(self, tree, program_config):
         arg_cfg = program_config[0]
-        param_types = [
-            np.ctypeslib.ndpointer(arg[0], arg[2], arg[1])
-            for arg in arg_cfg
-        ]
-        param_types.append(param_types[0])
 
         len_x = Constant(arg_cfg[0][1][0])
         len_y = Constant(arg_cfg[0][1][1])
@@ -299,103 +334,139 @@ class WarpImg2DLazyC(LazySpecializedFunction):
                                 Assign(
                                     SymbolRef('my_x', c_int()),
                                     Cast(c_int(),
-                                         ArrayRef(SymbolRef('u'), Add(SymbolRef('x'), Mul(SymbolRef('y'), len_x))))),
+                                         ArrayRef(SymbolRef('u'),
+                                                  Add(SymbolRef('x'),
+                                                      Mul(SymbolRef('y'),
+                                                          len_x))))),
                                 Assign(
                                     SymbolRef('my_y', c_int()),
                                     Cast(c_int(),
-                                         ArrayRef(SymbolRef('v'), Add(SymbolRef('x'), Mul(SymbolRef('y'), len_x))))),
+                                         ArrayRef(SymbolRef('v'),
+                                                  Add(SymbolRef('x'),
+                                                      Mul(SymbolRef('y'),
+                                                          len_x))))),
                                 Assign(
                                     SymbolRef('xfrac', c_float()),
-                                    Sub(ArrayRef(SymbolRef('u'), Add(SymbolRef('x'), Mul(len_x, SymbolRef('y')))),
+                                    Sub(ArrayRef(SymbolRef('u'),
+                                                 Add(SymbolRef('x'),
+                                                     Mul(len_x,
+                                                         SymbolRef('y')))),
                                         SymbolRef('my_x'))),
                                 Assign(
                                     SymbolRef('yfrac', c_float()),
-                                    Sub(ArrayRef(SymbolRef('v'), Add(SymbolRef('x'), Mul(len_x, SymbolRef('y')))),
+                                    Sub(ArrayRef(SymbolRef('v'),
+                                                 Add(SymbolRef('x'),
+                                                     Mul(len_x,
+                                                         SymbolRef('y')))),
                                         SymbolRef('my_y'))),
                                 If(Lt(
-                                    ArrayRef(SymbolRef('u'), Add(SymbolRef('x'), Mul(len_x, SymbolRef('y')))),
+                                    ArrayRef(SymbolRef('u'),
+                                             Add(SymbolRef('x'),
+                                                 Mul(len_x, SymbolRef('y')))),
                                     Constant(0.0)),
-                                   [
-                                       PostDec('my_x'),
-                                       Assign(SymbolRef('xfrac'), Add(Constant(1.0), SymbolRef('xfrac')))
-                                   ]
-                                ),
+                                    [
+                                        PostDec('my_x'),
+                                        Assign(SymbolRef('xfrac'),
+                                               Add(Constant(1.0),
+                                                   SymbolRef('xfrac')))
+                                    ]),
                                 If(Lt(
-                                    ArrayRef(SymbolRef('v'), Add(SymbolRef('x'), Mul(len_x, SymbolRef('y')))),
+                                    ArrayRef(SymbolRef('v'),
+                                             Add(SymbolRef('x'),
+                                                 Mul(len_x, SymbolRef('y')))),
                                     Constant(0.0)),
-                                   [
-                                       PostDec('my_y'),
-                                       Assign(SymbolRef('yfrac'), Add(Constant(1.0), SymbolRef('yfrac')))
-                                   ]
-                                ),
-                                Assign(SymbolRef('tmp', c_float()), Constant(0.0)),
+                                    [
+                                        PostDec('my_y'),
+                                        Assign(SymbolRef('yfrac'),
+                                               Add(Constant(1.0),
+                                                   SymbolRef('yfrac')))
+                                    ]),
+                                Assign(SymbolRef('tmp', c_float()),
+                                       Constant(0.0)),
                                 If(
                                     And(
                                         And(
-                                            GtE(Add(SymbolRef('x'), SymbolRef('my_x')), Constant(0)),
-                                            Lt(Add(SymbolRef('x'), Add(SymbolRef('my_x'), Constant(1))), len_x)
+                                            GtE(Add(SymbolRef('x'),
+                                                    SymbolRef('my_x')),
+                                                Constant(0)),
+                                            Lt(Add(SymbolRef('x'),
+                                                   Add(SymbolRef('my_x'),
+                                                       Constant(1))), len_x)
                                         ),
                                         And(
-                                            GtE(Add(SymbolRef('y'), SymbolRef('my_y')), Constant(0)),
-                                            Lt(Add(SymbolRef('y'), Add(SymbolRef('my_y'), Constant(1))), len_y)
+                                            GtE(Add(SymbolRef('y'),
+                                                    SymbolRef('my_y')),
+                                                Constant(0)),
+                                            Lt(Add(SymbolRef('y'),
+                                                   Add(SymbolRef('my_y'),
+                                                       Constant(1))), len_y)
                                         )
                                     ),
                                     [
                                         AddAssign(
                                             SymbolRef('tmp'),
-                                            Mul(
-                                                Mul(
-                                                    ArrayRef(
-                                                        SymbolRef('input'),
-                                                        Add(
-                                                            Add(
-                                                                SymbolRef('x'),
-                                                                SymbolRef('my_x')),
-                                                            Mul(
-                                                                len_x,
-                                                                Add(SymbolRef('y'), SymbolRef('my_y'))))),
-                                                    Sub(Constant(1.0), SymbolRef('xfrac'))),
-                                                Sub(Constant(1.0), SymbolRef('yfrac')))),
-                                        AddAssign(
-                                            SymbolRef('tmp'),
-                                            Mul(
-                                                Mul(
-                                                    ArrayRef(
-                                                        SymbolRef('input'),
-                                                        Add(
-                                                            Add(
-                                                                Add(SymbolRef('x'), SymbolRef('my_x')), Constant(1)),
-                                                            Mul(
-                                                                len_x,
-                                                                Add(SymbolRef('y'), SymbolRef('my_y'))))),
-                                                    SymbolRef('xfrac')),
-                                                Sub(Constant(1.0), SymbolRef('yfrac')))),
-                                        AddAssign(
-                                            SymbolRef('tmp'),
-                                            Mul(
-                                                Mul(
-                                                    ArrayRef(
-                                                        SymbolRef('input'),
-                                                        Add(
-                                                            Add(
-                                                                SymbolRef('x'), SymbolRef('my_x')),
-                                                            Mul(
-                                                                len_x,
-                                                                Add(Add(SymbolRef('y'), SymbolRef('my_y')),
-                                                                    Constant(1))))),
-                                                    Sub(Constant(1.0), SymbolRef('xfrac'))),
-                                                SymbolRef('yfrac'))),
-                                        AddAssign(
-                                            SymbolRef('tmp'),
-                                            Mul(
-                                                Mul(ArrayRef(
+                                            Mul(Mul(
+                                                ArrayRef(
                                                     SymbolRef('input'),
                                                     Add(
                                                         Add(
-                                                            Add(SymbolRef('x'), SymbolRef('my_x')), Constant(1)),
-                                                        Mul(
-                                                            len_x,
-                                                            Add(Add(SymbolRef('y'), SymbolRef('my_y')), Constant(1))))),
+                                                            SymbolRef('x'),
+                                                            SymbolRef('my_x')
+                                                        ),
+                                                        Mul(len_x, Add(
+                                                            SymbolRef('y'),
+                                                            SymbolRef('my_y')
+                                                        )))),
+                                                Sub(Constant(1.0),
+                                                    SymbolRef('xfrac'))),
+                                                Sub(Constant(1.0),
+                                                    SymbolRef('yfrac')))),
+                                        AddAssign(
+                                            SymbolRef('tmp'),
+                                            Mul(Mul(ArrayRef(
+                                                SymbolRef('input'),
+                                                Add(Add(
+                                                    Add(SymbolRef('x'),
+                                                        SymbolRef('my_x')),
+                                                    Constant(1)),
+                                                    Mul(
+                                                        len_x,
+                                                        Add(SymbolRef('y'),
+                                                            SymbolRef('my_y'))
+                                                    ))),
+                                                SymbolRef('xfrac')),
+                                                Sub(Constant(1.0),
+                                                    SymbolRef('yfrac')))),
+                                        AddAssign(
+                                            SymbolRef('tmp'),
+                                            Mul(Mul(ArrayRef(
+                                                SymbolRef('input'),
+                                                Add(Add(
+                                                    SymbolRef('x'),
+                                                    SymbolRef('my_x')),
+                                                    Mul(
+                                                        len_x,
+                                                        Add(Add(
+                                                            SymbolRef('y'),
+                                                            SymbolRef('my_y')),
+                                                            Constant(1))))),
+                                                    Sub(Constant(1.0),
+                                                        SymbolRef('xfrac'))),
+                                                SymbolRef('yfrac'))),
+                                        AddAssign(
+                                            SymbolRef('tmp'),
+                                            Mul(Mul(ArrayRef(
+                                                SymbolRef('input'),
+                                                Add(Add(
+                                                    Add(SymbolRef('x'),
+                                                        SymbolRef('my_x')),
+                                                    Constant(1)),
+                                                    Mul(
+                                                        len_x,
+                                                        Add(Add(
+                                                            SymbolRef('y'),
+                                                            SymbolRef('my_y')),
+                                                            Constant(1))))),
                                                     SymbolRef('xfrac')),
                                                 SymbolRef('yfrac'))),
                                         ],
@@ -407,18 +478,25 @@ class WarpImg2DLazyC(LazySpecializedFunction):
                                                 FunctionCall(
                                                     SymbolRef('clamp'),
                                                     [
-                                                        Add(SymbolRef('x'), SymbolRef('my_x')),
+                                                        Add(SymbolRef('x'),
+                                                            SymbolRef('my_x')),
                                                         Constant(0),
                                                         Sub(len_x, Constant(1))
                                                     ]
                                                 ),
                                                 Mul(
                                                     len_x,
-                                                    FunctionCall(SymbolRef('clamp'), [
-                                                        Add(SymbolRef('y'), SymbolRef('my_y')),
-                                                        Constant(0),
-                                                        Sub(len_y, Constant(1))
-                                                    ]
+                                                    FunctionCall(
+                                                        SymbolRef('clamp'),
+                                                        [
+                                                            Add(SymbolRef('y'),
+                                                                SymbolRef(
+                                                                    'my_y'
+                                                                )),
+                                                            Constant(0),
+                                                            Sub(len_y,
+                                                                Constant(1))
+                                                        ]
                                                     ),
                                                     )
                                             )
@@ -427,7 +505,9 @@ class WarpImg2DLazyC(LazySpecializedFunction):
 
                                 ),
                                 Assign(
-                                    ArrayRef(SymbolRef('output'), Add(SymbolRef('x'), Mul(len_x, SymbolRef('y')))),
+                                    ArrayRef(SymbolRef('output'),
+                                             Add(SymbolRef('x'),
+                                                 Mul(len_x, SymbolRef('y')))),
                                     SymbolRef('tmp')
                                 )
 
@@ -437,10 +517,20 @@ class WarpImg2DLazyC(LazySpecializedFunction):
                 )
             )
         ]
+        proj = Project([CFile("generated", body)])
+        return proj
+
+    def finalize(self, tree, program_config):
+        arg_cfg = program_config[0]
+        param_types = [
+            np.ctypeslib.ndpointer(arg[0], arg[2], arg[1])
+            for arg in arg_cfg
+        ]
+        param_types.append(param_types[0])
 
         fn = WarpImg2DConcreteC()
-        proj = Project([CFile("generated", body)])
-        return fn.finalize("warp_img_2D", proj, CFUNCTYPE(c_void_p, *param_types))
+        return fn.finalize("warp_img_2D", tree, CFUNCTYPE(c_void_p,
+                                                          *param_types))
 
 
 class WarpImg2D(object):
@@ -455,41 +545,6 @@ class WarpImg2D(object):
         raise UnsupportedBackendError(
             "Teller found an unsupported backend: {0}".format(backend)
         )
-
-    def pure_python(self, tex_Ix, u, v):
-        raise NotImplementedError()
-        # FIXME: This doesn't work due to python's casting being different than C
-        # u = u.data
-        # v = v.data
-        # tex_Ix = tex_Ix.data
-        # data = zeros_like(tex_Ix)
-        # len_x = tex_Ix.shape[0]
-        # len_y = tex_Ix.shape[1]
-        # for x in range(len_x):
-        #     for y in range(len_y):
-        #         index = (x, y)
-        #         my_x = int(u[index])
-        #         my_y = int(v[index])
-        #         xfrac = u[index] - float(my_x)
-        #         yfrac = v[index] - float(my_y)
-        #         if u[index] < 0.0:
-        #             my_x -= 1
-        #             xfrac += 1.0
-        #         if v[index] < 0.0:
-        #             my_y -= 1
-        #             yfrac += 1.0
-        #         if x + my_x >= 0 and x + my_x + 1 < len_x and \
-        #            y + my_y >= 0 and y + my_y + 1 < len_y:
-        #             tmp = 0.0
-        #             tmp += tex_Ix[(x + my_x, y + my_y)] * (1.0 - xfrac) * (1.0 - yfrac)
-        #             tmp += tex_Ix[(x + my_x + 1, y + my_y)] * (xfrac) * (1.0 - yfrac)
-        #             tmp += tex_Ix[(x + my_x, y + my_y + 1)] * (1.0 - xfrac) * (yfrac)
-        #             tmp += tex_Ix[(x + my_x + 1, y + my_y + 1)] * (xfrac) * (yfrac)
-        #             data[index] = tmp
-        #         else:
-        #             data[index] = tex_Ix[(clamp(x + my_x, 0, len_x - 1),
-        #                                   clamp(y + my_y, 0, len_y - 1))]
-        # return Array(unique_name(), data)
 
 
 warp_img2d = WarpImg2D()

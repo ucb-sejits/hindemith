@@ -1,4 +1,5 @@
 import numpy as np
+# pragma: no cover
 class Tssyrk(object):
     def __init__(self, pure_python=False):
         self.pure_python = pure_python
@@ -15,6 +16,8 @@ class Tssyrk(object):
                         accum += Matrix[i][x][y] * Matrix[j][x][y]
                 output[j][i] = accum
         return output
+
+# pragma: no cover
 if __name__ == '__main__':
     input = np.ones([6,512,512])
     tssyrk = Tssyrk()

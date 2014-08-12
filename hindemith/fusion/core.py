@@ -1,6 +1,5 @@
 import numpy
 import ast
-import ctypes as ct
 import pycl as cl
 
 from ctree.frontend import get_ast
@@ -8,7 +7,9 @@ from ctree.jit import ConcreteSpecializedFunction
 import ctree
 import ctree.np
 
-from hindemith.utils import unique_kernel_name
+from hindemith.utils import unique_kernel_name, unique_name
+
+import inspect
 
 ctree.np  # Make PEP happy
 
@@ -16,21 +17,24 @@ import logging
 LOG = logging.getLogger('Hindemith')
 
 
-def fuse(fn_locals, fn_globals):
-    def wrapped_fuser(fn):
-        def fused(*args, **kwargs):
-            tree = get_ast(fn)
-            blocks = get_blocks(tree)
-            fuser = Fuser(blocks, dict(fn_locals, **fn_globals))
-            fused_blocks = fuser.do_fusion()
-            tree.body[0].body = fused_blocks
-            # Remove Decorator
-            tree.body[0].decorator_list = []
-            tree = ast.fix_missing_locations(tree)
-            exec(compile(tree, '', 'exec')) in fuser._symbol_table
-            return fuser._symbol_table[fn.__name__](*args, **kwargs)
-        return fused
-    return wrapped_fuser
+def fuse(fn):
+    def fused(*args, **kwargs):
+        tree = get_ast(fn)
+        blocks = get_blocks(tree)
+        print()
+        symbol_table = dict(fn.__globals__, **kwargs)
+        symbol_table.update(inspect.stack()[1][0].f_locals)
+        for index, arg in enumerate(args):
+            symbol_table[tree.body[0].args.args[index].id] = arg
+        fuser = Fuser(blocks, symbol_table)
+        fused_blocks = fuser.do_fusion()
+        tree.body[0].body = fused_blocks
+        # Remove Decorator
+        tree.body[0].decorator_list = []
+        tree = ast.fix_missing_locations(tree)
+        exec(compile(tree, '', 'exec')) in symbol_table
+        return symbol_table[fn.__name__](*args, **kwargs)
+    return fused
 
 
 def get_blocks(tree):
@@ -126,11 +130,13 @@ class Fuser(object):
         :returns: @todo
 
         """
-        if isinstance(block_1, ast.Assign) and isinstance(block_2, ast.Assign):
+        if isinstance(block_1, ast.Assign) and \
+                isinstance(block_2, ast.Assign) or \
+                isinstance(block_2, ast.Return):
             if isinstance(block_1.value, ast.Call) and \
                isinstance(block_2.value, ast.Call):
-                func_1 = self._symbol_table[block_1.value.func.id].__call__
-                func_2 = self._symbol_table[block_2.value.func.id].__call__
+                func_1 = self._symbol_table[block_1.value.func.id]
+                func_2 = self._symbol_table[block_2.value.func.id]
                 return hasattr(func_1, 'fusable') and func_1.fusable() and \
                     hasattr(func_2, 'fusable') and func_2.fusable()
         return False
@@ -152,28 +158,41 @@ class Fuser(object):
         arg_list = []
         arg_nodes_list = []
         outputs = []
+        is_return = False
         for block in blocks:
-            specializer = self._symbol_table[block.value.func.id].__call__
+            if isinstance(block, ast.Return):
+                is_return = True
+            specializer = self._symbol_table[block.value.func.id]
             arg_nodes_list.extend(block.value.args)
             args = tuple(
                 self._symbol_table[arg.id] if isinstance(arg, ast.Name) else
                 arg.n for arg in block.value.args
             )
             arg_list.extend(args)
-            output = specializer.generate_output(*args)
+            program_cfg = (specializer.args_to_subconfig(args), None)
+            output = specializer.generate_output(program_cfg)
             arg_list.append(output)
-            self._symbol_table[block.targets[0].id] = output
-            arg_nodes_list.append(ast.Name(block.targets[0].id, ast.Load()))
+            if not is_return:
+                target = block.targets[0].id
+            else:
+                target = unique_name()
+
+            self._symbol_table[target] = output
+            arg_nodes_list.append(ast.Name(target, ast.Load()))
+
             outputs.append(output)
             kernels.append(
-                specializer.fuse_transform(
-                    specializer.original_tree,
-                    (specializer.args_to_subconfig(args), None)
-                )
-            )
-            specializers.append(
                 specializer.transform(
                     specializer.original_tree,
+                    (specializer.args_to_subconfig(args), None)
+                ).files[-1]  # TODO: This needs to be more general
+            )
+            specializers.append(
+                specializer.finalize(
+                    specializer.transform(
+                        specializer.original_tree,
+                        (specializer.args_to_subconfig(args), None)
+                    ),
                     (specializer.args_to_subconfig(args), None)
                 )
             )
@@ -185,7 +204,7 @@ class Fuser(object):
             kernel.body[0].defn.extend(kern.body[0].defn)
             kernel.body[0].params.extend(kern.body[0].params)
 
-        fn = FusedFn(specializers, num_args, outputs)
+        fn = FusedFn(specializers, num_args, outputs, is_return)
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
         # FIXME: Assuming OpenCL
@@ -194,17 +213,22 @@ class Fuser(object):
             program[kernel.body[0].name],
             reduce(lambda x, y: x * y, arg_list[0].shape, 1)
         )
-        return ast.Expr(ast.Call(
+        tree = ast.Call(
             func=ast.Name(id=func_name, ctx=ast.Load()),
             args=arg_nodes_list, keywords=[]
-        ))
+        )
+        if is_return:
+            tree = ast.Return(tree)
+        else:
+            tree = ast.Expr(tree)
+        return tree
 
 
 class FusedFn(ConcreteSpecializedFunction):
 
     """Docstring for FusedFn. """
 
-    def __init__(self, specializers, num_args, outputs):
+    def __init__(self, specializers, num_args, outputs, is_return):
         """@todo: to be defined1. """
         ConcreteSpecializedFunction.__init__(self)
         self.specializers = specializers
@@ -215,6 +239,7 @@ class FusedFn(ConcreteSpecializedFunction):
         self.orig_args = ()
         self.arg_buf_map = {}
         self.outputs = outputs
+        self.is_return = is_return
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
@@ -247,50 +272,6 @@ class FusedFn(ConcreteSpecializedFunction):
                     )
         return processed, argtypes
 
-    def tmp_process_args(self, *args):
-        processed = []
-        events = []
-        argtypes = ()
-        output = ct.c_int()
-        out_like = None
-        for arg in args:
-            if isinstance(arg, numpy.ndarray):
-                if arg.ctypes.data in self.arg_buf_map:
-                    processed.append(self.arg_buf_map[arg.ctypes.data])
-                    argtypes += (cl.cl_mem,)
-                else:
-                    buf, evt = cl.buffer_from_ndarray(self.queue, arg,
-                                                      blocking=False)
-                    processed.append(buf)
-                    self.arg_buf_map[arg.ctypes.data] = buf
-                    events.append(evt)
-                    argtypes += (cl.cl_mem,)
-                    output = buf.empty_like_this()
-                    out_like = arg
-            else:
-                processed.append(arg)
-                if isinstance(arg, int):
-                    argtypes += (cl.cl_int,)
-                elif isinstance(arg, float):
-                    argtypes += (cl.cl_float,)
-                    if isinstance(output, ct.c_int):
-                        output = ct.c_float()
-                else:
-                    raise NotImplementedError(
-                        "UnsupportedType: %s" % type(arg)
-                    )
-        if isinstance(output, cl.cl_mem):
-            argtypes += (cl.cl_mem,)
-            processed.append(output)
-        else:
-            processed.append(output.byref)
-            if isinstance(output, ct.c_float):
-                argtypes += (cl.cl_float,)
-            else:
-                argtypes += (cl.cl_int,)
-        cl.clWaitForEvents(*events)
-        return processed, argtypes, output, out_like
-
     def __call__(self, *args):
         processed, argtypes = self._process_args(args)
         self.kernel.argtypes = argtypes
@@ -300,6 +281,12 @@ class FusedFn(ConcreteSpecializedFunction):
 
     def _process_outputs(self):
         retvals = ()
+        if self.is_return:
+            output = self.outputs[-1]
+            buf = self.arg_buf_map[output.ctypes.data]
+            out, evt = cl.buffer_to_ndarray(self.queue, buf, output)
+            evt.wait()
+            return out
         for output in self.outputs:
             try:
                 buf = self.arg_buf_map[output.ctypes.data]
