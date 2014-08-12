@@ -19,6 +19,7 @@ from numpy.ctypeslib import ndpointer
 from collections import namedtuple
 
 from hindemith.utils import unique_kernel_name
+from hindemith.fusion.core import Fusable
 
 __author__ = 'leonardtruong'
 
@@ -175,7 +176,7 @@ HMArray = namedtuple("HMArray", ['type', 'ndpointer', 'shape', 'ndim',
 HMScalar = namedtuple("HMScalar", ['type', 'value', 'is_global'])
 
 
-class DLALazy(LazySpecializedFunction):
+class DLALazy(LazySpecializedFunction, Fusable):
     def __init__(self, tree, backend):
         super(DLALazy, self).__init__(tree)
         self.backend = backend
@@ -238,9 +239,6 @@ class DLALazy(LazySpecializedFunction):
                 self.output = zeros_like(arg.data)
                 return self.output
         return 0
-
-    def fusable(self):
-        return True
 
 
 class DLAOp(object):
