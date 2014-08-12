@@ -2,13 +2,14 @@ from _ctypes import sizeof, POINTER
 from ctypes import c_float, c_int
 from ctree.ocl.macros import get_global_id
 from numpy import zeros_like
-from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, cl_mem, buffer_from_ndarray, \
-    clEnqueueNDRangeKernel, buffer_to_ndarray, clCreateProgramWithSource, clWaitForEvents
-from ctree.c.nodes import SymbolRef, Constant, Assign, ArrayRef, Add, Div, FunctionDecl
+from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, \
+    buffer_from_ndarray, clEnqueueNDRangeKernel, buffer_to_ndarray, \
+    clCreateProgramWithSource, clWaitForEvents, cl_mem
+from ctree.c.nodes import SymbolRef, Constant, Assign, ArrayRef, Add, Div, \
+    FunctionDecl
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from hindemith.fusion.core import fuse
 from hindemith.utils import unique_name, unique_kernel_name
 from hindemith.types.common import Array
 
@@ -31,11 +32,13 @@ class OclFunc(ConcreteSpecializedFunction):
     def __call__(self, im):
         output = zeros_like(im.data)
         events = []
-        in_buf, in_evt = buffer_from_ndarray(self.queue, im.data, blocking=False)
+        in_buf, in_evt = buffer_from_ndarray(
+            self.queue, im.data, blocking=False)
         events.append(in_evt)
         self.kernel.setarg(0, in_buf, sizeof(cl_mem))
 
-        out_buf, out_evt = buffer_from_ndarray(self.queue, output, blocking=False)
+        out_buf, out_evt = buffer_from_ndarray(
+            self.queue, output, blocking=False)
         events.append(out_evt)
         self.kernel.setarg(1, out_buf, sizeof(cl_mem))
         clWaitForEvents(*events)
@@ -55,67 +58,80 @@ class PyrDownLazy(LazySpecializedFunction):
         return tuple((arg.name, arg.dtype, arg.shape) for arg in args)
 
     def transform(self, tree, program_config):
-        #TODO: Have to flip indices, figure out why
+        # TODO: Have to flip indices, figure out why
         arg_cfg = program_config[0]
 
         input_name = arg_cfg[0][0]
-        output_name = unique_name()
+        self.output_name = unique_name()
         params = [
-            SymbolRef(input_name, POINTER(c_float)(), _global=True, _const=True),
-            SymbolRef(output_name, POINTER(c_float)(), _global=True)
+            SymbolRef(
+                input_name, POINTER(c_float)(), _global=True, _const=True),
+            SymbolRef(self.output_name, POINTER(c_float)(), _global=True)
         ]
         defn = []
         defn.extend([
             Assign(SymbolRef('element_id%d' % d, c_int()), get_global_id(d))
             for d in range(len(arg_cfg[0][2]))
         ])
-        out_index = StringTemplate('element_id1 * $len_x + element_id0', {'len_x': Constant(
-            arg_cfg[0][2][1])})
-        defn.append(
-            Assign(
-                ArrayRef(SymbolRef(output_name), out_index),
-                Div(
+        out_index = StringTemplate('element_id1 * $len_x + element_id0',
+                                   {'len_x': Constant(arg_cfg[0][2][1])})
+        defn.append(Assign(
+            ArrayRef(SymbolRef(self.output_name), out_index),
+            Div(
+                Add(
+                    ArrayRef(
+                        SymbolRef(input_name),
+                        StringTemplate(
+                            '(element_id1 * 2) * $len_x + (element_id0 * 2)',
+                            {'len_x': Constant(arg_cfg[0][2][1])})
+                    ),
                     Add(
                         ArrayRef(
                             SymbolRef(input_name),
-                            StringTemplate('(element_id1 * 2) * $len_x + (element_id0 * 2)',
-                                           {'len_x': Constant(arg_cfg[0][2][1])})
+                            StringTemplate(
+                                '(element_id1 * 2) * $len_x + \
+                                 (element_id0 * 2 + 1)',
+                                {'len_x': Constant(arg_cfg[0][2][1])})
                         ),
                         Add(
                             ArrayRef(
                                 SymbolRef(input_name),
-                                StringTemplate('(element_id1 * 2) * $len_x + (element_id0 * 2 + 1)',
-                                               {'len_x': Constant(arg_cfg[0][2][1])})
+                                StringTemplate(
+                                    '(element_id1 * 2 + 1) * $len_x + \
+                                     (element_id0 * 2 + 1)',
+                                    {'len_x': Constant(arg_cfg[0][2][1])})
                             ),
                             Add(
                                 ArrayRef(
                                     SymbolRef(input_name),
-                                    StringTemplate('(element_id1 * 2 + 1) * $len_x + (element_id0 * 2 + 1)',
-                                                   {'len_x': Constant(arg_cfg[0][2][1])})
+                                    StringTemplate(
+                                        '(element_id1 * 2 + 1) * $len_x + \
+                                         (element_id0 * 2)',
+                                        {'len_x': Constant(arg_cfg[0][2][1])})
                                 ),
-                                Add(
-                                    ArrayRef(
-                                        SymbolRef(input_name),
-                                        StringTemplate('(element_id1 * 2 + 1) * $len_x + (element_id0 * 2)',
-                                                       {'len_x': Constant(arg_cfg[0][2][1])})
-                                    ),
-                                )
                             )
                         )
-                    ),
-                    Constant(4.0)
-                )
+                    )
+                ),
+                Constant(4.0)
             )
-        )
+        ))
 
-        entry_point = unique_kernel_name()
-        tree = FunctionDecl(None, entry_point, params, defn)
+        self.entry_point = unique_kernel_name()
+        tree = FunctionDecl(None, self.entry_point, params, defn)
         tree.set_kernel()
-        fn = OclFunc()
         kernel = OclFile("kernel", [tree])
-        program = clCreateProgramWithSource(fn.context, kernel.codegen()).build()
-        ptr = program[entry_point]
-        return fn.finalize(ptr, (arg_cfg[0][2][1] / 2, arg_cfg[0][2][0] / 2), output_name)
+        return kernel
+
+    def finalize(self, tree, program_config):
+        arg_cfg, tune_cfg = program_config
+        fn = OclFunc()
+        program = clCreateProgramWithSource(
+            fn.context, tree.codegen()).build()
+        ptr = program[self.entry_point]
+        return fn.finalize(
+            ptr, (arg_cfg[0][2][1] / 2, arg_cfg[0][2][0] / 2), self.output_name
+        )
 
 
 class PyrDown(object):

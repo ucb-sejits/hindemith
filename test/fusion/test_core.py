@@ -6,8 +6,7 @@ import ast
 
 from ctree.frontend import get_ast
 
-# from stencil_code.stencil_grid import StencilGrid
-# from stencil_code.stencil_kernel import StencilKernel
+from stencil_code.stencil_kernel import StencilKernel
 
 from hindemith.fusion.core import BlockBuilder, get_blocks, Fuser, fuse
 # from hindemith.types.common import Array
@@ -15,7 +14,7 @@ from hindemith.fusion.core import BlockBuilder, get_blocks, Fuser, fuse
 # from hindemith.operations.optical_flow.warp_img2D import warp_img2d
 # from hindemith.operations.dense_linear_algebra.array_op import square
 from hindemith.operations.dense_linear_algebra.core import array_mul, \
-    array_sub, scalar_array_mul, array_add
+    array_sub, scalar_array_mul, array_add, array_scalar_add
 
 
 class TestFuser(unittest.TestCase):
@@ -197,10 +196,67 @@ class TestSimpleFusion(unittest.TestCase):
         except Exception as e:
             self.fail("Arrays not almost equal: {0}".format(e.message))
 
+    def test_fuse_with_return(self):
+        a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+        b = numpy.random.rand(100, 100).astype(numpy.float32) * 100
+
+        def f(a, b):
+            c = array_mul(a, b)
+            d = scalar_array_mul(4, c)
+            return array_sub(c, d)
+
+        orig_f = f
+        tree = get_ast(f)
+        blocks = get_blocks(tree)
+        fuser = Fuser(blocks, dict(locals(), **globals()))
+        fused_blocks = fuser.do_fusion()
+        tree.body[0].body = fused_blocks
+        tree = ast.fix_missing_locations(tree)
+        exec(compile(tree, '', 'exec')) in fuser._symbol_table
+        try:
+            testing.assert_array_almost_equal(fuser._symbol_table['f'](a, b),
+                                              orig_f(a, b))
+        except Exception as e:
+            self.fail("Arrays not almost equal: {0}".format(e.message))
+
+
+stdev_d = 3
+stdev_s = 70
+radius = 1
+width = 64 + radius * 2
+height = width
+
+
+class Stencil(StencilKernel):
+    @property
+    def dim(self):
+        return 2
+
+    @property
+    def ghost_depth(self):
+        return 1
+
+    def neighbors(self, pt, defn=0):
+        if defn == 0:
+            for x in range(-radius, radius+1):
+                for y in range(-radius, radius+1):
+                    yield (pt[0] - x, pt[1] - y)
+
+    def kernel(self, in_grid, out_grid):
+        for x in self.interior_points(out_grid):
+            for y in self.neighbors(x, 0):
+                out_grid[x] += in_grid[y]
+
 
 class TestDecorator(unittest.TestCase):
+    def _check(self, actual, expected):
+        try:
+            testing.assert_array_almost_equal(actual, expected)
+        except AssertionError as e:
+            self.fail("Outputs not equal: %s" % e.message)
+
     def test_dec_no_fusion(self):
-        @fuse(locals(), globals())
+        @fuse
         def test_func(arg):
             return arg
 
@@ -212,7 +268,7 @@ class TestDecorator(unittest.TestCase):
         B = numpy.random.rand(60, 60).astype(numpy.float32)
         C = numpy.random.rand(60, 60).astype(numpy.float32)
 
-        @fuse(locals(), globals())
+        @fuse
         def test_func(A, B, C):
             D = array_mul(A, B)
             E = array_sub(C, D)
@@ -220,17 +276,14 @@ class TestDecorator(unittest.TestCase):
 
         actual = test_func(A, B, C)
         expected = C - (A * B)
-        try:
-            testing.assert_array_almost_equal(actual, expected)
-        except AssertionError as e:
-            self.fail("Outputs not equal: %s" % e.message)
+        self._check(actual, expected)
 
     def test_non_fusable(self):
         A = numpy.random.rand(60, 60).astype(numpy.float32)
         B = numpy.random.rand(60, 60).astype(numpy.float32)
         C = numpy.random.rand(60, 60).astype(numpy.float32)
 
-        @fuse(locals(), globals())
+        @fuse
         def test_func(A, B, C):
             D = array_mul(A, B)
             E = array_sub(C, D)
@@ -239,10 +292,35 @@ class TestDecorator(unittest.TestCase):
 
         actual = test_func(A, B, C)
         expected = (C - (A * B)) + ((C * 495) / 394)
-        try:
-            testing.assert_array_almost_equal(actual, expected)
-        except AssertionError as e:
-            self.fail("Outputs not equal: %s" % e.message)
+        self._check(actual, expected)
+
+    def test_fuse_with_return(self):
+        A = numpy.random.rand(60, 60).astype(numpy.float32)
+        B = numpy.random.rand(60, 60).astype(numpy.float32)
+        C = numpy.random.rand(60, 60).astype(numpy.float32)
+
+        @fuse
+        def test_func(A, B, C):
+            D = array_mul(A, B)
+            E = array_sub(C, D)
+            return array_scalar_add(E, 3)
+
+        actual = test_func(A, B, C)
+        expected = (C - A * B) + 3
+        self._check(actual, expected)
+
+    def test_fusing_stencils(self):
+        in_grid = numpy.random.rand(width, width).astype(numpy.float32) * 100
+        kernel = Stencil(backend='ocl')
+
+        @fuse
+        def f(in_grid):
+            out = kernel(in_grid)
+            return array_scalar_add(out, 4)
+
+        actual = f(in_grid)
+        expected = kernel(in_grid) + 4
+        self._check(actual, expected)
 
     # @unittest.skip("")
     # def test_hs_jacobi(self):
