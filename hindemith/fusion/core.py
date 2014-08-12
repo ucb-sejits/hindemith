@@ -9,27 +9,32 @@ import ctree.np
 
 from hindemith.utils import unique_kernel_name, unique_name
 
+import inspect
+
 ctree.np  # Make PEP happy
 
 import logging
 LOG = logging.getLogger('Hindemith')
 
 
-def fuse(fn_locals, fn_globals):
-    def wrapped_fuser(fn):
-        def fused(*args, **kwargs):
-            tree = get_ast(fn)
-            blocks = get_blocks(tree)
-            fuser = Fuser(blocks, dict(fn_locals, **fn_globals))
-            fused_blocks = fuser.do_fusion()
-            tree.body[0].body = fused_blocks
-            # Remove Decorator
-            tree.body[0].decorator_list = []
-            tree = ast.fix_missing_locations(tree)
-            exec(compile(tree, '', 'exec')) in fuser._symbol_table
-            return fuser._symbol_table[fn.__name__](*args, **kwargs)
-        return fused
-    return wrapped_fuser
+def fuse(fn):
+    def fused(*args, **kwargs):
+        tree = get_ast(fn)
+        blocks = get_blocks(tree)
+        print()
+        symbol_table = dict(fn.__globals__, **kwargs)
+        symbol_table.update(inspect.stack()[1][0].f_locals)
+        for index, arg in enumerate(args):
+            symbol_table[tree.body[0].args.args[index].id] = arg
+        fuser = Fuser(blocks, symbol_table)
+        fused_blocks = fuser.do_fusion()
+        tree.body[0].body = fused_blocks
+        # Remove Decorator
+        tree.body[0].decorator_list = []
+        tree = ast.fix_missing_locations(tree)
+        exec(compile(tree, '', 'exec')) in symbol_table
+        return symbol_table[fn.__name__](*args, **kwargs)
+    return fused
 
 
 def get_blocks(tree):
@@ -115,7 +120,6 @@ class Fuser(object):
                 fused_blocks[-1].append(block)
             else:
                 fused_blocks.append([block])
-        print(fused_blocks)
         return list(map(self._fuse, fused_blocks))
 
     def _is_fusable(self, block_1, block_2):
