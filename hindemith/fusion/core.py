@@ -18,15 +18,43 @@ LOG = logging.getLogger('Hindemith')
 
 
 def fuse(fn):
+    """Decorator that will fuse specializers in the body of a function.  This
+    optimizer will attempt to fuse specializer calls on various levels to
+    improve runtime performance.  It will execute regular python code normally,
+    and will output the same result as running the non-fused version of the
+    function.
+
+    :fn: A python function.
+    :returns: `fused`, higher order python function that takes in the same
+    paramaters as `fn` and returns the same result(s) as `fn`.
+
+    """
     def fused(*args, **kwargs):
+        """Fused wrapper around `fn`.  First it get all variables defined in the
+        local, global scope.  It then traverses the body of the function
+        looking for places where specializer calls are made.  Any specializer
+        calls found that can be fused will be (@todo: Tuning should occur here
+        instead).
+
+        :*args: Arguments to `fn`
+        :**kwargs: Keyword arguments to `fn`.
+        :returns: The same return value(s) as `fn`.
+
+        """
         tree = get_ast(fn)
         blocks = get_blocks(tree)
-        print()
+
+        # Build a symbol table with keyword arguments and the function's global
+        # scope.
         symbol_table = dict(fn.__globals__, **kwargs)
+        # Add all locally defined variables in the current stack
         for frame in inspect.stack()[1:]:
             symbol_table.update(frame[0].f_locals)
+
+        # Add non keyword arguments
         for index, arg in enumerate(args):
             symbol_table[tree.body[0].args.args[index].id] = arg
+
         fuser = Fuser(blocks, symbol_table)
         fused_blocks = fuser.do_fusion()
         tree.body[0].body = fused_blocks
