@@ -256,7 +256,7 @@ class TestDecorator(unittest.TestCase):
             self.fail("Outputs not equal: %s" % e.message)
 
     def test_dec_no_fusion(self):
-        @fuse(locals(), globals())
+        @fuse
         def test_func(arg):
             return arg
 
@@ -268,7 +268,7 @@ class TestDecorator(unittest.TestCase):
         B = numpy.random.rand(60, 60).astype(numpy.float32)
         C = numpy.random.rand(60, 60).astype(numpy.float32)
 
-        @fuse(locals(), globals())
+        @fuse
         def test_func(A, B, C):
             D = array_mul(A, B)
             E = array_sub(C, D)
@@ -283,7 +283,7 @@ class TestDecorator(unittest.TestCase):
         B = numpy.random.rand(60, 60).astype(numpy.float32)
         C = numpy.random.rand(60, 60).astype(numpy.float32)
 
-        @fuse(locals(), globals())
+        @fuse
         def test_func(A, B, C):
             D = array_mul(A, B)
             E = array_sub(C, D)
@@ -299,7 +299,7 @@ class TestDecorator(unittest.TestCase):
         B = numpy.random.rand(60, 60).astype(numpy.float32)
         C = numpy.random.rand(60, 60).astype(numpy.float32)
 
-        @fuse(locals(), globals())
+        @fuse
         def test_func(A, B, C):
             D = array_mul(A, B)
             E = array_sub(C, D)
@@ -311,9 +311,9 @@ class TestDecorator(unittest.TestCase):
 
     def test_fusing_stencils(self):
         in_grid = numpy.random.rand(width, width).astype(numpy.float32) * 100
-        kernel = Stencil(backend='ocl').kernel
+        kernel = Stencil(backend='ocl')
 
-        @fuse(locals(), globals())
+        @fuse
         def f(in_grid):
             out = kernel(in_grid)
             return array_scalar_add(out, 4)
