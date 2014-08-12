@@ -23,7 +23,8 @@ def fuse(fn):
         blocks = get_blocks(tree)
         print()
         symbol_table = dict(fn.__globals__, **kwargs)
-        symbol_table.update(inspect.stack()[1][0].f_locals)
+        for frame in inspect.stack()[1:]:
+            symbol_table.update(frame[0].f_locals)
         for index, arg in enumerate(args):
             symbol_table[tree.body[0].args.args[index].id] = arg
         fuser = Fuser(blocks, symbol_table)
