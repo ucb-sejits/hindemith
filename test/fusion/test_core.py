@@ -309,6 +309,7 @@ class TestDecorator(unittest.TestCase):
         expected = (C - A * B) + 3
         self._check(actual, expected)
 
+    @unittest.skip("Stencil Fusion not implemented yet")
     def test_fusing_stencils(self):
         in_grid = numpy.random.rand(width, width).astype(numpy.float32) * 100
         kernel = Stencil(backend='ocl')
