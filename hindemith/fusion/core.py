@@ -58,6 +58,7 @@ def fuse(fn):
         fuser = Fuser(blocks, symbol_table)
         fused_blocks = fuser.do_fusion()
         tree.body[0].body = fused_blocks
+
         # Remove Decorator
         tree.body[0].decorator_list = []
         tree = ast.fix_missing_locations(tree)
@@ -69,9 +70,9 @@ def fuse(fn):
 def get_blocks(tree):
     """Convenience method for getting the blocks from an ast
 
-    :tree: @todo
-    :returns: @todo
-
+    :param ast.Node tree: A Python AST.
+    :returns: A list of AST nodes.
+    :rtype: list
     """
     blocks = []
     BlockBuilder(blocks).visit(tree)
