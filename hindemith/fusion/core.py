@@ -167,8 +167,8 @@ class Fuser(object):
                isinstance(block_2.value, ast.Call):
                 func_1 = self._symbol_table[block_1.value.func.id]
                 func_2 = self._symbol_table[block_2.value.func.id]
-                return hasattr(func_1, 'fusable') and func_1.fusable() and \
-                    hasattr(func_2, 'fusable') and func_2.fusable()
+                return isinstance(func_1, Fusable) and \
+                    isinstance(func_2, Fusable)
         return False
 
     def _fuse(self, blocks):
@@ -337,3 +337,12 @@ class FusedFn(ConcreteSpecializedFunction):
         #     else:
         #         ret_vals.append(output.value)
         # return ret_vals
+
+
+class Fusable(object):
+
+    """Docstring for Fusable. """
+
+    def __init__(self):
+        """@todo: to be defined1. """
+        pass
