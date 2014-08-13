@@ -1,10 +1,13 @@
 from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
 from ctree.frontend import get_ast
 from ctree.transformations import PyBasicConversions
-from ctree.c.nodes import FunctionDecl, SymbolRef
+from ctree.c.nodes import FunctionDecl, SymbolRef, Assign, ArrayDef, \
+    FunctionCall, Ref, Constant, Add, Mul
+from ctree.c.macros import NULL
+from ctree.templates.nodes import StringTemplate
 
 from ctree.ocl.nodes import OclFile
-from ctree.ocl.macros import get_global_id
+from ctree.ocl.macros import get_global_id, clSetKernelArg
 
 import ctree.np
 
@@ -39,9 +42,9 @@ class DLAConcreteOCL(ConcreteSpecializedFunction):
         self.queue = DLAConcreteOCL.queue
         self.output = output
 
-    def finalize(self, kernel, global_size):
+    def finalize(self, tree, entry_type, entry_point, kernel):
         self.kernel = kernel
-        self.global_size = global_size
+        self._c_function = self._compile(entry_point, tree, entry_type)
         return self
 
     def process_args(self, *args):
@@ -90,9 +93,7 @@ class DLAConcreteOCL(ConcreteSpecializedFunction):
 
     def __call__(self, *args):
         processed, argtypes, output, out_like = self.process_args(*args)
-        self.kernel.argtypes = argtypes
-        run_evt = self.kernel(*processed).on(self.queue, self.global_size)
-        run_evt.wait()
+        self._c_function(self.queue, self.kernel, *processed)
         return self.process_output(output, out_like)
 
     def process_output(self, output, out_like=None):
@@ -137,6 +138,11 @@ class DLAOclTransformer(ast.NodeTransformer):
     def __init__(self, arg_cfg):
         self.arg_cfg = arg_cfg
         self.arg_cfg_dict = {}
+        for cfg in arg_cfg:
+            if hasattr(cfg, 'ndpointer'):
+                self.ndim = cfg.ndim
+                self.shape = cfg.shape
+                break
         self.params = []
         self.project = None
         self.loop_var = None
@@ -151,12 +157,55 @@ class DLAOclTransformer(ast.NodeTransformer):
         :param node:
         :type node: FunctionDef
         """
+        if node.kernel is True:
+            return node
         for index, arg in enumerate(node.params):
             self.arg_cfg_dict[arg.name] = self.arg_cfg[index]
             arg.type = self.arg_cfg[index].type
         self.params = node.params
         node.defn = list(filter(None, map(self.visit, node.defn)))
-        return node
+        params = [
+            SymbolRef('queue', cl.cl_command_queue()),
+            SymbolRef('kernel', cl.cl_kernel())
+        ]
+        params.extend(SymbolRef('buf%d' % d, cl.cl_mem())
+                      for d in range(len(self.arg_cfg)))
+        local_size = 1
+        defn = [
+            Assign(
+                SymbolRef('size_t global[%d]' % self.ndim),
+                ArrayDef([Constant(d) for d in self.shape])
+            ),
+            Assign(
+                SymbolRef('size_t local[%d]' % self.ndim),
+                ArrayDef([Constant(local_size) for _ in self.shape])
+            ),
+        ]
+        defn.extend(
+            clSetKernelArg(
+                SymbolRef('kernel'), Constant(d),
+                FunctionCall(SymbolRef('sizeof'), [SymbolRef('cl_mem')]),
+                Ref('buf%d' % d)
+            ) for d in range(len(self.arg_cfg))
+        )
+        defn.append(
+            FunctionCall(SymbolRef('clEnqueueNDRangeKernel'), [
+                SymbolRef('queue'), SymbolRef('kernel'),
+                Constant(self.ndim), NULL(),
+                SymbolRef('global'), SymbolRef('local'),
+                Constant(0), NULL(), NULL()
+            ])
+        )
+        header = StringTemplate("""
+            #ifdef __APPLE__
+            #include <OpenCL/opencl.h>
+            #else
+            #include <CL/cl.h>
+            #endif
+            """)
+        node.params = params
+        node.defn = defn
+        return [header, node]
 
     def visit_PointsLoop(self, node):
         self.loop_var = node.loop_var
@@ -172,7 +221,15 @@ class DLAOclTransformer(ast.NodeTransformer):
 
     def visit_SymbolRef(self, node):
         if node.name == self.loop_var:
-            return get_global_id(0)
+            index = get_global_id(self.ndim - 1)
+            for d in reversed(range(self.ndim - 1)):
+                index = Add(
+                    Mul(
+                        index,
+                        Constant(self.shape[d])
+                    ), get_global_id(d)
+                )
+            return index
         return node
 
 
@@ -225,17 +282,17 @@ class DLALazy(LazySpecializedFunction, Fusable):
 
     def finalize(self, tree, program_cfg):
         arg_cfg, tune_cfg = program_cfg
-        global_size = 1
-        for arg in arg_cfg:
-            if hasattr(arg, 'ndpointer'):
-                global_size = arg.length
-                break
         fn = DLAConcreteOCL(self.output)
         self.output = None
         kernel = tree.files[-1]
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
-        return fn.finalize(program[kernel.body[0].name], global_size)
+        kernel_ptr = program[kernel.body[0].name]
+
+        entry_type = [None, cl.cl_command_queue, cl.cl_kernel]
+        entry_type.extend(cl.cl_mem for _ in range(len(arg_cfg) + 1))
+        entry_type = ct.CFUNCTYPE(*entry_type)
+        return fn.finalize(tree, entry_type, 'op', kernel_ptr)
 
     def generate_output(self, program_cfg):
         arg_cfg, tune_cfg = program_cfg
