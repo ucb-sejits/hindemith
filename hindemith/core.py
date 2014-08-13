@@ -1,7 +1,6 @@
 from hindemith.types.common import Float32, Int, Scalar, Array
 from hindemith.utils import UnsupportedTypeError
 from numpy import ndarray
-from stencil_code.stencil_grid import StencilGrid
 
 import logging
 LOG = logging.getLogger('Hindemith')
@@ -15,8 +14,6 @@ def coercer(arg):
         return name, Float32(name, value)
     elif isinstance(value, int):
         return name, Int(name, value)
-    elif isinstance(value, StencilGrid):
-        return name, value
     elif isinstance(value, Array):
         value.name = name
         return name, value
