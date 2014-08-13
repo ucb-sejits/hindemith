@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='hindemith',
-    version='0.0.1a',
+    version='0.0.1a1',
     author = 'Leonard Truong',
     author_email = 'leonardtruong@berkeley.edu',
 

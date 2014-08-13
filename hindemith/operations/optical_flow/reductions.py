@@ -9,6 +9,10 @@ from ctypes import *
 from ctree.c.nodes import *
 from ctree.ocl.macros import *
 from hindemith.types.common import Array
+try:
+    from functools import reduce
+except:
+    pass
 
 # class ReduceConcrete(ConcreteSpecializedFunction):
 #     pass
