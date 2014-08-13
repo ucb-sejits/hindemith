@@ -130,7 +130,7 @@ class PyrDownLazy(LazySpecializedFunction):
             fn.context, tree.codegen()).build()
         ptr = program[self.entry_point]
         return fn.finalize(
-            ptr, (arg_cfg[0][2][1] / 2, arg_cfg[0][2][0] / 2), self.output_name
+            ptr, (int(arg_cfg[0][2][1] / 2), int(arg_cfg[0][2][0] / 2)), self.output_name
         )
 
 
@@ -145,8 +145,8 @@ class PyrDown(object):
     def pure_python(self, im):
         im = im.data
         retval = zeros_like(im)
-        for x in range(im.shape[0] / 2):
-            for y in range(im.shape[1] / 2):
+        for x in range(int(im.shape[0] / 2)):
+            for y in range(int(im.shape[1] / 2)):
                 retval[(x, y)] = (
                     im[(2 * x, 2 * y)] +
                     im[(2 * x + 1, 2 * y)] +
