@@ -6,12 +6,12 @@ from ctree.frontend import get_ast
 from ctree.jit import ConcreteSpecializedFunction
 import ctree
 import ctree.np
+ctree.np  # Make PEP happy
 
 from hindemith.utils import unique_kernel_name, unique_name
 
 import inspect
 
-ctree.np  # Make PEP happy
 
 import logging
 LOG = logging.getLogger('Hindemith')
@@ -215,7 +215,7 @@ class Fuser(object):
                 specializer.original_tree,
                 (specializer.args_to_subconfig(args), None)
             )
-            kernels.append(tree.files[-1])  # TODO: This needs to be more general
+            kernels.append(tree.files[-1])  # TODO: make this general
             specializers.append(
                 specializer.finalize(
                     tree,
