@@ -21,6 +21,11 @@ from collections import namedtuple
 from hindemith.utils import unique_kernel_name
 from hindemith.fusion.core import Fusable
 
+try:
+    from functools import reduce
+except:
+    pass
+
 __author__ = 'leonardtruong'
 
 
