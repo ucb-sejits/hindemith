@@ -211,18 +211,14 @@ class Fuser(object):
             arg_nodes_list.append(ast.Name(target, ast.Load()))
 
             outputs.append(output)
-            kernels.append(
-                specializer.transform(
-                    specializer.original_tree,
-                    (specializer.args_to_subconfig(args), None)
-                ).files[-1]  # TODO: This needs to be more general
+            tree = specializer.transform(
+                specializer.original_tree,
+                (specializer.args_to_subconfig(args), None)
             )
+            kernels.append(tree.files[-1])  # TODO: This needs to be more general
             specializers.append(
                 specializer.finalize(
-                    specializer.transform(
-                        specializer.original_tree,
-                        (specializer.args_to_subconfig(args), None)
-                    ),
+                    tree,
                     (specializer.args_to_subconfig(args), None)
                 )
             )
