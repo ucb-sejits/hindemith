@@ -10,11 +10,24 @@ import ctree.np
 from hindemith.utils import unique_kernel_name, unique_name
 
 import inspect
+import sys
 
 ctree.np  # Make PEP happy
 
 import logging
 LOG = logging.getLogger('Hindemith')
+
+try:
+    from functools import reduce
+except:
+    pass
+
+
+def my_exec(file, symbol_table):
+    if sys.version_info >= (3, 0):
+        exec(file, symbol_table)
+    else:
+        exec(file) in symbol_table
 
 
 def fuse(fn):
@@ -30,7 +43,8 @@ def fuse(fn):
 
     """
     def fused(*args, **kwargs):
-        """Fused wrapper around `fn`.  First it get all variables defined in the
+        """
+        Fused wrapper around `fn`.  First it get all variables defined in the
         local, global scope.  It then traverses the body of the function
         looking for places where specializer calls are made.  Any specializer
         calls found that can be fused will be (@todo: Tuning should occur here
@@ -53,7 +67,10 @@ def fuse(fn):
 
         # Add non keyword arguments
         for index, arg in enumerate(args):
-            symbol_table[tree.body[0].args.args[index].id] = arg
+            if sys.version_info >= (3, 0):
+                symbol_table[tree.body[0].args.args[index]] = arg
+            else:
+                symbol_table[tree.body[0].args.args[index].id] = arg
 
         fuser = Fuser(blocks, symbol_table)
         fused_blocks = fuser.do_fusion()
@@ -62,7 +79,7 @@ def fuse(fn):
         # Remove Decorator
         tree.body[0].decorator_list = []
         tree = ast.fix_missing_locations(tree)
-        exec(compile(tree, '', 'exec')) in symbol_table
+        my_exec(compile(tree, '', 'exec'), symbol_table)
         return symbol_table[fn.__name__](*args, **kwargs)
     return fused
 
