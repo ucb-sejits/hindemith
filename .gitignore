@@ -17,3 +17,4 @@ kernels.cl
 *.swp
 __pycache__
 tmp.png
+*.egg-info
