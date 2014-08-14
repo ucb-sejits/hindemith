@@ -1,7 +1,7 @@
 from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
 from ctree.frontend import get_ast
 from ctree.transformations import PyBasicConversions
-from ctree.c.nodes import FunctionDecl, SymbolRef, Assign, ArrayDef, \
+from ctree.c.nodes import FunctionDecl, SymbolRef, ArrayDef, \
     FunctionCall, Ref, Constant, Add, Mul
 from ctree.c.macros import NULL
 from ctree.templates.nodes import StringTemplate
@@ -50,7 +50,6 @@ class DLAConcreteOCL(ConcreteSpecializedFunction):
     def process_args(self, *args):
         processed = []
         events = []
-        argtypes = ()
         output = ct.c_int()
         out_like = None
         for arg in args:
@@ -59,17 +58,14 @@ class DLAConcreteOCL(ConcreteSpecializedFunction):
                                                   blocking=False)
                 processed.append(buf)
                 events.append(evt)
-                argtypes += (cl.cl_mem,)
                 output = buf.empty_like_this()
                 out_like = arg
             else:
-                processed.append(arg)
                 if isinstance(arg, int):
-                    argtypes += (cl.cl_int,)
-                elif isinstance(arg, float):
-                    argtypes += (cl.cl_float,)
-                    if isinstance(output, ct.c_int):
-                        output = ct.c_float()
+                    processed.append(arg)
+                elif isinstance(arg, float) and isinstance(output, ct.c_int):
+                    processed.append(arg)
+                    output = ct.c_float()
                 else:
                     raise NotImplementedError(
                         "UnsupportedType: %s" % type(arg)
@@ -80,19 +76,14 @@ class DLAConcreteOCL(ConcreteSpecializedFunction):
             out_like = self.output
             evt.wait()
         if isinstance(output, cl.cl_mem):
-            argtypes += (cl.cl_mem,)
             processed.append(output)
         else:
             processed.append(output.byref)
-            if isinstance(output, ct.c_float):
-                argtypes += (cl.cl_float,)
-            else:
-                argtypes += (cl.cl_int,)
         cl.clWaitForEvents(*events)
-        return processed, argtypes, output, out_like
+        return processed, output, out_like
 
     def __call__(self, *args):
-        processed, argtypes, output, out_like = self.process_args(*args)
+        processed, output, out_like = self.process_args(*args)
         self._c_function(self.queue, self.kernel, *processed)
         return self.process_output(output, out_like)
 
@@ -172,30 +163,31 @@ class DLAOclTransformer(ast.NodeTransformer):
                       for d in range(len(self.arg_cfg)))
         local_size = 1
         defn = [
-            Assign(
-                SymbolRef('size_t global[%d]' % self.ndim),
-                ArrayDef([Constant(d) for d in self.shape])
+            ArrayDef(
+                SymbolRef('global', ct.c_ulong()), Constant(self.ndim),
+                [Constant(d) for d in self.shape]
             ),
-            Assign(
-                SymbolRef('size_t local[%d]' % self.ndim),
-                ArrayDef([Constant(local_size) for _ in self.shape])
-            ),
+            ArrayDef(
+                SymbolRef('local', ct.c_ulong()), Constant(self.ndim),
+                [Constant(local_size) for _ in self.shape]
+            )
         ]
         defn.extend(
             clSetKernelArg(
-                SymbolRef('kernel'), Constant(d),
-                FunctionCall(SymbolRef('sizeof'), [SymbolRef('cl_mem')]),
-                Ref('buf%d' % d)
-            ) for d in range(len(self.arg_cfg))
+                SymbolRef('kernel'), Constant(index),
+                Constant(ct.sizeof(arg.ctype)),
+                Ref(SymbolRef('buf%d' % index))
+            ) for index, arg in enumerate(self.arg_cfg)
         )
-        defn.append(
+        defn.extend([
             FunctionCall(SymbolRef('clEnqueueNDRangeKernel'), [
                 SymbolRef('queue'), SymbolRef('kernel'),
                 Constant(self.ndim), NULL(),
                 SymbolRef('global'), SymbolRef('local'),
                 Constant(0), NULL(), NULL()
-            ])
-        )
+            ]),
+            FunctionCall(SymbolRef('clFinish'), [SymbolRef('queue')])
+        ])
         header = StringTemplate("""
             #ifdef __APPLE__
             #include <OpenCL/opencl.h>
@@ -234,8 +226,8 @@ class DLAOclTransformer(ast.NodeTransformer):
 
 
 HMArray = namedtuple("HMArray", ['type', 'ndpointer', 'shape', 'ndim',
-                                 'length', 'is_global', 'data'])
-HMScalar = namedtuple("HMScalar", ['type', 'value', 'is_global'])
+                                 'length', 'is_global', 'data', 'ctype'])
+HMScalar = namedtuple("HMScalar", ['type', 'value', 'is_global', 'ctype'])
 
 
 class DLALazy(LazySpecializedFunction, Fusable):
@@ -249,12 +241,12 @@ class DLALazy(LazySpecializedFunction, Fusable):
             return HMArray(
                 ndpointer(arg.dtype, arg.ndim, arg.shape)(),
                 ndpointer(arg.dtype, arg.ndim, arg.shape), arg.shape, arg.ndim,
-                reduce(lambda x, y: x * y, arg.shape, 1), True, arg
+                reduce(lambda x, y: x * y, arg.shape, 1), True, arg, cl.cl_mem
             )
         elif isinstance(arg, int):
-            return HMScalar(ct.c_int(), arg, False)
+            return HMScalar(ct.c_int(), arg, False, ct.c_int)
         elif isinstance(arg, float):
-            return HMScalar(ct.c_float(), arg, False)
+            return HMScalar(ct.c_float(), arg, False, ct.c_float)
         else:
             raise NotImplementedError(
                 "UnsupportedType: %s" % type(arg)
@@ -268,20 +260,24 @@ class DLALazy(LazySpecializedFunction, Fusable):
         # FIXME: Assumes all scalars are floats
         if self.output is None:
             self.generate_output(program_cfg)
-        output_type = (HMScalar(ct.POINTER(ct.c_float)(), 0, True),)
+        output_type = (HMScalar(ct.POINTER(ct.c_float)(), 0, True,
+                                ct.c_float),)
         for arg in arg_cfg:
             if hasattr(arg, 'ndpointer'):
                 output_type = (
                     HMArray(arg.type, arg.ndpointer, arg.shape,
-                            arg.ndim, arg.length, True, self.output),)
+                            arg.ndim, arg.length, True, self.output,
+                            cl.cl_mem),)
                 break
 
         tree = DLASemanticTransformer().visit(tree)
         tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
-        return tree
+        entry_type = [None, cl.cl_command_queue, cl.cl_kernel]
+        entry_type.extend(arg.ctype for arg in arg_cfg + output_type)
+        entry_point = 'op'
+        return tree, entry_type, entry_point
 
-    def finalize(self, tree, program_cfg):
-        arg_cfg, tune_cfg = program_cfg
+    def finalize(self, tree, entry_type, entry_point):
         fn = DLAConcreteOCL(self.output)
         self.output = None
         kernel = tree.files[-1]
@@ -289,10 +285,8 @@ class DLALazy(LazySpecializedFunction, Fusable):
                                                kernel.codegen()).build()
         kernel_ptr = program[kernel.body[0].name]
 
-        entry_type = [None, cl.cl_command_queue, cl.cl_kernel]
-        entry_type.extend(cl.cl_mem for _ in range(len(arg_cfg) + 1))
-        entry_type = ct.CFUNCTYPE(*entry_type)
-        return fn.finalize(tree, entry_type, 'op', kernel_ptr)
+        return fn.finalize(tree, ct.CFUNCTYPE(*entry_type), entry_point,
+                           kernel_ptr)
 
     def generate_output(self, program_cfg):
         arg_cfg, tune_cfg = program_cfg

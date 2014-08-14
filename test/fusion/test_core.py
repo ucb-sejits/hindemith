@@ -65,7 +65,7 @@ class TestFuser(unittest.TestCase):
             testing.assert_array_almost_equal(actual_c, expected_c)
             testing.assert_array_almost_equal(actual_d, expected_d)
         except Exception as e:
-            self.fail("Arrays not almost equal: {0}".format(e.message))
+            self.fail("Arrays not almost equal: {0}".format(e))
 
     def test_fuse_3(self):
         a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
@@ -94,7 +94,7 @@ class TestFuser(unittest.TestCase):
             testing.assert_array_almost_equal(actual_d, expected_d)
             testing.assert_array_almost_equal(actual_e, expected_e)
         except Exception as e:
-            self.fail("Arrays not almost equal: {0}".format(e.message))
+            self.fail("Arrays not almost equal: {0}".format(e))
 
 
 class TestBlockBuilder(unittest.TestCase):
@@ -145,7 +145,7 @@ class TestSimpleFusion(unittest.TestCase):
             testing.assert_array_almost_equal(fuser._symbol_table['f'](a, b),
                                               orig_f(a, b))
         except Exception as e:
-            self.fail("Arrays not almost equal: {0}".format(e.message))
+            self.fail("Arrays not almost equal: {0}".format(e))
 
     def test_simple2(self):
         a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
@@ -169,7 +169,7 @@ class TestSimpleFusion(unittest.TestCase):
             testing.assert_array_almost_equal(fuser._symbol_table['f'](a, b),
                                               orig_f(a, b))
         except Exception as e:
-            self.fail("Arrays not almost equal: {0}".format(e.message))
+            self.fail("Arrays not almost equal: {0}".format(e))
 
     def test_non_fusable(self):
         a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
@@ -194,7 +194,7 @@ class TestSimpleFusion(unittest.TestCase):
             testing.assert_array_almost_equal(fuser._symbol_table['f'](a, b),
                                               orig_f(a, b))
         except Exception as e:
-            self.fail("Arrays not almost equal: {0}".format(e.message))
+            self.fail("Arrays not almost equal: {0}".format(e))
 
     def test_fuse_with_return(self):
         a = numpy.random.rand(100, 100).astype(numpy.float32) * 100
@@ -217,7 +217,7 @@ class TestSimpleFusion(unittest.TestCase):
             testing.assert_array_almost_equal(fuser._symbol_table['f'](a, b),
                                               orig_f(a, b))
         except Exception as e:
-            self.fail("Arrays not almost equal: {0}".format(e.message))
+            self.fail("Arrays not almost equal: {0}".format(e))
 
 
 stdev_d = 3
@@ -253,7 +253,7 @@ class TestDecorator(unittest.TestCase):
         try:
             testing.assert_array_almost_equal(actual, expected)
         except AssertionError as e:
-            self.fail("Outputs not equal: %s" % e.message)
+            self.fail("Outputs not equal: %s" % e)
 
     def test_dec_no_fusion(self):
         @fuse
