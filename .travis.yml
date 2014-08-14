@@ -47,5 +47,7 @@ after_success:
   - source deactivate
   - coveralls
   - curl -X POST http://readthedocs.org/build/hindemith
+  # install setuptools for deploy
+  - pip instal setuptools 
 notifications:
   slack: ucb-sejits:cPZxBunxagWZ763mcsIXOV0W
