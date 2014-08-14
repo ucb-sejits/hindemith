@@ -172,20 +172,20 @@ class DLAOclTransformer(ast.NodeTransformer):
                       for d in range(len(self.arg_cfg)))
         local_size = 1
         defn = [
-            Assign(
-                SymbolRef('size_t global[%d]' % self.ndim),
-                ArrayDef([Constant(d) for d in self.shape])
+            ArrayDef(
+                SymbolRef('global', ct.c_ulong()), Constant(self.ndim),
+                [Constant(d) for d in self.shape]
             ),
-            Assign(
-                SymbolRef('size_t local[%d]' % self.ndim),
-                ArrayDef([Constant(local_size) for _ in self.shape])
-            ),
+            ArrayDef(
+                SymbolRef('local', ct.c_ulong()), Constant(self.ndim),
+                [Constant(local_size) for _ in self.shape]
+            )
         ]
         defn.extend(
             clSetKernelArg(
                 SymbolRef('kernel'), Constant(d),
                 FunctionCall(SymbolRef('sizeof'), [SymbolRef('cl_mem')]),
-                Ref('buf%d' % d)
+                Ref(SymbolRef('buf%d' % d))
             ) for d in range(len(self.arg_cfg))
         )
         defn.append(
@@ -278,10 +278,12 @@ class DLALazy(LazySpecializedFunction, Fusable):
 
         tree = DLASemanticTransformer().visit(tree)
         tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
-        return tree
+        entry_type = [None, cl.cl_command_queue, cl.cl_kernel]
+        entry_type.extend(cl.cl_mem for _ in range(len(arg_cfg) + 1))
+        entry_point = 'op'
+        return tree, entry_type, entry_point
 
-    def finalize(self, tree, program_cfg):
-        arg_cfg, tune_cfg = program_cfg
+    def finalize(self, tree, entry_type, entry_point):
         fn = DLAConcreteOCL(self.output)
         self.output = None
         kernel = tree.files[-1]
@@ -289,10 +291,7 @@ class DLALazy(LazySpecializedFunction, Fusable):
                                                kernel.codegen()).build()
         kernel_ptr = program[kernel.body[0].name]
 
-        entry_type = [None, cl.cl_command_queue, cl.cl_kernel]
-        entry_type.extend(cl.cl_mem for _ in range(len(arg_cfg) + 1))
-        entry_type = ct.CFUNCTYPE(*entry_type)
-        return fn.finalize(tree, entry_type, 'op', kernel_ptr)
+        return fn.finalize(tree, ct.CFUNCTYPE(*entry_type), entry_point, kernel_ptr)
 
     def generate_output(self, program_cfg):
         arg_cfg, tune_cfg = program_cfg
