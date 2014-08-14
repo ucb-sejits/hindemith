@@ -1,57 +1,51 @@
 language: python
-
 python:
-  - "2.7"
-  - "3.3"
-  - "3.4"
-
+  - '2.7'
+  - '3.3'
+  - '3.4'
 before_install:
-
-  - if [ ${TRAVIS_PYTHON_VERSION:0:1} == "2" ]; then wget http://repo.continuum.io/miniconda/Miniconda-3.5.2-Linux-x86_64.sh -O miniconda.sh; else wget http://repo.continuum.io/miniconda/Miniconda3-3.5.2-Linux-x86_64.sh -O miniconda.sh; fi
+  - if [ ${TRAVIS_PYTHON_VERSION:0:1} == "2" ]; then wget http://repo.continuum.io/miniconda/Miniconda-3.5.2-Linux-x86_64.sh
+    -O miniconda.sh; else wget http://repo.continuum.io/miniconda/Miniconda3-3.5.2-Linux-x86_64.sh
+    -O miniconda.sh; fi
   - chmod +x miniconda.sh
   - ./miniconda.sh -b
-  - if [ ${TRAVIS_PYTHON_VERSION:0:1} == "2" ]; then export PATH=/home/travis/miniconda/bin:$PATH; else export PATH=/home/travis/miniconda3/bin:$PATH; fi
+  - if [ ${TRAVIS_PYTHON_VERSION:0:1} == "2" ]; then export PATH=/home/travis/miniconda/bin:$PATH;
+    else export PATH=/home/travis/miniconda3/bin:$PATH; fi
   - conda update --yes conda
-  # Setup environment
   - conda create -n travisci --yes python=${TRAVIS_PYTHON_VERSION:0:3} llvm numpy pip
   - source activate travisci
   - sudo apt-get update -qq
   - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
-
 install:
-  - pip install numpy Sphinx coveralls coverage nose pygments setuptools 
-
-
+  - pip install numpy Sphinx coveralls coverage nose pygments setuptools
   - mkdir dependencies
-  # install llvmpy
   - git clone -b llvm-3.4 git://github.com/llvmpy/llvmpy.git ${TRAVIS_BUILD_DIR}/dependencies/llvmpy
   - cd ${TRAVIS_BUILD_DIR}/dependencies/llvmpy
   - python setup.py install
-
-  # install pycl
   - git clone git://github.com/ucb-sejits/pycl.git ${TRAVIS_BUILD_DIR}/dependencies/pycl
   - cd ${TRAVIS_BUILD_DIR}/dependencies/pycl
   - python setup.py install
-
   - git clone git://github.com/ucb-sejits/ctree.git ${TRAVIS_BUILD_DIR}/dependencies/ctree
   - cd ${TRAVIS_BUILD_DIR}/dependencies/ctree
   - python setup.py install
   - cd ${TRAVIS_BUILD_DIR}
-
   - git clone git://github.com/ucb-sejits/stencil_code.git ${TRAVIS_BUILD_DIR}/dependencies/stencil_code
   - cd ${TRAVIS_BUILD_DIR}/dependencies/stencil_code
   - python setup.py install
   - cd ${TRAVIS_BUILD_DIR}
-
 script:
   - nosetests --verbose --with-coverage --cover-package=hindemith --cover-erase
-
+deploy:
+  provider: pypi
+  user: leonardt
+  password:
+    secure: VaklmzdQNl3sg4u7TyrLsZFoAxjGieFMvO8z30sno8pW0zsn2YNpkpfDO1Qy/5kXnSpjLNcDYHJLlcsV2njhONU/0ER5bHwlqAY+n7XM8M+Yk/KvTk6k6dfsl6+k8G2L4K5cSydaz1erYCU/TYgzviki/9D2vMnDG/jP65vevGU=
+  on:
+    tags: true
+    all_branches: true
 after_success:
-  # publish coverage report
   - source deactivate
   - coveralls
-  # Tell read the docs to rebuild docs
   - curl -X POST http://readthedocs.org/build/hindemith
-
 notifications:
   slack: ucb-sejits:cPZxBunxagWZ763mcsIXOV0W
