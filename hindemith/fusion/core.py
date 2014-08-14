@@ -1,9 +1,12 @@
 import numpy
 import ast
 import pycl as cl
+import ctypes as ct
 
 from ctree.frontend import get_ast
 from ctree.jit import ConcreteSpecializedFunction
+from ctree.c.nodes import CFile, FunctionDecl
+from ctree.ocl.nodes import OclFile
 import ctree
 import ctree.np
 
@@ -17,10 +20,7 @@ ctree.np  # Make PEP happy
 import logging
 LOG = logging.getLogger('Hindemith')
 
-try:
-    from functools import reduce
-except:
-    pass
+from functools import reduce
 
 
 def my_exec(file, symbol_table):
@@ -129,9 +129,13 @@ class UniqueNamer(ast.NodeTransformer):
 
     def visit_FunctionCall(self, node):
         # Don't rename functions
+        node.args = list(map(self.visit, node.args))
         return node
 
     def visit_SymbolRef(self, node):
+        if node.name in {'float', 'NULL', 'cl_mem'}:
+            # Don't rename constants
+            return node
         if node.name not in self.seen:
             UniqueNamer.uid += 1
             self.seen[node.name] = '_f%d' % UniqueNamer.uid
@@ -201,7 +205,10 @@ class Fuser(object):
 
         num_args = []
         specializers = []
-        kernels = []
+        projects = []
+        entry_types = []
+        entry_points = []
+        kernel_names = []
         arg_list = []
         arg_nodes_list = []
         outputs = []
@@ -228,37 +235,32 @@ class Fuser(object):
             arg_nodes_list.append(ast.Name(target, ast.Load()))
 
             outputs.append(output)
-            kernels.append(
-                specializer.transform(
-                    specializer.original_tree,
-                    (specializer.args_to_subconfig(args), None)
-                ).files[-1]  # TODO: This needs to be more general
+            tree, entry_type, entry_point = specializer.transform(
+                specializer.original_tree,
+                (specializer.args_to_subconfig(args), None)
             )
+            kernel_names.extend(kernel_names)
+            projects.append(tree)
+            entry_types.append(entry_type)
+            entry_points.append(entry_point)
             specializers.append(
-                specializer.finalize(
-                    specializer.transform(
-                        specializer.original_tree,
-                        (specializer.args_to_subconfig(args), None)
-                    ),
-                    (specializer.args_to_subconfig(args), None)
-                )
+                specializer.finalize(tree, entry_type, entry_point)
             )
-            num_args.append(len(block.value.args))
-
-        kernel = UniqueNamer().visit(kernels[0])
-        for kern in kernels[1:]:
-            UniqueNamer().visit(kern)
-            kernel.body[0].defn.extend(kern.body[0].defn)
-            kernel.body[0].params.extend(kern.body[0].params)
+            num_args.append(len(block.value.args) + 1)
 
         fn = FusedFn(specializers, num_args, outputs, is_return)
-        program = cl.clCreateProgramWithSource(fn.context,
-                                               kernel.codegen()).build()
-        # FIXME: Assuming OpenCL
+
+        project = self.fuse_at_project_level(projects, entry_points)
+        ocl_file = project.find(OclFile)
+        kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
+
         func_name = unique_kernel_name()
+        argtypes = [None]
+        for entry_type in entry_types:
+            argtypes.extend(entry_type[1:])
+
         self._symbol_table[func_name] = fn.finalize(
-            program[kernel.body[0].name],
-            reduce(lambda x, y: x * y, arg_list[0].shape, 1)
+            'op', project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
         )
         tree = ast.Call(
             func=ast.Name(id=func_name, ctx=ast.Load()),
@@ -269,6 +271,138 @@ class Fuser(object):
         else:
             tree = ast.Expr(tree)
         return tree
+
+        # kernel = UniqueNamer().visit(kernels[0])
+        # for kern in kernels[1:]:
+        #     UniqueNamer().visit(kern)
+        #     kernel.body[0].defn.extend(kern.body[0].defn)
+        #     kernel.body[0].params.extend(kern.body[0].params)
+
+        # fn = FusedFn(specializers, num_args, outputs, is_return)
+        # program = cl.clCreateProgramWithSource(fn.context,
+        #                                        kernel.codegen()).build()
+        # FIXME: Assuming OpenCL
+        # func_name = unique_kernel_name()
+        # self._symbol_table[func_name] = fn.finalize(
+        #     program[kernel.body[0].name],
+        #     reduce(lambda x, y: x * y, arg_list[0].shape, 1)
+        # )
+        # tree = ast.Call(
+        #     func=ast.Name(id=func_name, ctx=ast.Load()),
+        #     args=arg_nodes_list, keywords=[]
+        # )
+        # if is_return:
+        #     tree = ast.Return(tree)
+        # else:
+        #     tree = ast.Expr(tree)
+        # return tree
+
+    def fuse_at_project_level(self, projects, entry_points):
+        """@todo: Docstring for fuse_at_project_level.
+
+        :projects: @todo
+        :returns: @todo
+
+        """
+        project = projects.pop(0)
+        for proj in projects:
+            project.files.extend(proj.files)
+        project.files = self.fuse_at_file_level(project.files, entry_points)
+        return project
+
+    def fuse_at_file_level(self, files, entry_points):
+        """@todo: Docstring for fuse_at_file_level.
+
+        :files: @todo
+        :returns: @todo
+
+        """
+        # FIXME: Support all file types
+        c_file = CFile('fused_c_file', [])
+        ocl_file = OclFile('fuse_ocl_file', [])
+
+        file_map = {
+            CFile: c_file,
+            OclFile: ocl_file
+        }
+        for _file in files:
+            file_map[type(_file)].body.extend(_file.body)
+
+        c_file = self.fuse_entry_points(c_file, entry_points)
+        return [c_file, ocl_file]
+
+    def fuse_entry_points(self, c_file, entry_points):
+        """@todo: Docstring for fuse_at_function_level.
+
+        :c_file: @todo
+        :ocl_file: @todo
+        :returns: @todo
+
+        """
+        # Fuse all entry_points together
+        func_decls = find_and_remove_entry_points(entry_points, c_file)
+        fused_func = uniqueify_names(func_decls.pop(0))
+        for func in func_decls:
+            unique = uniqueify_names(func)
+            fused_func.params.extend(unique.params)
+            fused_func.defn.extend(unique.defn)
+        c_file.body.append(fused_func)
+        return c_file
+
+
+def get_kernel_ptrs(ocl_file, fn):
+    program = cl.clCreateProgramWithSource(fn.context,
+                                            ocl_file.codegen()).build()
+    ptrs = []
+    for statement in ocl_file.body:
+        if isinstance(statement, FunctionDecl):
+            ptrs.append(program[statement.name])
+    return ptrs
+
+
+def uniqueify_names(function):
+    return UniqueNamer().visit(function)
+
+
+def find_and_remove_entry_points(entry_points, c_file):
+    """@todo: Docstring for find_and_remove_entry_points.
+
+    :entry_points: @todo
+    :c_file: @todo
+    :returns: @todo
+
+    """
+    results = []
+    EntryPointFindAndRemover(entry_points, results).visit(c_file)
+    return results
+
+
+class EntryPointFindAndRemover(ast.NodeTransformer):
+
+    """Docstring for EntryPointFindAndRemover. """
+
+    def __init__(self, entry_points, results):
+        """@todo: to be defined1.
+
+        :entry_points: @todo
+        :results: @todo
+
+        """
+        ast.NodeTransformer.__init__(self)
+
+        self._entry_points = entry_points
+        self._results = results
+
+    def visit_FunctionDecl(self, node):
+        """@todo: Docstring for visit_FunctionDecl.
+
+        :node: @todo
+        :returns: @todo
+
+        """
+        if node.name in self._entry_points:
+            self._results.append(node)
+        return []
 
 
 class FusedFn(ConcreteSpecializedFunction):
@@ -288,14 +422,13 @@ class FusedFn(ConcreteSpecializedFunction):
         self.outputs = outputs
         self.is_return = is_return
 
-    def finalize(self, kernel, global_size):
-        self.kernel = kernel
-        self.global_size = global_size
+    def finalize(self, entry_point_name, project, entry_point_typesig, kernels):
+        self._c_function = self._compile(entry_point_name, project, entry_point_typesig)
+        self.kernels = kernels
         return self
 
     def _process_args(self, args):
         processed = ()
-        argtypes = ()
         for arg in args:
             if isinstance(arg, numpy.ndarray):
                 if arg.ctypes.data in self.arg_buf_map:
@@ -306,28 +439,25 @@ class FusedFn(ConcreteSpecializedFunction):
                     evt.wait()
                     processed += (buf,)
                     self.arg_buf_map[arg.ctypes.data] = buf
-                argtypes += (cl.cl_mem,)
             else:
                 processed += (arg,)
-                if isinstance(arg, int):
-                    argtypes += (cl.cl_int,)
-                elif isinstance(arg, float):
-                    argtypes += (cl.cl_float,)
-                else:
-                    raise NotImplementedError(
-                        "UnsupportedType: %s" % type(arg)
-                    )
-        return processed, argtypes
+        return processed
 
     def __call__(self, *args):
-        processed, argtypes = self._process_args(args)
-        self.kernel.argtypes = argtypes
-        run_evt = self.kernel(*processed).on(self.queue, self.global_size)
-        run_evt.wait()
+        processed = self._process_args(args)
+        args = []
+        offset = 0
+        for index, self.num_args in enumerate(self.num_args):
+            args.append(self.queue)
+            args.append(self.kernels[index])
+            args.extend(processed[offset: offset + self.num_args])
+            offset += self.num_args
+        self._c_function(*args)
         return self._process_outputs()
 
     def _process_outputs(self):
         retvals = ()
+        print([output.ctypes.data for output in self.outputs])
         if self.is_return:
             output = self.outputs[-1]
             buf = self.arg_buf_map[output.ctypes.data]
