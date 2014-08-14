@@ -188,14 +188,15 @@ class DLAOclTransformer(ast.NodeTransformer):
                 Ref(SymbolRef('buf%d' % d))
             ) for d in range(len(self.arg_cfg))
         )
-        defn.append(
+        defn.extend([
             FunctionCall(SymbolRef('clEnqueueNDRangeKernel'), [
                 SymbolRef('queue'), SymbolRef('kernel'),
                 Constant(self.ndim), NULL(),
                 SymbolRef('global'), SymbolRef('local'),
                 Constant(0), NULL(), NULL()
-            ])
-        )
+            ]),
+            FunctionCall(SymbolRef('clFinish'), [SymbolRef('queue')])
+        ])
         header = StringTemplate("""
             #ifdef __APPLE__
             #include <OpenCL/opencl.h>
