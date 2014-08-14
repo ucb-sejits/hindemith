@@ -42,6 +42,7 @@ deploy:
     secure: VaklmzdQNl3sg4u7TyrLsZFoAxjGieFMvO8z30sno8pW0zsn2YNpkpfDO1Qy/5kXnSpjLNcDYHJLlcsV2njhONU/0ER5bHwlqAY+n7XM8M+Yk/KvTk6k6dfsl6+k8G2L4K5cSydaz1erYCU/TYgzviki/9D2vMnDG/jP65vevGU=
   on:
     tags: true
+    all_branches: true
 after_success:
   - source deactivate
   - coveralls
