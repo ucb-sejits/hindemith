@@ -22,7 +22,7 @@ from numpy.ctypeslib import ndpointer
 from collections import namedtuple
 
 from hindemith.utils import unique_kernel_name
-from hindemith.fusion.core import Fusable
+from hindemith.fusion.core import Fusable, KernelCall
 
 try:
     from functools import reduce
@@ -126,7 +126,7 @@ class DLASemanticTransformer(PyBasicConversions):
 
 
 class DLAOclTransformer(ast.NodeTransformer):
-    def __init__(self, arg_cfg):
+    def __init__(self, arg_cfg, fusable_nodes):
         self.arg_cfg = arg_cfg
         self.arg_cfg_dict = {}
         for cfg in arg_cfg:
@@ -137,6 +137,7 @@ class DLAOclTransformer(ast.NodeTransformer):
         self.params = []
         self.project = None
         self.loop_var = None
+        self.fusable_nodes = fusable_nodes
 
     def visit_Project(self, node):
         self.project = node
@@ -172,22 +173,20 @@ class DLAOclTransformer(ast.NodeTransformer):
                 [Constant(local_size) for _ in self.shape]
             )
         ]
-        defn.extend(
-            clSetKernelArg(
+        setargs = [clSetKernelArg(
                 SymbolRef('kernel'), Constant(index),
                 Constant(ct.sizeof(arg.ctype)),
                 Ref(SymbolRef('buf%d' % index))
-            ) for index, arg in enumerate(self.arg_cfg)
-        )
-        defn.extend([
-            FunctionCall(SymbolRef('clEnqueueNDRangeKernel'), [
-                SymbolRef('queue'), SymbolRef('kernel'),
-                Constant(self.ndim), NULL(),
-                SymbolRef('global'), SymbolRef('local'),
-                Constant(0), NULL(), NULL()
-            ]),
-            FunctionCall(SymbolRef('clFinish'), [SymbolRef('queue')])
+            ) for index, arg in enumerate(self.arg_cfg)]
+        defn.extend(setargs)
+        enqueue_call = FunctionCall(SymbolRef('clEnqueueNDRangeKernel'), [
+            SymbolRef('queue'), SymbolRef('kernel'),
+            Constant(self.ndim), NULL(),
+            SymbolRef('global'), SymbolRef('local'),
+            Constant(0), NULL(), NULL()
         ])
+        finish_call = FunctionCall(SymbolRef('clFinish'), [SymbolRef('queue')])
+        defn.extend([enqueue_call, finish_call])
         header = StringTemplate("""
             #ifdef __APPLE__
             #include <OpenCL/opencl.h>
@@ -197,6 +196,11 @@ class DLAOclTransformer(ast.NodeTransformer):
             """)
         node.params = params
         node.defn = defn
+        self.fusable_nodes.append(
+            KernelCall(node, self.project.files[-1].body[0], self.shape, defn[0],
+                       tuple(local_size for _ in self.shape), defn[1], enqueue_call,
+                       finish_call, setargs)
+        )
         return [header, node]
 
     def visit_PointsLoop(self, node):
@@ -235,6 +239,7 @@ class DLALazy(LazySpecializedFunction, Fusable):
         super(DLALazy, self).__init__(tree)
         self.backend = backend
         self.output = None
+        self.fusable_nodes = []
 
     def _process_arg(self, arg):
         if isinstance(arg, np.ndarray):
@@ -271,7 +276,8 @@ class DLALazy(LazySpecializedFunction, Fusable):
                 break
 
         tree = DLASemanticTransformer().visit(tree)
-        tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
+        tree = DLAOclTransformer(arg_cfg + output_type,
+                                 self.fusable_nodes).visit(tree)
         entry_type = [None, cl.cl_command_queue, cl.cl_kernel]
         entry_type.extend(arg.ctype for arg in arg_cfg + output_type)
         entry_point = 'op'
@@ -280,6 +286,7 @@ class DLALazy(LazySpecializedFunction, Fusable):
     def finalize(self, tree, entry_type, entry_point):
         fn = DLAConcreteOCL(self.output)
         self.output = None
+        self.fusable_nodes = []
         kernel = tree.files[-1]
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
