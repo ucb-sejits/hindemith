@@ -4,7 +4,7 @@ import pycl as cl
 import ctypes as ct
 
 from ctree.frontend import get_ast
-from ctree.jit import ConcreteSpecializedFunction
+from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
 from ctree.c.nodes import CFile, FunctionDecl
 from ctree.ocl.nodes import OclFile
 import ctree
@@ -245,26 +245,31 @@ class Fuser(object):
             fusable_nodes.extend(specializer.fusable_nodes)
             specializer.finalize(tree, entry_type, entry_point)
 
-        fn = FusedFn(outputs, is_return)
+        lazy = LazyFused(None)
+        def transform(tree, program_cfg):
+            fn = FusedFn(outputs, is_return)
 
-        project = fuse_at_project_level(projects, entry_points)
-        fuse_fusables(fusable_nodes)
+            project = fuse_at_project_level(projects, entry_points)
+            fuse_fusables(fusable_nodes)
 
-        ocl_file = project.find(OclFile)
-        kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
+            ocl_file = project.find(OclFile)
+            kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
 
+            argtypes = [None, cl.cl_command_queue, cl.cl_kernel]
+
+            for arg in project.files[0].body[-1].params:
+                if isinstance(arg.type, ct.c_float):
+                    argtypes.append(ct.c_float)
+                elif isinstance(arg.type, cl.cl_mem):
+                    argtypes.append(cl.cl_mem)
+
+            return fn.finalize(
+                'op', project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
+            )
+
+        lazy.transform = transform
         func_name = unique_kernel_name()
-        argtypes = [None, cl.cl_command_queue, cl.cl_kernel]
-
-        for arg in project.files[0].body[-1].params:
-            if isinstance(arg.type, ct.c_float):
-                argtypes.append(ct.c_float)
-            elif isinstance(arg.type, cl.cl_mem):
-                argtypes.append(cl.cl_mem)
-
-        self._symbol_table[func_name] = fn.finalize(
-            'op', project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
-        )
+        self._symbol_table[func_name] = lazy
         tree = ast.Call(
             func=ast.Name(id=func_name, ctx=ast.Load()),
             args=arg_nodes_list, keywords=[]
@@ -274,6 +279,10 @@ class Fuser(object):
         else:
             tree = ast.Expr(tree)
         return tree
+
+
+class LazyFused(LazySpecializedFunction):
+    pass
 
 
 def fuse_at_project_level(projects, entry_points):
