@@ -45,7 +45,7 @@ deploy:
     all_branches: true
 after_success:
   # install setuptools for deploy
-  - pip instal setuptools coveralls
+  - pip install setuptools coveralls
   - source deactivate
   - coveralls
   - curl -X POST http://readthedocs.org/build/hindemith
