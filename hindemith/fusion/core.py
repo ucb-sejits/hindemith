@@ -20,7 +20,7 @@ ctree.np  # Make PEP happy
 import logging
 LOG = logging.getLogger('Hindemith')
 
-from functools import reduce
+# from functools import reduce
 
 
 def my_exec(file, symbol_table):
@@ -366,9 +366,9 @@ def fuse_fusables(nodes):
             node._enqueue_call.delete()
             node._finish_call.delete()
         else:
-            nodes[-1]._finish_call.args[0].name = kernel._control.params[0].name
-            nodes[-1]._enqueue_call.args[0].name = kernel._control.params[0].name
-            nodes[-1]._enqueue_call.args[1].name = kernel._control.params[1].name
+            node._finish_call.args[0].name = kernel._control.params[0].name
+            node._enqueue_call.args[0].name = kernel._control.params[0].name
+            node._enqueue_call.args[1].name = kernel._control.params[1].name
     remove_symbol_from_params(kernel._control.params, to_remove)
 
 
@@ -382,7 +382,7 @@ def remove_symbol_from_params(params, names):
 
 def get_kernel_ptrs(ocl_file, fn):
     program = cl.clCreateProgramWithSource(fn.context,
-                                            ocl_file.codegen()).build()
+                                           ocl_file.codegen()).build()
     ptrs = []
     for statement in ocl_file.body:
         if isinstance(statement, FunctionDecl) and not statement.deleted:
@@ -450,8 +450,10 @@ class FusedFn(ConcreteSpecializedFunction):
         self.outputs = outputs
         self.is_return = is_return
 
-    def finalize(self, entry_point_name, project, entry_point_typesig, kernels):
-        self._c_function = self._compile(entry_point_name, project, entry_point_typesig)
+    def finalize(self, entry_point_name, project, entry_point_typesig,
+                 kernels):
+        self._c_function = self._compile(entry_point_name, project,
+                                         entry_point_typesig)
         self.kernels = kernels
         return self
 
@@ -474,7 +476,6 @@ class FusedFn(ConcreteSpecializedFunction):
     def __call__(self, *args):
         processed = self._process_args(args)
         args = []
-        offset = 2
         args.append(self.queue)
         args.append(self.kernels[0])
         args.extend(processed)
