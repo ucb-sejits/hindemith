@@ -55,6 +55,8 @@ def fuse(fn):
         :returns: The same return value(s) as `fn`.
 
         """
+        if hasattr(fn, '_hm_fused'):
+            return fn._hm_fused(*args, **kwargs)
         tree = get_ast(fn)
         blocks = get_blocks(tree)
 
@@ -80,6 +82,7 @@ def fuse(fn):
         tree.body[0].decorator_list = []
         tree = ast.fix_missing_locations(tree)
         my_exec(compile(tree, '', 'exec'), symbol_table)
+        fn._hm_fused = symbol_table[fn.__name__]
         return symbol_table[fn.__name__](*args, **kwargs)
     return fused
 
@@ -246,12 +249,16 @@ class Fuser(object):
             specializer.finalize(tree, entry_type, entry_point)
 
         lazy = LazyFused(None)
+
         def transform(tree, program_cfg):
-            fn = FusedFn(outputs, is_return)
 
             project = fuse_at_project_level(projects, entry_points)
             fuse_fusables(fusable_nodes)
 
+            return project
+
+        def finalize(project, program_cfg):
+            fn = FusedFn(outputs, is_return)
             ocl_file = project.find(OclFile)
             kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
 
@@ -262,12 +269,12 @@ class Fuser(object):
                     argtypes.append(ct.c_float)
                 elif isinstance(arg.type, cl.cl_mem):
                     argtypes.append(cl.cl_mem)
-
             return fn.finalize(
                 'op', project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
             )
 
         lazy.transform = transform
+        lazy.finalize = finalize
         func_name = unique_kernel_name()
         self._symbol_table[func_name] = lazy
         tree = ast.Call(
