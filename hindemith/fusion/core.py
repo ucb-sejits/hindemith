@@ -211,6 +211,7 @@ class Fuser(object):
         kernel_names = []
         arg_list = []
         arg_nodes_list = []
+        fusable_nodes = []
         outputs = []
         is_return = False
         for block in blocks:
@@ -243,6 +244,7 @@ class Fuser(object):
             projects.append(tree)
             entry_types.append(entry_type)
             entry_points.append(entry_point)
+            fusable_nodes.extend(specializer.fusable_nodes)
             specializers.append(
                 specializer.finalize(tree, entry_type, entry_point)
             )
@@ -250,14 +252,20 @@ class Fuser(object):
 
         fn = FusedFn(specializers, num_args, outputs, is_return)
 
-        project = self.fuse_at_project_level(projects, entry_points)
+        project = fuse_at_project_level(projects, entry_points)
+        fuse_fusables(fusable_nodes)
+
         ocl_file = project.find(OclFile)
         kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
 
         func_name = unique_kernel_name()
-        argtypes = [None]
-        for entry_type in entry_types:
-            argtypes.extend(entry_type[1:])
+        argtypes = [None, cl.cl_command_queue, cl.cl_kernel]
+
+        for arg in project.files[0].body[-1].params:
+            if isinstance(arg.type, ct.c_float):
+                argtypes.append(ct.c_float)
+            elif isinstance(arg.type, cl.cl_mem):
+                argtypes.append(cl.cl_mem)
 
         self._symbol_table[func_name] = fn.finalize(
             'op', project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
@@ -297,57 +305,115 @@ class Fuser(object):
         #     tree = ast.Expr(tree)
         # return tree
 
-    def fuse_at_project_level(self, projects, entry_points):
-        """@todo: Docstring for fuse_at_project_level.
 
-        :projects: @todo
-        :returns: @todo
+def fuse_at_project_level(projects, entry_points):
+    """@todo: Docstring for fuse_at_project_level.
 
-        """
-        project = projects.pop(0)
-        for proj in projects:
-            project.files.extend(proj.files)
-        project.files = self.fuse_at_file_level(project.files, entry_points)
-        return project
+    :projects: @todo
+    :returns: @todo
 
-    def fuse_at_file_level(self, files, entry_points):
-        """@todo: Docstring for fuse_at_file_level.
+    """
+    project = projects.pop(0)
+    for proj in projects:
+        project.files.extend(proj.files)
+    project.files = fuse_at_file_level(project.files, entry_points)
+    return project
 
-        :files: @todo
-        :returns: @todo
 
-        """
-        # FIXME: Support all file types
-        c_file = CFile('fused_c_file', [])
-        ocl_file = OclFile('fuse_ocl_file', [])
+def fuse_at_file_level(files, entry_points):
+    """@todo: Docstring for fuse_at_file_level.
 
-        file_map = {
-            CFile: c_file,
-            OclFile: ocl_file
-        }
-        for _file in files:
-            file_map[type(_file)].body.extend(_file.body)
+    :files: @todo
+    :returns: @todo
 
-        c_file = self.fuse_entry_points(c_file, entry_points)
-        return [c_file, ocl_file]
+    """
+    # FIXME: Support all file types
+    c_file = CFile('fused_c_file', [])
+    ocl_file = OclFile('fuse_ocl_file', [])
 
-    def fuse_entry_points(self, c_file, entry_points):
-        """@todo: Docstring for fuse_at_function_level.
+    file_map = {
+        CFile: c_file,
+        OclFile: ocl_file
+    }
+    for _file in files:
+        file_map[type(_file)].body.extend(_file.body)
 
-        :c_file: @todo
-        :ocl_file: @todo
-        :returns: @todo
+    c_file = fuse_entry_points(c_file, entry_points)
+    return [c_file, ocl_file]
 
-        """
-        # Fuse all entry_points together
-        func_decls = find_and_remove_entry_points(entry_points, c_file)
-        fused_func = uniqueify_names(func_decls.pop(0))
-        for func in func_decls:
-            unique = uniqueify_names(func)
-            fused_func.params.extend(unique.params)
-            fused_func.defn.extend(unique.defn)
-        c_file.body.append(fused_func)
-        return c_file
+
+def fuse_entry_points(c_file, entry_points):
+    """@todo: Docstring for fuse_at_function_level.
+
+    :c_file: @todo
+    :ocl_file: @todo
+    :returns: @todo
+
+    """
+    # Fuse all entry_points together
+    func_decls = find_and_remove_entry_points(entry_points, c_file)
+    fused_func = uniqueify_names(func_decls.pop(0))
+    for func in func_decls:
+        unique = uniqueify_names(func)
+        fused_func.params.extend(unique.params)
+        fused_func.defn.extend(unique.defn)
+    c_file.body.append(fused_func)
+    return c_file
+
+
+def fuse_fusables(nodes):
+    """@todo: Docstring for fuse_fusables.
+
+    :nodes: @todo
+    :returns: @todo
+
+    """
+    # FIXME: Assuming all KernelCalls
+    kernel = nodes[0]
+    kernel._global_size_decl.delete()
+    kernel._local_size_decl.delete()
+    offset = len(kernel._setargs)
+    kernel._kernel.name = nodes[-1]._kernel.name
+    kernel._enqueue_call.delete()
+    kernel._finish_call.delete()
+    # FIXME: Assuming fusability
+    for node in nodes[1:-1]:
+        # kernel._control.defn.extend(node._control.defn)
+        # del node._control.defn[:]
+        node._global_size_decl.delete()
+        node._local_size_decl.delete()
+        remove_symbol_from_params(kernel._control.params, node._control.params[0].name)
+        remove_symbol_from_params(kernel._control.params, node._control.params[1].name)
+        for setter in node._setargs:
+            setter.args[0].name = kernel._setargs[0].args[0].name
+            setter.args[1].value += offset
+        offset += len(node._setargs)
+        node._enqueue_call.delete()
+        node._finish_call.delete()
+        unique = UniqueNamer().visit(node._kernel)
+        kernel._kernel.params.extend(unique.params)
+        kernel._kernel.defn.extend(unique.defn)
+        node._kernel.delete()
+    unique = UniqueNamer().visit(nodes[-1]._kernel)
+    kernel._kernel.params.extend(unique.params)
+    kernel._kernel.defn.extend(unique.defn)
+    for setter in nodes[-1]._setargs:
+        setter.args[0].name = kernel._setargs[0].args[0].name
+        setter.args[1].value += offset
+    nodes[-1]._finish_call.args[0].name = kernel._control.params[0].name
+    nodes[-1]._enqueue_call.args[0].name = kernel._control.params[0].name
+    nodes[-1]._enqueue_call.args[1].name = kernel._control.params[1].name
+    remove_symbol_from_params(kernel._control.params, nodes[-1]._control.params[0].name)
+    remove_symbol_from_params(kernel._control.params, nodes[-1]._control.params[1].name)
+    nodes[-1]._kernel.delete()
+
+
+def remove_symbol_from_params(params, name):
+    new_params = []
+    for param in params:
+        if param.name is not name:
+            new_params.append(param)
+    params[:] = new_params
 
 
 def get_kernel_ptrs(ocl_file, fn):
@@ -355,7 +421,7 @@ def get_kernel_ptrs(ocl_file, fn):
                                             ocl_file.codegen()).build()
     ptrs = []
     for statement in ocl_file.body:
-        if isinstance(statement, FunctionDecl):
+        if isinstance(statement, FunctionDecl) and not statement.deleted:
             ptrs.append(program[statement.name])
     return ptrs
 
@@ -446,18 +512,15 @@ class FusedFn(ConcreteSpecializedFunction):
     def __call__(self, *args):
         processed = self._process_args(args)
         args = []
-        offset = 0
-        for index, self.num_args in enumerate(self.num_args):
-            args.append(self.queue)
-            args.append(self.kernels[index])
-            args.extend(processed[offset: offset + self.num_args])
-            offset += self.num_args
+        offset = 2
+        args.append(self.queue)
+        args.append(self.kernels[0])
+        args.extend(processed)
         self._c_function(*args)
         return self._process_outputs()
 
     def _process_outputs(self):
         retvals = ()
-        print([output.ctypes.data for output in self.outputs])
         if self.is_return:
             output = self.outputs[-1]
             buf = self.arg_buf_map[output.ctypes.data]
@@ -493,3 +556,29 @@ class Fusable(object):
     def __init__(self):
         """@todo: to be defined1. """
         pass
+
+
+class KernelCall(object):
+
+    """Docstring for KernelCall. """
+
+    def __init__(self, control, kernel, global_size, global_size_decl,
+                 local_size, local_size_decl, enqueue_call, finish_call,
+                 setargs):
+        """@todo: to be defined1.
+
+        :control: @todo
+        :kernel: @todo
+        :global_size: @todo
+        :local_size: @todo
+
+        """
+        self._control = control
+        self._kernel = kernel
+        self._global_size = global_size
+        self._global_size_decl = global_size_decl
+        self._local_size = local_size
+        self._local_size_decl = local_size_decl
+        self._enqueue_call = enqueue_call
+        self._finish_call = finish_call
+        self._setargs = setargs
