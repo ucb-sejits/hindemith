@@ -4,7 +4,7 @@ import pycl as cl
 import ctypes as ct
 
 from ctree.frontend import get_ast
-from ctree.jit import ConcreteSpecializedFunction
+from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
 from ctree.c.nodes import CFile, FunctionDecl
 from ctree.ocl.nodes import OclFile
 import ctree
@@ -20,7 +20,7 @@ ctree.np  # Make PEP happy
 import logging
 LOG = logging.getLogger('Hindemith')
 
-from functools import reduce
+# from functools import reduce
 
 
 def my_exec(file, symbol_table):
@@ -55,6 +55,8 @@ def fuse(fn):
         :returns: The same return value(s) as `fn`.
 
         """
+        if hasattr(fn, '_hm_fused'):
+            return fn._hm_fused(*args, **kwargs)
         tree = get_ast(fn)
         blocks = get_blocks(tree)
 
@@ -80,6 +82,7 @@ def fuse(fn):
         tree.body[0].decorator_list = []
         tree = ast.fix_missing_locations(tree)
         my_exec(compile(tree, '', 'exec'), symbol_table)
+        fn._hm_fused = symbol_table[fn.__name__]
         return symbol_table[fn.__name__](*args, **kwargs)
     return fused
 
@@ -245,26 +248,35 @@ class Fuser(object):
             fusable_nodes.extend(specializer.fusable_nodes)
             specializer.finalize(tree, entry_type, entry_point)
 
-        fn = FusedFn(outputs, is_return)
+        lazy = LazyFused(None)
 
-        project = fuse_at_project_level(projects, entry_points)
-        fuse_fusables(fusable_nodes)
+        def transform(tree, program_cfg):
 
-        ocl_file = project.find(OclFile)
-        kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
+            project = fuse_at_project_level(projects, entry_points)
+            fuse_fusables(fusable_nodes)
 
+            return project
+
+        def finalize(project, program_cfg):
+            fn = FusedFn(outputs, is_return)
+            ocl_file = project.find(OclFile)
+            kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
+
+            argtypes = [None, cl.cl_command_queue, cl.cl_kernel]
+
+            for arg in project.files[0].body[-1].params:
+                if isinstance(arg.type, ct.c_float):
+                    argtypes.append(ct.c_float)
+                elif isinstance(arg.type, cl.cl_mem):
+                    argtypes.append(cl.cl_mem)
+            return fn.finalize(
+                'op', project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
+            )
+
+        lazy.transform = transform
+        lazy.finalize = finalize
         func_name = unique_kernel_name()
-        argtypes = [None, cl.cl_command_queue, cl.cl_kernel]
-
-        for arg in project.files[0].body[-1].params:
-            if isinstance(arg.type, ct.c_float):
-                argtypes.append(ct.c_float)
-            elif isinstance(arg.type, cl.cl_mem):
-                argtypes.append(cl.cl_mem)
-
-        self._symbol_table[func_name] = fn.finalize(
-            'op', project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
-        )
+        self._symbol_table[func_name] = lazy
         tree = ast.Call(
             func=ast.Name(id=func_name, ctx=ast.Load()),
             args=arg_nodes_list, keywords=[]
@@ -274,6 +286,10 @@ class Fuser(object):
         else:
             tree = ast.Expr(tree)
         return tree
+
+
+class LazyFused(LazySpecializedFunction):
+    pass
 
 
 def fuse_at_project_level(projects, entry_points):
@@ -366,9 +382,9 @@ def fuse_fusables(nodes):
             node._enqueue_call.delete()
             node._finish_call.delete()
         else:
-            nodes[-1]._finish_call.args[0].name = kernel._control.params[0].name
-            nodes[-1]._enqueue_call.args[0].name = kernel._control.params[0].name
-            nodes[-1]._enqueue_call.args[1].name = kernel._control.params[1].name
+            node._finish_call.args[0].name = kernel._control.params[0].name
+            node._enqueue_call.args[0].name = kernel._control.params[0].name
+            node._enqueue_call.args[1].name = kernel._control.params[1].name
     remove_symbol_from_params(kernel._control.params, to_remove)
 
 
@@ -382,7 +398,7 @@ def remove_symbol_from_params(params, names):
 
 def get_kernel_ptrs(ocl_file, fn):
     program = cl.clCreateProgramWithSource(fn.context,
-                                            ocl_file.codegen()).build()
+                                           ocl_file.codegen()).build()
     ptrs = []
     for statement in ocl_file.body:
         if isinstance(statement, FunctionDecl) and not statement.deleted:
@@ -450,8 +466,10 @@ class FusedFn(ConcreteSpecializedFunction):
         self.outputs = outputs
         self.is_return = is_return
 
-    def finalize(self, entry_point_name, project, entry_point_typesig, kernels):
-        self._c_function = self._compile(entry_point_name, project, entry_point_typesig)
+    def finalize(self, entry_point_name, project, entry_point_typesig,
+                 kernels):
+        self._c_function = self._compile(entry_point_name, project,
+                                         entry_point_typesig)
         self.kernels = kernels
         return self
 
@@ -474,7 +492,6 @@ class FusedFn(ConcreteSpecializedFunction):
     def __call__(self, *args):
         processed = self._process_args(args)
         args = []
-        offset = 2
         args.append(self.queue)
         args.append(self.kernels[0])
         args.extend(processed)

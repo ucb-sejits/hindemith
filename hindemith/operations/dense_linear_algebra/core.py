@@ -17,7 +17,7 @@ import pycl as cl
 import numpy as np
 import ctypes as ct
 import ast
-from numpy import zeros_like
+from numpy import zeros
 from numpy.ctypeslib import ndpointer
 from collections import namedtuple
 
@@ -153,7 +153,11 @@ class DLAOclTransformer(ast.NodeTransformer):
             return node
         for index, arg in enumerate(node.params):
             self.arg_cfg_dict[arg.name] = self.arg_cfg[index]
-            arg.type = self.arg_cfg[index].type
+            if hasattr(self.arg_cfg[index], 'ndpointer'):
+                arg.type = self.arg_cfg[index].ndpointer()
+            else:
+                arg.type = self.arg_cfg[index].ctype()
+
         self.params = node.params
         node.defn = list(filter(None, map(self.visit, node.defn)))
         params = [
@@ -229,9 +233,9 @@ class DLAOclTransformer(ast.NodeTransformer):
         return node
 
 
-HMArray = namedtuple("HMArray", ['type', 'ndpointer', 'shape', 'ndim',
-                                 'length', 'is_global', 'data', 'ctype'])
-HMScalar = namedtuple("HMScalar", ['type', 'value', 'is_global', 'ctype'])
+HMArray = namedtuple("HMArray", ['ndpointer', 'shape', 'ndim', 'dtype',
+                                 'is_global', 'ctype'])
+HMScalar = namedtuple("HMScalar", ['is_global', 'ctype'])
 
 
 class DLALazy(LazySpecializedFunction, Fusable):
@@ -244,14 +248,13 @@ class DLALazy(LazySpecializedFunction, Fusable):
     def _process_arg(self, arg):
         if isinstance(arg, np.ndarray):
             return HMArray(
-                ndpointer(arg.dtype, arg.ndim, arg.shape)(),
                 ndpointer(arg.dtype, arg.ndim, arg.shape), arg.shape, arg.ndim,
-                reduce(lambda x, y: x * y, arg.shape, 1), True, arg, cl.cl_mem
+                arg.dtype, True, cl.cl_mem
             )
         elif isinstance(arg, int):
-            return HMScalar(ct.c_int(), arg, False, ct.c_int)
+            return HMScalar(False, ct.c_int)
         elif isinstance(arg, float):
-            return HMScalar(ct.c_float(), arg, False, ct.c_float)
+            return HMScalar(False, ct.c_float)
         else:
             raise NotImplementedError(
                 "UnsupportedType: %s" % type(arg)
@@ -265,21 +268,12 @@ class DLALazy(LazySpecializedFunction, Fusable):
         # FIXME: Assumes all scalars are floats
         if self.output is None:
             self.generate_output(program_cfg)
-        output_type = (HMScalar(ct.POINTER(ct.c_float)(), 0, True,
-                                ct.c_float),)
-        for arg in arg_cfg:
-            if hasattr(arg, 'ndpointer'):
-                output_type = (
-                    HMArray(arg.type, arg.ndpointer, arg.shape,
-                            arg.ndim, arg.length, True, self.output,
-                            cl.cl_mem),)
-                break
-
+        output_type = self._process_arg(self.output)
         tree = DLASemanticTransformer().visit(tree)
-        tree = DLAOclTransformer(arg_cfg + output_type,
+        tree = DLAOclTransformer(arg_cfg + (output_type, ),
                                  self.fusable_nodes).visit(tree)
         entry_type = [None, cl.cl_command_queue, cl.cl_kernel]
-        entry_type.extend(arg.ctype for arg in arg_cfg + output_type)
+        entry_type.extend(arg.ctype for arg in arg_cfg + (output_type, ))
         entry_point = 'op'
         return tree, entry_type, entry_point
 
@@ -299,7 +293,7 @@ class DLALazy(LazySpecializedFunction, Fusable):
         arg_cfg, tune_cfg = program_cfg
         for arg in arg_cfg:
             if hasattr(arg, 'ndpointer'):
-                self.output = zeros_like(arg.data)
+                self.output = zeros(arg.shape, arg.dtype)
                 return self.output
         return 0
 
