@@ -203,8 +203,6 @@ class Fuser(object):
         if len(blocks) == 1:
             return blocks[0]
 
-        num_args = []
-        specializers = []
         projects = []
         entry_types = []
         entry_points = []
@@ -238,19 +236,16 @@ class Fuser(object):
             outputs.append(output)
             tree, entry_type, entry_point = specializer.transform(
                 specializer.original_tree,
-                (specializer.args_to_subconfig(args), None)
+                program_cfg
             )
             kernel_names.extend(kernel_names)
             projects.append(tree)
             entry_types.append(entry_type)
             entry_points.append(entry_point)
             fusable_nodes.extend(specializer.fusable_nodes)
-            specializers.append(
-                specializer.finalize(tree, entry_type, entry_point)
-            )
-            num_args.append(len(block.value.args) + 1)
+            specializer.finalize(tree, entry_type, entry_point)
 
-        fn = FusedFn(specializers, num_args, outputs, is_return)
+        fn = FusedFn(outputs, is_return)
 
         project = fuse_at_project_level(projects, entry_points)
         fuse_fusables(fusable_nodes)
@@ -279,31 +274,6 @@ class Fuser(object):
         else:
             tree = ast.Expr(tree)
         return tree
-
-        # kernel = UniqueNamer().visit(kernels[0])
-        # for kern in kernels[1:]:
-        #     UniqueNamer().visit(kern)
-        #     kernel.body[0].defn.extend(kern.body[0].defn)
-        #     kernel.body[0].params.extend(kern.body[0].params)
-
-        # fn = FusedFn(specializers, num_args, outputs, is_return)
-        # program = cl.clCreateProgramWithSource(fn.context,
-        #                                        kernel.codegen()).build()
-        # FIXME: Assuming OpenCL
-        # func_name = unique_kernel_name()
-        # self._symbol_table[func_name] = fn.finalize(
-        #     program[kernel.body[0].name],
-        #     reduce(lambda x, y: x * y, arg_list[0].shape, 1)
-        # )
-        # tree = ast.Call(
-        #     func=ast.Name(id=func_name, ctx=ast.Load()),
-        #     args=arg_nodes_list, keywords=[]
-        # )
-        # if is_return:
-        #     tree = ast.Return(tree)
-        # else:
-        #     tree = ast.Expr(tree)
-        # return tree
 
 
 def fuse_at_project_level(projects, entry_points):
@@ -376,42 +346,36 @@ def fuse_fusables(nodes):
     kernel._kernel.name = nodes[-1]._kernel.name
     kernel._enqueue_call.delete()
     kernel._finish_call.delete()
+    to_remove = set()
     # FIXME: Assuming fusability
-    for node in nodes[1:-1]:
+    for node in nodes[1:]:
         # kernel._control.defn.extend(node._control.defn)
         # del node._control.defn[:]
-        node._global_size_decl.delete()
-        node._local_size_decl.delete()
-        remove_symbol_from_params(kernel._control.params, node._control.params[0].name)
-        remove_symbol_from_params(kernel._control.params, node._control.params[1].name)
+        to_remove.update(param.name for param in node._control.params[:2])
         for setter in node._setargs:
             setter.args[0].name = kernel._setargs[0].args[0].name
             setter.args[1].value += offset
         offset += len(node._setargs)
-        node._enqueue_call.delete()
-        node._finish_call.delete()
         unique = UniqueNamer().visit(node._kernel)
         kernel._kernel.params.extend(unique.params)
         kernel._kernel.defn.extend(unique.defn)
         node._kernel.delete()
-    unique = UniqueNamer().visit(nodes[-1]._kernel)
-    kernel._kernel.params.extend(unique.params)
-    kernel._kernel.defn.extend(unique.defn)
-    for setter in nodes[-1]._setargs:
-        setter.args[0].name = kernel._setargs[0].args[0].name
-        setter.args[1].value += offset
-    nodes[-1]._finish_call.args[0].name = kernel._control.params[0].name
-    nodes[-1]._enqueue_call.args[0].name = kernel._control.params[0].name
-    nodes[-1]._enqueue_call.args[1].name = kernel._control.params[1].name
-    remove_symbol_from_params(kernel._control.params, nodes[-1]._control.params[0].name)
-    remove_symbol_from_params(kernel._control.params, nodes[-1]._control.params[1].name)
-    nodes[-1]._kernel.delete()
+        if node is not nodes[-1]:
+            node._global_size_decl.delete()
+            node._local_size_decl.delete()
+            node._enqueue_call.delete()
+            node._finish_call.delete()
+        else:
+            nodes[-1]._finish_call.args[0].name = kernel._control.params[0].name
+            nodes[-1]._enqueue_call.args[0].name = kernel._control.params[0].name
+            nodes[-1]._enqueue_call.args[1].name = kernel._control.params[1].name
+    remove_symbol_from_params(kernel._control.params, to_remove)
 
 
-def remove_symbol_from_params(params, name):
+def remove_symbol_from_params(params, names):
     new_params = []
     for param in params:
-        if param.name is not name:
+        if param.name not in names:
             new_params.append(param)
     params[:] = new_params
 
@@ -475,11 +439,9 @@ class FusedFn(ConcreteSpecializedFunction):
 
     """Docstring for FusedFn. """
 
-    def __init__(self, specializers, num_args, outputs, is_return):
+    def __init__(self, outputs, is_return):
         """@todo: to be defined1. """
         ConcreteSpecializedFunction.__init__(self)
-        self.specializers = specializers
-        self.num_args = num_args
         self.device = cl.clGetDeviceIDs()[-1]
         self.context = cl.clCreateContext([self.device])
         self.queue = cl.clCreateCommandQueue(self.context)
