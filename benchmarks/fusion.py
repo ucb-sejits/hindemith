@@ -7,39 +7,36 @@ import numpy
 from ctree.util import Timer
 
 
-@fuse
-def fused_f(A, B, C):
-    D = array_mul(A, B)
-    E = array_sub(C, D)
-    F = array_add(A, B)
-    G = array_sub(F, E)
-    H = array_mul(F, G)
-    return H
-
-
-def unfused_f(A, B, C):
-    D = array_mul(A, B)
-    E = array_sub(C, D)
-    F = array_add(A, B)
-    G = array_sub(F, E)
-    H = array_mul(F, G)
-    return H
-
-
-def numpy_f(A, B, C):
-    D = A * B
-    E = C - D
-    F = A + B
-    G = F - E
-    H = F * G
-    return H
-
-
 x = []
 iterations = 20
 results = [[] for _ in range(3)]
 
-for width in (2**x for x in range(8, 14)):
+for width in (2**x for x in range(8, 13)):
+    @fuse
+    def fused_f(A, B, C):
+        D = array_mul(A, B)
+        E = array_sub(C, D)
+        F = array_add(A, B)
+        G = array_sub(F, E)
+        H = array_mul(F, G)
+        return H
+
+    def unfused_f(A, B, C):
+        D = array_mul(A, B)
+        E = array_sub(C, D)
+        F = array_add(A, B)
+        G = array_sub(F, E)
+        H = array_mul(F, G)
+        return H
+
+    def numpy_f(A, B, C):
+        D = A * B
+        E = C - D
+        F = A + B
+        G = F - E
+        H = F * G
+        return H
+
     A = numpy.random.rand(width, width).astype(numpy.float32)
     B = numpy.random.rand(width, width).astype(numpy.float32)
     C = numpy.random.rand(width, width).astype(numpy.float32)
@@ -50,7 +47,7 @@ for width in (2**x for x in range(8, 14)):
     for _ in range(iterations):
         x.append(width)
         with Timer() as fused_time:
-            fused_f(A, B, C)
+            a = fused_f(A, B, C)
         results[0].append(fused_time.interval)
 
         unfused_f(A, B, C)
@@ -59,8 +56,10 @@ for width in (2**x for x in range(8, 14)):
         results[1].append(unfused_time.interval)
 
         with Timer() as numpy_time:
-            numpy_f(A, B, C)
+            c = numpy_f(A, B, C)
         results[2].append(numpy_time.interval)
+
+        numpy.testing.assert_array_almost_equal(a, c)
 
 colors = ['b', 'c', 'r']
 import matplotlib.pyplot as plt
