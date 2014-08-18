@@ -44,7 +44,6 @@ deploy:
     tags: true
     all_branches: true
 after_success:
-  - source deactivate
   - coveralls
   - curl -X POST http://readthedocs.org/build/hindemith
 notifications:

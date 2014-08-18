@@ -7,6 +7,6 @@ omit =
     */dependencies/*
     */examples/*
     */ipython_notebooks/*
-    matrix_powers.py
-    Tssyrk.py
-    array_op.py
+    */matrix_powers.py
+    */Tssyrk.py
+    */array_op.py
