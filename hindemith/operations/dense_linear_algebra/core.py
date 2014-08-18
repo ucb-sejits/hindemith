@@ -17,12 +17,12 @@ import pycl as cl
 import numpy as np
 import ctypes as ct
 import ast
-from numpy import zeros_like
+from numpy import zeros
 from numpy.ctypeslib import ndpointer
 from collections import namedtuple
 
 from hindemith.utils import unique_kernel_name
-from hindemith.fusion.core import Fusable
+from hindemith.fusion.core import Fusable, KernelCall
 
 try:
     from functools import reduce
@@ -126,7 +126,7 @@ class DLASemanticTransformer(PyBasicConversions):
 
 
 class DLAOclTransformer(ast.NodeTransformer):
-    def __init__(self, arg_cfg):
+    def __init__(self, arg_cfg, fusable_nodes):
         self.arg_cfg = arg_cfg
         self.arg_cfg_dict = {}
         for cfg in arg_cfg:
@@ -137,6 +137,7 @@ class DLAOclTransformer(ast.NodeTransformer):
         self.params = []
         self.project = None
         self.loop_var = None
+        self.fusable_nodes = fusable_nodes
 
     def visit_Project(self, node):
         self.project = node
@@ -152,7 +153,11 @@ class DLAOclTransformer(ast.NodeTransformer):
             return node
         for index, arg in enumerate(node.params):
             self.arg_cfg_dict[arg.name] = self.arg_cfg[index]
-            arg.type = self.arg_cfg[index].type
+            if hasattr(self.arg_cfg[index], 'ndpointer'):
+                arg.type = self.arg_cfg[index].ndpointer()
+            else:
+                arg.type = self.arg_cfg[index].ctype()
+
         self.params = node.params
         node.defn = list(filter(None, map(self.visit, node.defn)))
         params = [
@@ -172,22 +177,20 @@ class DLAOclTransformer(ast.NodeTransformer):
                 [Constant(local_size) for _ in self.shape]
             )
         ]
-        defn.extend(
-            clSetKernelArg(
+        setargs = [clSetKernelArg(
                 SymbolRef('kernel'), Constant(index),
                 Constant(ct.sizeof(arg.ctype)),
                 Ref(SymbolRef('buf%d' % index))
-            ) for index, arg in enumerate(self.arg_cfg)
-        )
-        defn.extend([
-            FunctionCall(SymbolRef('clEnqueueNDRangeKernel'), [
-                SymbolRef('queue'), SymbolRef('kernel'),
-                Constant(self.ndim), NULL(),
-                SymbolRef('global'), SymbolRef('local'),
-                Constant(0), NULL(), NULL()
-            ]),
-            FunctionCall(SymbolRef('clFinish'), [SymbolRef('queue')])
+            ) for index, arg in enumerate(self.arg_cfg)]
+        defn.extend(setargs)
+        enqueue_call = FunctionCall(SymbolRef('clEnqueueNDRangeKernel'), [
+            SymbolRef('queue'), SymbolRef('kernel'),
+            Constant(self.ndim), NULL(),
+            SymbolRef('global'), SymbolRef('local'),
+            Constant(0), NULL(), NULL()
         ])
+        finish_call = FunctionCall(SymbolRef('clFinish'), [SymbolRef('queue')])
+        defn.extend([enqueue_call, finish_call])
         header = StringTemplate("""
             #ifdef __APPLE__
             #include <OpenCL/opencl.h>
@@ -197,6 +200,11 @@ class DLAOclTransformer(ast.NodeTransformer):
             """)
         node.params = params
         node.defn = defn
+        self.fusable_nodes.append(
+            KernelCall(node, self.project.files[-1].body[0], self.shape, defn[0],
+                       tuple(local_size for _ in self.shape), defn[1], enqueue_call,
+                       finish_call, setargs)
+        )
         return [header, node]
 
     def visit_PointsLoop(self, node):
@@ -225,9 +233,9 @@ class DLAOclTransformer(ast.NodeTransformer):
         return node
 
 
-HMArray = namedtuple("HMArray", ['type', 'ndpointer', 'shape', 'ndim',
-                                 'length', 'is_global', 'data', 'ctype'])
-HMScalar = namedtuple("HMScalar", ['type', 'value', 'is_global', 'ctype'])
+HMArray = namedtuple("HMArray", ['ndpointer', 'shape', 'ndim', 'dtype',
+                                 'is_global', 'ctype'])
+HMScalar = namedtuple("HMScalar", ['is_global', 'ctype'])
 
 
 class DLALazy(LazySpecializedFunction, Fusable):
@@ -235,18 +243,18 @@ class DLALazy(LazySpecializedFunction, Fusable):
         super(DLALazy, self).__init__(tree)
         self.backend = backend
         self.output = None
+        self.fusable_nodes = []
 
     def _process_arg(self, arg):
         if isinstance(arg, np.ndarray):
             return HMArray(
-                ndpointer(arg.dtype, arg.ndim, arg.shape)(),
                 ndpointer(arg.dtype, arg.ndim, arg.shape), arg.shape, arg.ndim,
-                reduce(lambda x, y: x * y, arg.shape, 1), True, arg, cl.cl_mem
+                arg.dtype, True, cl.cl_mem
             )
         elif isinstance(arg, int):
-            return HMScalar(ct.c_int(), arg, False, ct.c_int)
+            return HMScalar(False, ct.c_int)
         elif isinstance(arg, float):
-            return HMScalar(ct.c_float(), arg, False, ct.c_float)
+            return HMScalar(False, ct.c_float)
         else:
             raise NotImplementedError(
                 "UnsupportedType: %s" % type(arg)
@@ -260,26 +268,19 @@ class DLALazy(LazySpecializedFunction, Fusable):
         # FIXME: Assumes all scalars are floats
         if self.output is None:
             self.generate_output(program_cfg)
-        output_type = (HMScalar(ct.POINTER(ct.c_float)(), 0, True,
-                                ct.c_float),)
-        for arg in arg_cfg:
-            if hasattr(arg, 'ndpointer'):
-                output_type = (
-                    HMArray(arg.type, arg.ndpointer, arg.shape,
-                            arg.ndim, arg.length, True, self.output,
-                            cl.cl_mem),)
-                break
-
+        output_type = self._process_arg(self.output)
         tree = DLASemanticTransformer().visit(tree)
-        tree = DLAOclTransformer(arg_cfg + output_type).visit(tree)
+        tree = DLAOclTransformer(arg_cfg + (output_type, ),
+                                 self.fusable_nodes).visit(tree)
         entry_type = [None, cl.cl_command_queue, cl.cl_kernel]
-        entry_type.extend(arg.ctype for arg in arg_cfg + output_type)
+        entry_type.extend(arg.ctype for arg in arg_cfg + (output_type, ))
         entry_point = 'op'
         return tree, entry_type, entry_point
 
     def finalize(self, tree, entry_type, entry_point):
         fn = DLAConcreteOCL(self.output)
         self.output = None
+        self.fusable_nodes = []
         kernel = tree.files[-1]
         program = cl.clCreateProgramWithSource(fn.context,
                                                kernel.codegen()).build()
@@ -292,7 +293,7 @@ class DLALazy(LazySpecializedFunction, Fusable):
         arg_cfg, tune_cfg = program_cfg
         for arg in arg_cfg:
             if hasattr(arg, 'ndpointer'):
-                self.output = zeros_like(arg.data)
+                self.output = zeros(arg.shape, arg.dtype)
                 return self.output
         return 0
 
