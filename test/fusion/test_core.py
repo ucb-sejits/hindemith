@@ -251,7 +251,7 @@ class Stencil(StencilKernel):
 class TestDecorator(unittest.TestCase):
     def _check(self, actual, expected):
         try:
-            testing.assert_array_almost_equal(actual, expected)
+            testing.assert_array_almost_equal(actual, expected, decimal=4)
         except AssertionError as e:
             self.fail("Outputs not equal: %s" % e)
 
@@ -310,8 +310,9 @@ class TestDecorator(unittest.TestCase):
         self._check(actual, expected)
 
     def test_fusing_stencils(self):
-        in_grid = numpy.random.rand(width, width).astype(numpy.float32) * 100
+        in_grid = numpy.random.rand(4, 4).astype(numpy.float32) * 100
         kernel = Stencil(backend='ocl')
+        py_kernel = Stencil(backend='python')
 
         @fuse
         def f(in_grid):
@@ -319,7 +320,7 @@ class TestDecorator(unittest.TestCase):
             return array_scalar_add(out, 4)
 
         actual = f(in_grid)
-        expected = kernel(in_grid) + 4
+        expected = py_kernel(in_grid) + 4
         self._check(actual, expected)
 
     # @unittest.skip("")
