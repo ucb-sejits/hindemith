@@ -6,8 +6,8 @@ import ctypes as ct
 from ctree.frontend import get_ast
 from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
 from ctree.c.nodes import CFile, FunctionDecl
+from ctree.ocl.macros import barrier, CLK_LOCAL_MEM_FENCE
 from ctree.ocl.nodes import OclFile
-import ctree
 import ctree.np
 
 from hindemith.utils import unique_kernel_name, unique_name
@@ -15,7 +15,6 @@ from hindemith.utils import unique_kernel_name, unique_name
 import inspect
 import sys
 
-ctree.np  # Make PEP happy
 
 import logging
 LOG = logging.getLogger('Hindemith')
@@ -23,11 +22,11 @@ LOG = logging.getLogger('Hindemith')
 # from functools import reduce
 
 
-def my_exec(file, symbol_table):
+def my_exec(f, symbol_table):
     if sys.version_info >= (3, 0):
-        exec(file, symbol_table)
+        exec(f, symbol_table)
     else:
-        exec(file) in symbol_table
+        exec(f) in symbol_table
 
 
 def fuse(fn):
@@ -39,7 +38,7 @@ def fuse(fn):
 
     :fn: A python function.
     :returns: `fused`, higher order python function that takes in the same
-    paramaters as `fn` and returns the same result(s) as `fn`.
+    parameters as `fn` and returns the same result(s) as `fn`.
 
     """
     def fused(*args, **kwargs):
@@ -269,8 +268,10 @@ class Fuser(object):
                     argtypes.append(ct.c_float)
                 elif isinstance(arg.type, cl.cl_mem):
                     argtypes.append(cl.cl_mem)
+            print(project.files[0])
+            print(project.files[1])
             return fn.finalize(
-                'op', project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
+                entry_points[0], project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
             )
 
         lazy.transform = transform
@@ -374,6 +375,7 @@ def fuse_fusables(nodes):
         offset += len(node._setargs)
         unique = UniqueNamer().visit(node._kernel)
         kernel._kernel.params.extend(unique.params)
+        kernel._kernel.defn.append(barrier(CLK_LOCAL_MEM_FENCE()))
         kernel._kernel.defn.extend(unique.defn)
         node._kernel.delete()
         if node is not nodes[-1]:
@@ -534,7 +536,7 @@ class Fusable(object):
 
     def __init__(self):
         """@todo: to be defined1. """
-        pass
+        self.fusable_nodes = []
 
 
 class KernelCall(object):
