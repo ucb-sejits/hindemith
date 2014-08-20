@@ -166,7 +166,7 @@ class DLAOclTransformer(ast.NodeTransformer):
         ]
         params.extend(SymbolRef('buf%d' % d, cl.cl_mem())
                       for d in range(len(self.arg_cfg)))
-        local_size = 1
+        local_size = 4
         defn = [
             ArrayDef(
                 SymbolRef('global', ct.c_ulong()), Constant(self.ndim),
