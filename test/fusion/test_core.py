@@ -16,6 +16,11 @@ from hindemith.fusion.core import BlockBuilder, get_blocks, Fuser, fuse
 from hindemith.operations.dense_linear_algebra.core import array_mul, \
     array_sub, scalar_array_mul, array_add, array_scalar_add
 
+import logging
+
+log = logging.getLogger('ctree')
+log.setLevel = 10
+
 
 class TestFuser(unittest.TestCase):
     def test_is_fusable_true(self):
@@ -251,7 +256,7 @@ class Stencil(StencilKernel):
 class TestDecorator(unittest.TestCase):
     def _check(self, actual, expected):
         try:
-            testing.assert_array_almost_equal(actual, expected, decimal=4)
+            testing.assert_array_almost_equal(actual, expected)
         except AssertionError as e:
             self.fail("Outputs not equal: %s" % e)
 
@@ -309,18 +314,35 @@ class TestDecorator(unittest.TestCase):
         expected = (C - A * B) + 3
         self._check(actual, expected)
 
-    def test_fusing_stencils(self):
-        in_grid = numpy.random.rand(4, 4).astype(numpy.float32) * 100
-        kernel = Stencil(backend='ocl')
-        py_kernel = Stencil(backend='python')
+    def test_fusing_stencil_array_op(self):
+        in_grid = numpy.random.rand(1024, 1024).astype(numpy.float32) * 100
+        kernel1 = Stencil(backend='ocl')
+        kernel2 = Stencil(backend='ocl')
 
         @fuse
         def f(in_grid):
-            out = kernel(in_grid)
+            out = kernel1(in_grid)
             return array_scalar_add(out, 4)
 
         actual = f(in_grid)
-        expected = py_kernel(in_grid) + 4
+        expected = kernel2(in_grid) + 4
+        self._check(actual, expected)
+
+    @unittest.skip("Not implemented yet")
+    def test_fusing_stencils(self):
+        in_grid = (numpy.random.rand(16, 16) * 10).astype(numpy.int32)
+        kernel1 = Stencil(backend='ocl')
+        kernel2 = Stencil(backend='ocl')
+        py_kernel1 = Stencil(backend='python')
+        py_kernel2 = Stencil(backend='python')
+
+        @fuse
+        def f(in_grid):
+            a = kernel1(in_grid)
+            return kernel2(a)
+
+        actual = f(in_grid)
+        expected = py_kernel2(py_kernel1(in_grid))
         self._check(actual, expected)
 
     # @unittest.skip("")

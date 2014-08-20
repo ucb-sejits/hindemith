@@ -5,10 +5,11 @@ import ctypes as ct
 
 from ctree.frontend import get_ast
 from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
-from ctree.c.nodes import CFile, FunctionDecl
+from ctree.c.nodes import CFile, FunctionDecl, Op, FunctionCall, Constant, Add
 from ctree.ocl.macros import barrier, CLK_LOCAL_MEM_FENCE
 from ctree.ocl.nodes import OclFile
 import ctree.np
+ctree.np
 
 from hindemith.utils import unique_kernel_name, unique_name
 
@@ -135,8 +136,11 @@ class UniqueNamer(ast.NodeTransformer):
         return node
 
     def visit_SymbolRef(self, node):
-        if node.name in {'float', 'NULL', 'cl_mem'}:
+        if node.name in {'float', 'NULL', 'cl_mem', 'CLK_LOCAL_MEM_FENCE'}:
             # Don't rename constants
+            return node
+        if node.name == '_f16':
+            # Weird bug
             return node
         if node.name not in self.seen:
             UniqueNamer.uid += 1
@@ -205,6 +209,55 @@ class Fuser(object):
         if len(blocks) == 1:
             return blocks[0]
 
+        projects, entry_types, entry_points, kernel_names, arg_list, \
+            arg_nodes_list, fusable_nodes, outputs, is_return = \
+            self.get_fusable_info(blocks)
+
+        lazy = LazyFused(None)
+
+        def transform(tree, program_cfg):
+
+            project = fuse_at_project_level(projects, entry_points)
+            fuse_fusables(fusable_nodes)
+            print(project.files[0])
+            print(project.files[1])
+
+            return project
+
+        def finalize(project, program_cfg):
+            fn = FusedFn(outputs, is_return)
+            ocl_file = project.find(OclFile)
+            # print(ocl_file)
+            kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
+
+            argtypes = [None, cl.cl_command_queue, cl.cl_kernel]
+
+            for arg in project.files[0].body[-1].params:
+                if isinstance(arg.type, ct.c_float):
+                    argtypes.append(ct.c_float)
+                elif isinstance(arg.type, cl.cl_mem):
+                    argtypes.append(cl.cl_mem)
+            # print(project.files[0])
+            # print(project.files[1])
+            return fn.finalize(
+                entry_points[0], project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
+            )
+
+        lazy.transform = transform
+        lazy.finalize = finalize
+        func_name = unique_kernel_name()
+        self._symbol_table[func_name] = lazy
+        tree = ast.Call(
+            func=ast.Name(id=func_name, ctx=ast.Load()),
+            args=arg_nodes_list, keywords=[]
+        )
+        if is_return:
+            tree = ast.Return(tree)
+        else:
+            tree = ast.Expr(tree)
+        return tree
+
+    def get_fusable_info(self, blocks):
         projects = []
         entry_types = []
         entry_points = []
@@ -246,47 +299,8 @@ class Fuser(object):
             entry_points.append(entry_point)
             fusable_nodes.extend(specializer.fusable_nodes)
             specializer.finalize(tree, entry_type, entry_point)
-
-        lazy = LazyFused(None)
-
-        def transform(tree, program_cfg):
-
-            project = fuse_at_project_level(projects, entry_points)
-            fuse_fusables(fusable_nodes)
-
-            return project
-
-        def finalize(project, program_cfg):
-            fn = FusedFn(outputs, is_return)
-            ocl_file = project.find(OclFile)
-            kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
-
-            argtypes = [None, cl.cl_command_queue, cl.cl_kernel]
-
-            for arg in project.files[0].body[-1].params:
-                if isinstance(arg.type, ct.c_float):
-                    argtypes.append(ct.c_float)
-                elif isinstance(arg.type, cl.cl_mem):
-                    argtypes.append(cl.cl_mem)
-            print(project.files[0])
-            print(project.files[1])
-            return fn.finalize(
-                entry_points[0], project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
-            )
-
-        lazy.transform = transform
-        lazy.finalize = finalize
-        func_name = unique_kernel_name()
-        self._symbol_table[func_name] = lazy
-        tree = ast.Call(
-            func=ast.Name(id=func_name, ctx=ast.Load()),
-            args=arg_nodes_list, keywords=[]
-        )
-        if is_return:
-            tree = ast.Return(tree)
-        else:
-            tree = ast.Expr(tree)
-        return tree
+        return (projects, entry_types, entry_points, kernel_names, arg_list,
+                arg_nodes_list, fusable_nodes, outputs, is_return)
 
 
 class LazyFused(LazySpecializedFunction):
@@ -363,6 +377,21 @@ def fuse_fusables(nodes):
     kernel._kernel.name = nodes[-1]._kernel.name
     kernel._enqueue_call.delete()
     kernel._finish_call.delete()
+    if kernel._load_shared_memory_block is not None and \
+            nodes[1]._load_shared_memory_block  is not None:
+        import operator
+        from functools import reduce
+        import ctypes as ct
+        # Calculate new local size
+        # FIXME: Assumes going from 2 -> 4
+        local_size = reduce(
+            operator.mul,
+            (item.value + 4 for item in kernel._local_size_decl.body),
+            ct.sizeof(ct.c_float)
+        )
+        kernel._setargs[-1].args[2].value = local_size
+        BlockSizeChanger().visit(kernel._load_shared_memory_block[1])
+        BlockSizeChanger().visit(kernel._load_shared_memory_block[-1])
     to_remove = set()
     # FIXME: Assuming fusability
     for node in nodes[1:]:
@@ -387,7 +416,20 @@ def fuse_fusables(nodes):
             node._finish_call.args[0].name = kernel._control.params[0].name
             node._enqueue_call.args[0].name = kernel._control.params[0].name
             node._enqueue_call.args[1].name = kernel._control.params[1].name
+
     remove_symbol_from_params(kernel._control.params, to_remove)
+
+
+class BlockSizeChanger(ast.NodeTransformer):
+    def visit_BinaryOp(self, node):
+        if isinstance(node.op, Op.Add) and \
+            isinstance(node.left, FunctionCall) and \
+                node.left.func.name is 'get_local_size':
+            return Add(node.left, Constant(node.right.value * 2))
+        else:
+            node.left = self.visit(node.left)
+            node.right = self.visit(node.right)
+        return node
 
 
 def remove_symbol_from_params(params, names):
@@ -545,7 +587,7 @@ class KernelCall(object):
 
     def __init__(self, control, kernel, global_size, global_size_decl,
                  local_size, local_size_decl, enqueue_call, finish_call,
-                 setargs):
+                 setargs, load_shared_memory_block=None):
         """@todo: to be defined1.
 
         :control: @todo
@@ -563,3 +605,4 @@ class KernelCall(object):
         self._enqueue_call = enqueue_call
         self._finish_call = finish_call
         self._setargs = setargs
+        self._load_shared_memory_block = load_shared_memory_block
