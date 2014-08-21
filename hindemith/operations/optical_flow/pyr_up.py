@@ -5,7 +5,7 @@ from numpy import zeros_like
 from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, \
     buffer_from_ndarray, clEnqueueNDRangeKernel, buffer_to_ndarray, cl_mem, \
     clCreateProgramWithSource, clCreateBuffer
-from ctree.c.nodes import SymbolRef, Assign, FunctionDecl
+from ctree.c.nodes import SymbolRef, Assign, FunctionDecl, Constant
 from ctree.ocl.nodes import OclFile
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from hindemith.utils import unique_name, clamp, unique_kernel_name
@@ -68,7 +68,7 @@ class PyrUpLazy(LazySpecializedFunction):
         defn.extend([
             Assign(SymbolRef('x', c_int()), get_global_id(0)),
             Assign(SymbolRef('y', c_int()), get_global_id(1)),
-            Assign(SymbolRef('temp', ctypeObject), 0),
+            Assign(SymbolRef('temp', ctypeObject), Constant(0)),
         ])
         body = \
             """

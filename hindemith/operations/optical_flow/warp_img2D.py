@@ -117,7 +117,7 @@ class WarpImg2DLazyOcl(LazySpecializedFunction):
                                  Mul(len_x, SymbolRef('y')))),
                     Constant(0.0)),
                     [
-                        PostDec('my_x'),
+                        PostDec(SymbolRef('my_x')),
                         Assign(SymbolRef('xfrac'),
                                Add(Constant(1.0),
                                    SymbolRef('xfrac')))
@@ -128,7 +128,7 @@ class WarpImg2DLazyOcl(LazySpecializedFunction):
                                  Mul(len_x, SymbolRef('y')))),
                     Constant(0.0)),
                     [
-                        PostDec('my_y'),
+                        PostDec(SymbolRef('my_y')),
                         Assign(SymbolRef('yfrac'),
                                Add(Constant(1.0),
                                    SymbolRef('yfrac')))
@@ -365,7 +365,7 @@ class WarpImg2DLazyC(LazySpecializedFunction):
                                                  Mul(len_x, SymbolRef('y')))),
                                     Constant(0.0)),
                                     [
-                                        PostDec('my_x'),
+                                        PostDec(SymbolRef('my_x')),
                                         Assign(SymbolRef('xfrac'),
                                                Add(Constant(1.0),
                                                    SymbolRef('xfrac')))
@@ -376,7 +376,7 @@ class WarpImg2DLazyC(LazySpecializedFunction):
                                                  Mul(len_x, SymbolRef('y')))),
                                     Constant(0.0)),
                                     [
-                                        PostDec('my_y'),
+                                        PostDec(SymbolRef('my_y')),
                                         Assign(SymbolRef('yfrac'),
                                                Add(Constant(1.0),
                                                    SymbolRef('yfrac')))
