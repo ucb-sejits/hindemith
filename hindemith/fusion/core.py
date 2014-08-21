@@ -2,10 +2,12 @@ import numpy
 import ast
 import pycl as cl
 import ctypes as ct
+import copy
 
 from ctree.frontend import get_ast
 from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
-from ctree.c.nodes import CFile, FunctionDecl, Op, FunctionCall, Constant, Add
+from ctree.c.nodes import CFile, FunctionDecl, Op, FunctionCall, Constant, Add, \
+    SymbolRef, Assign, AddAssign
 from ctree.ocl.macros import barrier, CLK_LOCAL_MEM_FENCE
 from ctree.ocl.nodes import OclFile
 import ctree.np
@@ -130,21 +132,33 @@ class UniqueNamer(ast.NodeTransformer):
         ast.NodeTransformer.__init__(self)
         self.seen = {}
 
+    def gen_unique_name(self):
+        UniqueNamer.uid += 1
+        return '_f%d' % UniqueNamer.uid
+
     def visit_FunctionCall(self, node):
-        # Don't rename functions
+        # Don't rename functions except for macros
+        if node.func.name in self.seen:
+            node.func.name = self.seen[node.func.name]
         node.args = list(map(self.visit, node.args))
+        return node
+
+    def visit_CppDefine(self, node):
+        if node.name not in self.seen:
+            self.seen[node.name] = self.gen_unique_name()
+        node.name = self.seen[node.name]
+
         return node
 
     def visit_SymbolRef(self, node):
         if node.name in {'float', 'NULL', 'cl_mem', 'CLK_LOCAL_MEM_FENCE'}:
             # Don't rename constants
             return node
-        if node.name == '_f16':
-            # Weird bug
+        elif hasattr(node, '_hm_seen'):
             return node
-        if node.name not in self.seen:
-            UniqueNamer.uid += 1
-            self.seen[node.name] = '_f%d' % UniqueNamer.uid
+        elif node.name not in self.seen:
+            self.seen[node.name] = self.gen_unique_name()
+            node._hm_seen = True
         node.name = self.seen[node.name]
         return node
 
@@ -219,8 +233,8 @@ class Fuser(object):
 
             project = fuse_at_project_level(projects, entry_points)
             fuse_fusables(fusable_nodes)
-            print(project.files[0])
-            print(project.files[1])
+            # print(project.files[0])
+            # print(project.files[1])
 
             return project
 
@@ -378,7 +392,7 @@ def fuse_fusables(nodes):
     kernel._enqueue_call.delete()
     kernel._finish_call.delete()
     if kernel._load_shared_memory_block is not None and \
-            nodes[1]._load_shared_memory_block  is not None:
+            nodes[1]._load_shared_memory_block is not None:
         import operator
         from functools import reduce
         import ctypes as ct
@@ -387,11 +401,13 @@ def fuse_fusables(nodes):
         local_size = reduce(
             operator.mul,
             (item.value + 4 for item in kernel._local_size_decl.body),
-            ct.sizeof(ct.c_float)
+            ct.sizeof(cl.cl_float())
         )
         kernel._setargs[-1].args[2].value = local_size
         BlockSizeChanger().visit(kernel._load_shared_memory_block[1])
         BlockSizeChanger().visit(kernel._load_shared_memory_block[-1])
+        BlockSizeChanger().visit(kernel._macro_defns[0])
+
     to_remove = set()
     # FIXME: Assuming fusability
     for node in nodes[1:]:
@@ -408,16 +424,69 @@ def fuse_fusables(nodes):
         kernel._kernel.defn.extend(unique.defn)
         node._kernel.delete()
         if node is not nodes[-1]:
-            node._global_size_decl.delete()
-            node._local_size_decl.delete()
-            node._enqueue_call.delete()
-            node._finish_call.delete()
+            clear_kernel_call(node)
         else:
-            node._finish_call.args[0].name = kernel._control.params[0].name
-            node._enqueue_call.args[0].name = kernel._control.params[0].name
-            node._enqueue_call.args[1].name = kernel._control.params[1].name
+            set_queue_context_kernel(node, kernel)
+
+    if kernel._load_shared_memory_block is not None and \
+            nodes[1]._load_shared_memory_block is not None:
+        idx_map = increment_local_ids(
+            nodes[1]._load_shared_memory_block[-1].body, 1)
+        new_ops = move_stencil_op(
+            kernel._stencil_op,
+            nodes[1]._load_shared_memory_block[-1].body[-1].left,
+            idx_map
+        )
+        for index, op in enumerate(new_ops[1:]):
+            new_ops[index + 1] = AddAssign(op.target, op.value)
+        nodes[1]._load_shared_memory_block[-1].body.pop()
+        nodes[1]._load_shared_memory_block[-1].body.extend(new_ops)
 
     remove_symbol_from_params(kernel._control.params, to_remove)
+
+
+def move_stencil_op(stencil_op, new_target, idx_map):
+    new_ops = []
+    for old_op in stencil_op:
+        op = copy.deepcopy(old_op)
+        old_op.delete()
+        op.target = new_target
+        op = IdxMapper(idx_map).visit(op)
+        new_ops.append(op)
+    new_ops[0] = Assign(new_target, new_ops[0].value)
+    return new_ops
+
+
+class IdxMapper(ast.NodeTransformer):
+    def __init__(self, idx_map):
+        self.idx_map = idx_map
+
+    def visit_SymbolRef(self, node):
+        if node.name in self.idx_map:
+            node.name = self.idx_map[node.name]
+        return node
+
+
+def clear_kernel_call(node):
+    node._global_size_decl.delete()
+    node._local_size_decl.delete()
+    node._enqueue_call.delete()
+    node._finish_call.delete()
+
+
+def set_queue_context_kernel(node, kernel):
+    node._finish_call.args[0].name = kernel._control.params[0].name
+    node._enqueue_call.args[0].name = kernel._control.params[0].name
+    node._enqueue_call.args[1].name = kernel._control.params[1].name
+
+
+def increment_local_ids(body, incr):
+    idx_map = {}
+    for i in range(0, len(body) - 1, 2):
+        body[i].right = Add(body[i].right, Constant(incr))
+        n = len(body) / 2 - 1
+        idx_map['local_id%d' % (n - i / 2)] = body[i].left.name
+    return idx_map
 
 
 class BlockSizeChanger(ast.NodeTransformer):
@@ -429,6 +498,13 @@ class BlockSizeChanger(ast.NodeTransformer):
         else:
             node.left = self.visit(node.left)
             node.right = self.visit(node.right)
+        return node
+
+    def visit_FunctionCall(self, node):
+        if node.func.name == 'clamp':
+            node.args[0].value.right.value *= 2
+        else:
+            node.args = list(map(self.visit, node.args))
         return node
 
 
@@ -587,7 +663,9 @@ class KernelCall(object):
 
     def __init__(self, control, kernel, global_size, global_size_decl,
                  local_size, local_size_decl, enqueue_call, finish_call,
-                 setargs, load_shared_memory_block=None):
+                 setargs, load_shared_memory_block=None, stencil_op=None,
+                 macro_defns=None
+                 ):
         """@todo: to be defined1.
 
         :control: @todo
@@ -606,3 +684,5 @@ class KernelCall(object):
         self._finish_call = finish_call
         self._setargs = setargs
         self._load_shared_memory_block = load_shared_memory_block
+        self._stencil_op = stencil_op
+        self._macro_defns = macro_defns
