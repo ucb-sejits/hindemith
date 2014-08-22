@@ -19,5 +19,3 @@ __pycache__
 tmp.png
 *.egg-info
 .DS_Store
-*.sublime-project
-*.sublime-workspace
