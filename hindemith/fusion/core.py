@@ -646,6 +646,16 @@ class FusedFn(ConcreteSpecializedFunction):
                 # TODO: Make this a better exception
                 raise Exception("Could not find corresponding buffer")
         return retvals
+        # ret_vals = []
+        # for output, out_like in zip(outputs, out_likes):
+        #     if isinstance(output, cl.cl_mem):
+        #         out, evt = cl.buffer_to_ndarray(self.queue, output,
+        #                                         like=out_like)
+        #         evt.wait()
+        #         ret_vals.append(out)
+        #     else:
+        #         ret_vals.append(output.value)
+        # return ret_vals
 
 
 class Fusable(object):
