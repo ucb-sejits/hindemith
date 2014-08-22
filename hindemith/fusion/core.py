@@ -7,9 +7,10 @@ import copy
 from ctree.frontend import get_ast
 from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
 from ctree.c.nodes import CFile, FunctionDecl, Op, FunctionCall, Constant, Add, \
-    SymbolRef, Assign, AddAssign
+    Assign, AddAssign
 from ctree.ocl.macros import barrier, CLK_LOCAL_MEM_FENCE
 from ctree.ocl.nodes import OclFile
+from ctree.ocl import get_context_from_device
 import ctree.np
 ctree.np
 
@@ -579,7 +580,7 @@ class FusedFn(ConcreteSpecializedFunction):
         """@todo: to be defined1. """
         ConcreteSpecializedFunction.__init__(self)
         self.device = cl.clGetDeviceIDs()[-1]
-        self.context = cl.clCreateContext([self.device])
+        self.context = get_context_from_device(self.device)
         self.queue = cl.clCreateCommandQueue(self.context)
         self.orig_args = ()
         self.arg_buf_map = {}
