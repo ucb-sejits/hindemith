@@ -1,5 +1,6 @@
 from _ctypes import sizeof
 from ctypes import CFUNCTYPE, c_void_p
+from ctree.ocl import get_context_from_device
 from ctree.ocl.macros import get_global_id
 from numpy import zeros_like
 import numpy as np
@@ -25,7 +26,7 @@ __author__ = 'leonardtruong'
 class WarpImg2DConcreteOcl(ConcreteSpecializedFunction):
     def __init__(self):
         self.device = clGetDeviceIDs()[-1]
-        self.context = clCreateContext([self.device])
+        self.context = get_context_from_device(self.device)
         self.queue = clCreateCommandQueue(self.context)
 
     def finalize(self, kernel, global_size):
