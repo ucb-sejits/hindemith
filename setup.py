@@ -7,6 +7,7 @@ setup(
     version='0.0.2a2',
     author='Leonard Truong',
     author_email='leonardtruong@berkeley.edu',
+    description='Package containing a suite of high performance pattern specializers',
 
     packages=find_packages(),
 
