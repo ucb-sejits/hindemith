@@ -6,6 +6,7 @@ from ctree.c.nodes import FunctionDecl, SymbolRef, ArrayDef, \
 from ctree.c.macros import NULL
 from ctree.templates.nodes import StringTemplate
 
+from ctree.ocl import get_context_from_device
 from ctree.ocl.nodes import OclFile
 from ctree.ocl.macros import get_global_id, clSetKernelArg
 
@@ -24,17 +25,12 @@ from collections import namedtuple
 from hindemith.utils import unique_kernel_name
 from hindemith.fusion.core import Fusable, KernelCall
 
-try:
-    from functools import reduce
-except:
-    pass
-
 __author__ = 'leonardtruong'
 
 
 class DLAConcreteOCL(ConcreteSpecializedFunction):
     device = cl.clGetDeviceIDs()[-1]
-    context = cl.clCreateContext([device])
+    context = get_context_from_device(device)
     queue = cl.clCreateCommandQueue(context)
 
     def __init__(self, output=None):

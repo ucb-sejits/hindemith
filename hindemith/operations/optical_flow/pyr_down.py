@@ -1,8 +1,9 @@
 from _ctypes import sizeof, POINTER
 from ctypes import c_float, c_int
+from ctree.ocl import get_context_from_device
 from ctree.ocl.macros import get_global_id
 from numpy import zeros_like
-from pycl import clGetDeviceIDs, clCreateContext, clCreateCommandQueue, \
+from pycl import clGetDeviceIDs, clCreateCommandQueue, \
     buffer_from_ndarray, clEnqueueNDRangeKernel, buffer_to_ndarray, \
     clCreateProgramWithSource, clWaitForEvents, cl_mem
 from ctree.c.nodes import SymbolRef, Constant, Assign, ArrayRef, Add, Div, \
@@ -19,7 +20,7 @@ __author__ = 'leonardtruong'
 class OclFunc(ConcreteSpecializedFunction):
     def __init__(self):
         self.device = clGetDeviceIDs()[-1]
-        self.context = clCreateContext([self.device])
+        self.context = get_context_from_device(self.device)
         self.queue = clCreateCommandQueue(self.context)
 
     def finalize(self, kernel, global_size, output_name):
