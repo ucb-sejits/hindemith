@@ -1,6 +1,6 @@
 from _ctypes import sizeof
 from ctypes import CFUNCTYPE, c_void_p
-from ctree.ocl import get_context_from_device
+from ctree.ocl import get_context_and_queue_from_devices
 from ctree.ocl.macros import get_global_id
 from numpy import zeros_like
 import numpy as np
@@ -8,8 +8,8 @@ from ctree.nodes import Project
 from hindemith.utils import unique_name, unique_kernel_name, \
     UnsupportedBackendError
 from hindemith.types.common import Array
-from pycl import clCreateCommandQueue, cl_mem, clGetDeviceIDs, \
-    clCreateContext, buffer_from_ndarray, clEnqueueNDRangeKernel, \
+from pycl import cl_mem, clGetDeviceIDs, \
+    buffer_from_ndarray, clEnqueueNDRangeKernel, \
     buffer_to_ndarray, clCreateProgramWithSource, clWaitForEvents
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
@@ -26,8 +26,9 @@ __author__ = 'leonardtruong'
 class WarpImg2DConcreteOcl(ConcreteSpecializedFunction):
     def __init__(self):
         self.device = clGetDeviceIDs()[-1]
-        self.context = get_context_from_device(self.device)
-        self.queue = clCreateCommandQueue(self.context)
+        self.context, self.queue = get_context_and_queue_from_devices([
+            self.device
+        ])
 
     def finalize(self, kernel, global_size):
         self.kernel = kernel
