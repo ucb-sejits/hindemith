@@ -583,7 +583,6 @@ class FusedFn(ConcreteSpecializedFunction):
         self.context, self.queue = get_context_and_queue_from_devices(
             [self.device]
         )
-        self.queue = cl.clCreateCommandQueue(self.context)
         self.orig_args = ()
         self.arg_buf_map = {}
         self.outputs = outputs
