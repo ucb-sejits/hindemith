@@ -6,7 +6,7 @@ from ctree.c.nodes import FunctionDecl, SymbolRef, ArrayDef, \
 from ctree.c.macros import NULL
 from ctree.templates.nodes import StringTemplate
 
-from ctree.ocl import get_context_from_device
+from ctree.ocl import get_context_and_queue_from_devices
 from ctree.ocl.nodes import OclFile
 from ctree.ocl.macros import get_global_id, clSetKernelArg
 
@@ -30,8 +30,7 @@ __author__ = 'leonardtruong'
 
 class DLAConcreteOCL(ConcreteSpecializedFunction):
     device = cl.clGetDeviceIDs()[-1]
-    context = get_context_from_device(device)
-    queue = cl.clCreateCommandQueue(context)
+    context, queue = get_context_and_queue_from_devices([device])
 
     def __init__(self, output=None):
         self.context = DLAConcreteOCL.context
