@@ -195,7 +195,9 @@ class Fuser(object):
         return list(map(self._fuse, fused_blocks))
 
     def _is_fusable(self, block_1, block_2):
-        """@todo: Docstring for _is_fusable.
+        """Determines if two subsqeuent blocks are fusable.  Currently only
+        supports the fusing of subsequent Assign statements which involve
+        single specializer calls.
 
         :block_1: @todo
         :block_2: @todo
@@ -214,7 +216,12 @@ class Fuser(object):
         return False
 
     def _fuse(self, blocks):
-        """@todo: Docstring for _fuse.
+        """Fuse a set of fusable blocks together.  Creates a new
+        LazySpecializedFunction that will generate a fused tree.  It also
+        replaces the original function calls in the Python AST with a call to
+        this newly defined LazySpecailizedFunction.  This definition is added
+        to the symbol table so the Python AST will have access to it in the
+        scope.
 
         :block_1: @todo
         :block_2: @todo
@@ -401,7 +408,8 @@ def fuse_fusables(nodes):
         # FIXME: Assumes going from 2 -> 4
         local_size = reduce(
             operator.mul,
-            (item.value + 4 for item in kernel._local_size_decl.body),
+            (item.value + (kernel._ghost_depth * 2) * 2
+             for item in kernel._local_size_decl.body),
             ct.sizeof(cl.cl_float())
         )
         kernel._setargs[-1].args[2].value = local_size
@@ -583,7 +591,6 @@ class FusedFn(ConcreteSpecializedFunction):
         self.context, self.queue = get_context_and_queue_from_devices(
             [self.device]
         )
-        self.queue = cl.clCreateCommandQueue(self.context)
         self.orig_args = ()
         self.arg_buf_map = {}
         self.outputs = outputs
@@ -639,16 +646,6 @@ class FusedFn(ConcreteSpecializedFunction):
                 # TODO: Make this a better exception
                 raise Exception("Could not find corresponding buffer")
         return retvals
-        # ret_vals = []
-        # for output, out_like in zip(outputs, out_likes):
-        #     if isinstance(output, cl.cl_mem):
-        #         out, evt = cl.buffer_to_ndarray(self.queue, output,
-        #                                         like=out_like)
-        #         evt.wait()
-        #         ret_vals.append(out)
-        #     else:
-        #         ret_vals.append(output.value)
-        # return ret_vals
 
 
 class Fusable(object):
@@ -667,7 +664,7 @@ class KernelCall(object):
     def __init__(self, control, kernel, global_size, global_size_decl,
                  local_size, local_size_decl, enqueue_call, finish_call,
                  setargs, load_shared_memory_block=None, stencil_op=None,
-                 macro_defns=None
+                 macro_defns=None, ghost_depth=0
                  ):
         """@todo: to be defined1.
 
@@ -689,3 +686,4 @@ class KernelCall(object):
         self._load_shared_memory_block = load_shared_memory_block
         self._stencil_op = stencil_op
         self._macro_defns = macro_defns
+        self._ghost_depth = ghost_depth
