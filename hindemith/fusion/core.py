@@ -413,9 +413,10 @@ def fuse_fusables(nodes):
             ct.sizeof(cl.cl_float())
         )
         kernel._setargs[-1].args[2].value = local_size
-        BlockSizeChanger().visit(kernel._load_shared_memory_block[1])
-        BlockSizeChanger().visit(kernel._load_shared_memory_block[-1])
-        BlockSizeChanger().visit(kernel._macro_defns[0])
+        block_size_changer = BlockSizeChanger(kernel._ghost_depth * 2)
+        block_size_changer.visit(kernel._load_shared_memory_block[1])
+        block_size_changer.visit(kernel._load_shared_memory_block[-1])
+        block_size_changer.visit(kernel._macro_defns[0])
 
     to_remove = set()
     # FIXME: Assuming fusability
@@ -499,11 +500,15 @@ def increment_local_ids(body, incr):
 
 
 class BlockSizeChanger(ast.NodeTransformer):
+    def __init__(self, amt):
+        super(BlockSizeChanger, self).__init__()
+        self._amt = amt
+
     def visit_BinaryOp(self, node):
         if isinstance(node.op, Op.Add) and \
             isinstance(node.left, FunctionCall) and \
                 node.left.func.name is 'get_local_size':
-            return Add(node.left, Constant(node.right.value * 2))
+            return Add(node.left, Constant(node.right.value + self._amt))
         else:
             node.left = self.visit(node.left)
             node.right = self.visit(node.right)
@@ -511,7 +516,7 @@ class BlockSizeChanger(ast.NodeTransformer):
 
     def visit_FunctionCall(self, node):
         if node.func.name == 'clamp':
-            node.args[0].value.right.value *= 2
+            node.args[0].value.right.value += self._amt / 2
         else:
             node.args = list(map(self.visit, node.args))
         return node
