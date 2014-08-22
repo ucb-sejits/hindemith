@@ -18,3 +18,4 @@ kernels.cl
 __pycache__
 tmp.png
 *.egg-info
+.DS_Store
