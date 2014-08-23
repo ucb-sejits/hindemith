@@ -18,6 +18,8 @@ from hindemith.utils import unique_kernel_name, unique_name
 
 import inspect
 import sys
+import operator
+from functools import reduce
 
 
 import logging
@@ -399,24 +401,27 @@ def fuse_fusables(nodes):
     kernel._kernel.name = nodes[-1]._kernel.name
     kernel._enqueue_call.delete()
     kernel._finish_call.delete()
-    if kernel._load_shared_memory_block is not None and \
-            nodes[1]._load_shared_memory_block is not None:
-        import operator
-        from functools import reduce
-        import ctypes as ct
-        # Calculate new local size
-        # FIXME: Assumes going from 2 -> 4
-        local_size = reduce(
-            operator.mul,
-            (item.value + (kernel._ghost_depth * 2) * 2
-             for item in kernel._local_size_decl.body),
-            ct.sizeof(cl.cl_float())
-        )
-        kernel._setargs[-1].args[2].value = local_size
-        block_size_changer = BlockSizeChanger(kernel._ghost_depth * 2)
-        block_size_changer.visit(kernel._load_shared_memory_block[1])
-        block_size_changer.visit(kernel._load_shared_memory_block[-1])
-        block_size_changer.visit(kernel._macro_defns[0])
+    if kernel._load_shared_memory_block is not None:
+        i = 1
+        next_node = nodes[i]
+        while next_node._load_shared_memory_block is not None \
+                and i < len(nodes):
+            next_node = nodes[i]
+            for node in nodes[:i]:
+                node._ghost_depth += next_node._ghost_depth
+                local_size = reduce(
+                    operator.mul,
+                    (item.value + node._ghost_depth * 2
+                     for item in node._local_size_decl.body),
+                    ct.sizeof(cl.cl_float())
+                )
+                node._setargs[-1].args[2].value = local_size
+                block_size_changer = BlockSizeChanger(node._ghost_depth)
+                block_size_changer.visit(node._load_shared_memory_block[1])
+                block_size_changer.visit(node._load_shared_memory_block[-1])
+                block_size_changer.visit(node._macro_defns[0])
+
+            i += 1
 
     to_remove = set()
     # FIXME: Assuming fusability
@@ -438,19 +443,26 @@ def fuse_fusables(nodes):
         else:
             set_queue_context_kernel(node, kernel)
 
-    if kernel._load_shared_memory_block is not None and \
-            nodes[1]._load_shared_memory_block is not None:
-        idx_map = increment_local_ids(
-            nodes[1]._load_shared_memory_block[-1].body, 1)
-        new_ops = move_stencil_op(
-            kernel._stencil_op,
-            nodes[1]._load_shared_memory_block[-1].body[-1].left,
-            idx_map
-        )
-        for index, op in enumerate(new_ops[1:]):
-            new_ops[index + 1] = AddAssign(op.target, op.value)
-        nodes[1]._load_shared_memory_block[-1].body.pop()
-        nodes[1]._load_shared_memory_block[-1].body.extend(new_ops)
+    if kernel._load_shared_memory_block is not None:
+        i = 1
+        next_node = nodes[i]
+        while next_node._load_shared_memory_block is not None \
+                and i < len(nodes):
+            next_node = nodes[i]
+            idx_map = increment_local_ids(
+                next_node._load_shared_memory_block[-1].body,
+                # next_node._ghost_depth)
+                1)  # Assume ghost_depth 1 for now
+            new_ops = move_stencil_op(
+                nodes[i - 1]._stencil_op,
+                next_node._load_shared_memory_block[-1].body[-1].left,
+                idx_map
+            )
+            for index, op in enumerate(new_ops[1:]):
+                new_ops[index + 1] = AddAssign(op.target, op.value)
+            next_node._load_shared_memory_block[-1].body.pop()
+            next_node._load_shared_memory_block[-1].body.extend(new_ops)
+            i += 1
 
     remove_symbol_from_params(kernel._control.params, to_remove)
 
@@ -471,9 +483,10 @@ class IdxMapper(ast.NodeTransformer):
     def __init__(self, idx_map):
         self.idx_map = idx_map
 
-    def visit_SymbolRef(self, node):
-        if node.name in self.idx_map:
-            node.name = self.idx_map[node.name]
+    def visit_FunctionCall(self, node):
+        if len(node.args) == len(self.idx_map.keys()):
+            for i in range(len(node.args)):
+                node.args[i].left.name = self.idx_map[i]
         return node
 
 
@@ -495,7 +508,7 @@ def increment_local_ids(body, incr):
     for i in range(0, len(body) - 1, 2):
         body[i].right = Add(body[i].right, Constant(incr))
         n = len(body) / 2 - 1
-        idx_map['local_id%d' % (n - i / 2)] = body[i].left.name
+        idx_map[(n - i / 2)] = body[i].left.name
     return idx_map
 
 
@@ -508,7 +521,7 @@ class BlockSizeChanger(ast.NodeTransformer):
         if isinstance(node.op, Op.Add) and \
             isinstance(node.left, FunctionCall) and \
                 node.left.func.name is 'get_local_size':
-            return Add(node.left, Constant(node.right.value + self._amt))
+            return Add(node.left, Constant(self._amt * 2))
         else:
             node.left = self.visit(node.left)
             node.right = self.visit(node.right)
@@ -516,7 +529,7 @@ class BlockSizeChanger(ast.NodeTransformer):
 
     def visit_FunctionCall(self, node):
         if node.func.name == 'clamp':
-            node.args[0].value.right.value += self._amt / 2
+            node.args[0].value.right.value = self._amt
         else:
             node.args = list(map(self.visit, node.args))
         return node
