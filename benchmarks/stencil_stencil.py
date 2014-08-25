@@ -1,4 +1,5 @@
 from hindemith.fusion.core import fuse
+from hindemith.fusion.core import dont_fuse_fusables
 
 from stencil_code.stencil_kernel import StencilKernel
 import numpy
@@ -33,12 +34,13 @@ class Stencil(StencilKernel):
 x = []
 iterations = 2
 results = [[] for _ in range(3)]
-speedup = [[] for _ in range(4)]
+speedup = [[] for _ in range(8)]
+
 
 for width in range(2**8, 2**13, 256):
     print("Running width: %d" % width)
 # for width in (2**x for x in range(8, 11)):
-    total0, total1 = 0, 0
+    total0, total1, total2 = 0, 0, 0
     for _ in range(iterations):
         stencil1 = Stencil(backend='ocl')
         stencil2 = Stencil(backend='ocl')
@@ -49,12 +51,18 @@ for width in range(2**8, 2**13, 256):
             C = stencil1(A)
             return stencil2(C)
 
+        @dont_fuse_fusables
+        def fused_f2(A):
+            C = stencil1(A)
+            return stencil2(C)
+
         def unfused_f(A):
             return stencil3(stencil3(A))
 
         A = numpy.random.rand(width, width).astype(numpy.float32) * 100
 
         a = fused_f(A)
+        a = fused_f2(A)
         b = unfused_f(A)
         numpy.testing.assert_array_almost_equal(a[2:-2, 2:-2], b[2:-2, 2:-2])
         # x.append(width)
@@ -62,6 +70,11 @@ for width in range(2**8, 2**13, 256):
             fused_f(A)
         results[0].append(fused_time.interval)
         total0 += fused_time.interval
+
+        with Timer() as fused_time2:
+            fused_f(A)
+        results[1].append(fused_time2.interval)
+        total1 += fused_time.interval
 
         with Timer() as unfused_time:
             unfused_f(A)

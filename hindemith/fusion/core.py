@@ -99,6 +99,40 @@ def fuse(func):
     return fused
 
 
+def dont_fuse_fusables(func):
+    def fused(*args, **kwargs):
+        if hasattr(func, 'hm_fused'):
+            return func.hm_fused(*args, **kwargs)
+        tree = get_ast(func)
+        blocks = get_blocks(tree)
+
+        # Build a symbol table with keyword arguments and the function's global
+        # scope.
+        symbol_table = dict(func.__globals__, **kwargs)
+        # Add all locally defined variables in the current stack
+        for frame in inspect.stack()[1:]:
+            symbol_table.update(frame[0].f_locals)
+
+        # Add non keyword arguments
+        for index, arg in enumerate(args):
+            if sys.version_info >= (3, 0):
+                symbol_table[tree.body[0].args.args[index]] = arg
+            else:
+                symbol_table[tree.body[0].args.args[index].id] = arg
+
+        fuser = Fuser(blocks, symbol_table, False)
+        fused_blocks = fuser.do_fusion()
+        tree.body[0].body = fused_blocks
+
+        # Remove Decorator
+        tree.body[0].decorator_list = []
+        tree = ast.fix_missing_locations(tree)
+        my_exec(compile(tree, '', 'exec'), symbol_table)
+        func.hm_fused = symbol_table[func.__name__]
+        return symbol_table[func.__name__](*args, **kwargs)
+    return fused
+
+
 def get_blocks(tree):
     """Convenience method for getting the blocks from an ast
 
@@ -160,6 +194,14 @@ class UniqueNamer(ast.NodeTransformer):
 
         return node
 
+    def visit_FunctionDecl(self, node):
+        if node.name not in self.seen:
+            self.seen[node.name] = self.gen_unique_name()
+        node.name = self.seen[node.name]
+        node.params = list(map(self.visit, node.params))
+        node.defn = list(map(self.visit, node.defn))
+        return node
+
     def visit_SymbolRef(self, node):
         if node.name in {'float', 'NULL', 'cl_mem', 'CLK_LOCAL_MEM_FENCE'}:
             # Don't rename constants
@@ -177,7 +219,7 @@ class Fuser(object):
 
     """Docstring for Fuser. """
 
-    def __init__(self, blocks, symbol_table):
+    def __init__(self, blocks, symbol_table, fuse_fusables=True):
         """@todo: to be defined1.
 
         :blocks: @todo
@@ -187,6 +229,7 @@ class Fuser(object):
         self._blocks = blocks
         self._symbol_table = symbol_table
         self._defns = []
+        self._fuse_fusables = fuse_fusables
 
     def do_fusion(self):
         """@todo: Docstring for do_fusion.
@@ -241,7 +284,7 @@ class Fuser(object):
             return blocks[0]
 
         projects, entry_types, entry_points, kernel_names, arg_list, \
-            arg_nodes_list, fusable_nodes, outputs, is_return = \
+            arg_nodes_list, fusable_nodes, outputs, is_return, num_args = \
             self.get_fusable_info(blocks)
 
         lazy = LazyFused(None)
@@ -249,7 +292,8 @@ class Fuser(object):
         def transform(tree, program_cfg):
 
             project = fuse_at_project_level(projects, entry_points)
-            fuse_fusables(fusable_nodes)
+            if self._fuse_fusables:
+                fuse_fusables(fusable_nodes)
             # print(project.files[0])
             # print(project.files[1])
 
@@ -261,17 +305,25 @@ class Fuser(object):
             # print(ocl_file)
             kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
 
-            argtypes = [None, cl.cl_command_queue, cl.cl_kernel]
+            argtypes = [None]
 
             for arg in project.files[0].body[-1].params:
                 if isinstance(arg.type, ct.c_float):
                     argtypes.append(ct.c_float)
                 elif isinstance(arg.type, cl.cl_mem):
                     argtypes.append(cl.cl_mem)
-            # print(project.files[0])
-            # print(project.files[1])
+                elif isinstance(arg.type, cl.cl_command_queue):
+                    argtypes.append(cl.cl_command_queue)
+                elif isinstance(arg.type, cl.cl_kernel):
+                    argtypes.append(cl.cl_kernel)
+                else:
+                    raise Exception("Unsupported argtype")
+            print(project.files[0])
+            print(project.files[1])
+            entry_pt = project.files[0].find(FunctionDecl)
             return fn.finalize(
-                entry_points[0], project, ct.CFUNCTYPE(*argtypes), kernel_ptrs
+                entry_pt.name, project, ct.CFUNCTYPE(*argtypes), kernel_ptrs,
+                num_args
             )
 
         lazy.transform = transform
@@ -298,6 +350,7 @@ class Fuser(object):
         fusable_nodes = []
         outputs = []
         is_return = False
+        num_args = []
         for block in blocks:
             if isinstance(block, ast.Return):
                 is_return = True
@@ -310,6 +363,7 @@ class Fuser(object):
             arg_list.extend(args)
             program_cfg = (specializer.args_to_subconfig(args), None)
             output = specializer.generate_output(program_cfg)
+            num_args.append(len(args) + 1)
             arg_list.append(output)
             if not is_return:
                 target = block.targets[0].id
@@ -331,7 +385,7 @@ class Fuser(object):
             fusable_nodes.extend(specializer.fusable_nodes)
             specializer.finalize(tree, entry_type, entry_point)
         return (projects, entry_types, entry_points, kernel_names, arg_list,
-                arg_nodes_list, fusable_nodes, outputs, is_return)
+                arg_nodes_list, fusable_nodes, outputs, is_return, num_args)
 
 
 class LazyFused(LazySpecializedFunction):
@@ -633,15 +687,17 @@ class FusedFn(ConcreteSpecializedFunction):
         self.is_return = is_return
         self.kernels = []
         self._c_function = None
+        self.num_args = []
 
     def finalize(self, entry_point_name, project, entry_point_typesig,
-                 kernels):
+                 kernels, num_args):
         """
         @todo: docstring
         """
         self._c_function = self._compile(entry_point_name, project,
                                          entry_point_typesig)
         self.kernels = kernels
+        self.num_args = num_args
         return self
 
     def _process_args(self, args):
@@ -666,9 +722,16 @@ class FusedFn(ConcreteSpecializedFunction):
     def __call__(self, *args):
         processed = self._process_args(args)
         args = []
-        args.append(self.queue)
-        args.append(self.kernels[0])
-        args.extend(processed)
+        offset = 0
+        for index, num in enumerate(self.num_args):
+            args.append(self.queue)
+            try:
+                args.append(self.kernels[index])
+            except IndexError:
+                args.pop()
+            args.extend(processed[offset:offset + num])
+            offset += num
+        # args.extend(processed)
         self._c_function(*args)
         return self._process_outputs()
 
@@ -678,6 +741,7 @@ class FusedFn(ConcreteSpecializedFunction):
         """
         retvals = ()
         if self.is_return:
+            # FIXME: Assuming only one output is returned
             output = self.outputs[-1]
             buf = self.arg_buf_map[output.ctypes.data]
             out, evt = cl.buffer_to_ndarray(self.queue, buf, output)
