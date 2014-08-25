@@ -1,5 +1,8 @@
 """
-The core fusion module
+The core fusion module.
+
+This is one monolothic file that should (and will) be split up into multiple
+files and organized in a much more sensible fashion.  Enter at your own risk.
 """
 
 import numpy
