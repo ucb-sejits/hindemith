@@ -139,7 +139,7 @@ class TestFusingStencils(unittest.TestCase):
 
     def test_fusing_stencils_3d(self):
         in_grid = numpy.random.rand(
-            512, 512, 256).astype(numpy.float32) * 10
+            512, 512, 128).astype(numpy.float32) * 10
         kernel1 = Stencil3D(backend='ocl')
         kernel2 = Stencil3D(backend='ocl')
         py_kernel1 = Stencil3D(backend='ocl')
@@ -155,7 +155,7 @@ class TestFusingStencils(unittest.TestCase):
 
     def test_fusing_3_stencils_3d(self):
         in_grid = numpy.random.rand(
-            512, 512, 256).astype(numpy.float32) * 10
+            512, 512, 128).astype(numpy.float32) * 10
         kernel1 = Stencil3D(backend='ocl')
         kernel2 = Stencil3D(backend='ocl')
         kernel3 = Stencil3D(backend='ocl')
