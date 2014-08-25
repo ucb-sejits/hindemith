@@ -1,3 +1,7 @@
+"""
+The core fusion module
+"""
+
 import numpy
 import ast
 import pycl as cl
@@ -6,13 +10,11 @@ import copy
 
 from ctree.frontend import get_ast
 from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
-from ctree.c.nodes import CFile, FunctionDecl, Op, FunctionCall, Constant, Add, \
-    Assign, AddAssign
+from ctree.c.nodes import CFile, FunctionDecl, Op, FunctionCall, Constant, \
+    Add, Assign, AddAssign
 from ctree.ocl.macros import barrier, CLK_LOCAL_MEM_FENCE
 from ctree.ocl.nodes import OclFile
 from ctree.ocl import get_context_and_queue_from_devices
-import ctree.np
-ctree.np
 
 from hindemith.utils import unique_kernel_name, unique_name
 
@@ -21,53 +23,55 @@ import sys
 import operator
 from functools import reduce
 
-
 import logging
 LOG = logging.getLogger('Hindemith')
 
 # from functools import reduce
 
 
-def my_exec(f, symbol_table):
+def my_exec(func, symbol_table):
+    """
+    Wrapper around the exec function to support python 2 and 3
+    """
     if sys.version_info >= (3, 0):
-        exec(f, symbol_table)
+        exec(func, symbol_table)
     else:
-        exec(f) in symbol_table
+        exec(func) in symbol_table
 
 
-def fuse(fn):
+def fuse(func):
     """Decorator that will fuse specializers in the body of a function.  This
     optimizer will attempt to fuse specializer calls on various levels to
     improve runtime performance.  It will execute regular python code normally,
     and will output the same result as running the non-fused version of the
     function.
 
-    :fn: A python function.
+    :func: A python function.
     :returns: `fused`, higher order python function that takes in the same
-    parameters as `fn` and returns the same result(s) as `fn`.
+    parameters as `func` and returns the same result(s) as `func`.
 
     """
     def fused(*args, **kwargs):
         """
-        Fused wrapper around `fn`.  First it get all variables defined in the
+        Fused wrapper around `func`.  First it get all variables defined in the
         local, global scope.  It then traverses the body of the function
         looking for places where specializer calls are made.  Any specializer
         calls found that can be fused will be (@todo: Tuning should occur here
         instead).
 
-        :*args: Arguments to `fn`
-        :**kwargs: Keyword arguments to `fn`.
-        :returns: The same return value(s) as `fn`.
+        :*args: Arguments to `func`
+        :**kwargs: Keyword arguments to `func`.
+        :returns: The same return value(s) as `func`.
 
         """
-        if hasattr(fn, '_hm_fused'):
-            return fn._hm_fused(*args, **kwargs)
-        tree = get_ast(fn)
+        if hasattr(func, 'hm_fused'):
+            return func.hm_fused(*args, **kwargs)
+        tree = get_ast(func)
         blocks = get_blocks(tree)
 
         # Build a symbol table with keyword arguments and the function's global
         # scope.
-        symbol_table = dict(fn.__globals__, **kwargs)
+        symbol_table = dict(func.__globals__, **kwargs)
         # Add all locally defined variables in the current stack
         for frame in inspect.stack()[1:]:
             symbol_table.update(frame[0].f_locals)
@@ -87,8 +91,8 @@ def fuse(fn):
         tree.body[0].decorator_list = []
         tree = ast.fix_missing_locations(tree)
         my_exec(compile(tree, '', 'exec'), symbol_table)
-        fn._hm_fused = symbol_table[fn.__name__]
-        return symbol_table[fn.__name__](*args, **kwargs)
+        func.hm_fused = symbol_table[func.__name__]
+        return symbol_table[func.__name__](*args, **kwargs)
     return fused
 
 
@@ -197,7 +201,7 @@ class Fuser(object):
         return list(map(self._fuse, fused_blocks))
 
     def _is_fusable(self, block_1, block_2):
-        """Determines if two subsqeuent blocks are fusable.  Currently only
+        """Determines if two subsequent blocks are fusable.  Currently only
         supports the fusing of subsequent Assign statements which involve
         single specializer calls.
 
@@ -402,26 +406,7 @@ def fuse_fusables(nodes):
     kernel._enqueue_call.delete()
     kernel._finish_call.delete()
     if kernel._load_shared_memory_block is not None:
-        i = 1
-        next_node = nodes[i]
-        while next_node._load_shared_memory_block is not None \
-                and i < len(nodes):
-            next_node = nodes[i]
-            for node in nodes[:i]:
-                node._ghost_depth += next_node._ghost_depth
-                local_size = reduce(
-                    operator.mul,
-                    (item.value + node._ghost_depth * 2
-                     for item in node._local_size_decl.body),
-                    ct.sizeof(cl.cl_float())
-                )
-                node._setargs[-1].args[2].value = local_size
-                block_size_changer = BlockSizeChanger(node._ghost_depth)
-                block_size_changer.visit(node._load_shared_memory_block[1])
-                block_size_changer.visit(node._load_shared_memory_block[-1])
-                block_size_changer.visit(node._macro_defns[0])
-
-            i += 1
+        update_block_sizes(nodes)
 
     to_remove = set()
     # FIXME: Assuming fusability
@@ -444,27 +429,54 @@ def fuse_fusables(nodes):
             set_queue_context_kernel(node, kernel)
 
     if kernel._load_shared_memory_block is not None:
-        i = 1
-        next_node = nodes[i]
-        while next_node._load_shared_memory_block is not None \
-                and i < len(nodes):
-            next_node = nodes[i]
-            idx_map = increment_local_ids(
-                next_node._load_shared_memory_block[-1].body,
-                # next_node._ghost_depth)
-                1)  # Assume ghost_depth 1 for now
-            new_ops = move_stencil_op(
-                nodes[i - 1]._stencil_op,
-                next_node._load_shared_memory_block[-1].body[-1].left,
-                idx_map
-            )
-            for index, op in enumerate(new_ops[1:]):
-                new_ops[index + 1] = AddAssign(op.target, op.value)
-            next_node._load_shared_memory_block[-1].body.pop()
-            next_node._load_shared_memory_block[-1].body.extend(new_ops)
-            i += 1
+        incr_ids_and_move_ops(nodes)
 
     remove_symbol_from_params(kernel._control.params, to_remove)
+
+
+def update_block_sizes(nodes):
+    i = 1
+    next_node = nodes[i]
+    while next_node._load_shared_memory_block is not None \
+            and i < len(nodes):
+        next_node = nodes[i]
+        for node in nodes[:i]:
+            node._ghost_depth += next_node._ghost_depth
+            local_size = reduce(
+                operator.mul,
+                (item.value + node._ghost_depth * 2
+                    for item in node._local_size_decl.body),
+                ct.sizeof(cl.cl_float())
+            )
+            node._setargs[-1].args[2].value = local_size
+            block_size_changer = BlockSizeChanger(node._ghost_depth)
+            block_size_changer.visit(node._load_shared_memory_block[1])
+            block_size_changer.visit(node._load_shared_memory_block[-1])
+            block_size_changer.visit(node._macro_defns[0])
+
+        i += 1
+
+
+def incr_ids_and_move_ops(nodes):
+    i = 1
+    next_node = nodes[i]
+    while next_node._load_shared_memory_block is not None \
+            and i < len(nodes):
+        next_node = nodes[i]
+        idx_map = increment_local_ids(
+            next_node._load_shared_memory_block[-1].body,
+            # next_node._ghost_depth)
+            1)  # Assume ghost_depth 1 for now
+        new_ops = move_stencil_op(
+            nodes[i - 1]._stencil_op,
+            next_node._load_shared_memory_block[-1].body[-1].left,
+            idx_map
+        )
+        for index, op in enumerate(new_ops[1:]):
+            new_ops[index + 1] = AddAssign(op.target, op.value)
+        next_node._load_shared_memory_block[-1].body.pop()
+        next_node._load_shared_memory_block[-1].body.extend(new_ops)
+        i += 1
 
 
 def move_stencil_op(stencil_op, new_target, idx_map):
@@ -536,6 +548,7 @@ class BlockSizeChanger(ast.NodeTransformer):
 
 
 def remove_symbol_from_params(params, names):
+    """@todo: docstring"""
     new_params = []
     for param in params:
         if param.name not in names:
@@ -543,8 +556,9 @@ def remove_symbol_from_params(params, names):
     params[:] = new_params
 
 
-def get_kernel_ptrs(ocl_file, fn):
-    program = cl.clCreateProgramWithSource(fn.context,
+def get_kernel_ptrs(ocl_file, func):
+    """@todo: docstring"""
+    program = cl.clCreateProgramWithSource(func.context,
                                            ocl_file.codegen()).build()
     ptrs = []
     for statement in ocl_file.body:
@@ -554,6 +568,7 @@ def get_kernel_ptrs(ocl_file, fn):
 
 
 def uniqueify_names(function):
+    """@todo: docstring"""
     return UniqueNamer().visit(function)
 
 
@@ -613,15 +628,23 @@ class FusedFn(ConcreteSpecializedFunction):
         self.arg_buf_map = {}
         self.outputs = outputs
         self.is_return = is_return
+        self.kernels = []
+        self._c_function = None
 
     def finalize(self, entry_point_name, project, entry_point_typesig,
                  kernels):
+        """
+        @todo: docstring
+        """
         self._c_function = self._compile(entry_point_name, project,
                                          entry_point_typesig)
         self.kernels = kernels
         return self
 
     def _process_args(self, args):
+        """
+        Process arguments by converting any ndarrays to OpenCL buffers
+        """
         processed = ()
         for arg in args:
             if isinstance(arg, numpy.ndarray):
@@ -647,6 +670,9 @@ class FusedFn(ConcreteSpecializedFunction):
         return self._process_outputs()
 
     def _process_outputs(self):
+        """
+        Process outputs by converting any OpenCL buffers to ndarrays.
+        """
         retvals = ()
         if self.is_return:
             output = self.outputs[-1]
@@ -682,8 +708,7 @@ class KernelCall(object):
     def __init__(self, control, kernel, global_size, global_size_decl,
                  local_size, local_size_decl, enqueue_call, finish_call,
                  setargs, load_shared_memory_block=None, stencil_op=None,
-                 macro_defns=None, ghost_depth=0
-                 ):
+                 macro_defns=None, ghost_depth=0):
         """@todo: to be defined1.
 
         :control: @todo
