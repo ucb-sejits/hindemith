@@ -344,6 +344,46 @@ class TestDecorator(unittest.TestCase):
         expected = py_kernel2(py_kernel1(in_grid))
         self._check(actual[2:-2, 2:-2], expected[2:-2, 2:-2])
 
+    def test_fusing_3_stencils(self):
+        in_grid = numpy.random.rand(1024, 1024).astype(numpy.float32) * 10
+        kernel1 = Stencil(backend='ocl')
+        kernel2 = Stencil(backend='ocl')
+        kernel3 = Stencil(backend='ocl')
+        py_kernel1 = Stencil(backend='ocl')
+        py_kernel2 = Stencil(backend='ocl')
+        py_kernel3 = Stencil(backend='ocl')
+
+        @fuse
+        def f(in_grid):
+            a = kernel1(in_grid)
+            b = kernel2(a)
+            return kernel3(b)
+
+        actual = f(in_grid)
+        expected = py_kernel3(py_kernel2(py_kernel1(in_grid)))
+        self._check(actual[2:-2, 2:-2], expected[2:-2, 2:-2])
+
+    def test_fusing_4_stencils(self):
+        in_grid = numpy.random.rand(1024, 1024).astype(numpy.float32) * 10
+        kernel1 = Stencil(backend='ocl')
+        kernel2 = Stencil(backend='ocl')
+        kernel3 = Stencil(backend='ocl')
+        kernel4 = Stencil(backend='ocl')
+        py_kernel1 = Stencil(backend='ocl')
+        py_kernel2 = Stencil(backend='ocl')
+        py_kernel3 = Stencil(backend='ocl')
+        py_kernel4 = Stencil(backend='ocl')
+
+        @fuse
+        def f(in_grid):
+            a = kernel1(in_grid)
+            b = kernel2(a)
+            c = kernel3(b)
+            return kernel4(c)
+
+        actual = f(in_grid)
+        expected = py_kernel4(py_kernel3(py_kernel2(py_kernel1(in_grid))))
+        self._check(actual[4:-4, 4:-4], expected[4:-4, 4:-4])
     # @unittest.skip("")
     # def test_hs_jacobi(self):
     #     @fuse
