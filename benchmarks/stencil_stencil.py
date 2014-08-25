@@ -1,5 +1,4 @@
 from hindemith.fusion.core import fuse
-from hindemith.fusion.core import dont_fuse_fusables
 
 from stencil_code.stencil_kernel import StencilKernel
 import numpy
@@ -34,7 +33,7 @@ class Stencil(StencilKernel):
 x = []
 iterations = 2
 results = [[] for _ in range(3)]
-speedup = [[] for _ in range(8)]
+speedup = [[] for _ in range(4)]
 
 
 for width in range(2**8, 2**13, 256):
@@ -51,18 +50,12 @@ for width in range(2**8, 2**13, 256):
             C = stencil1(A)
             return stencil2(C)
 
-        @dont_fuse_fusables
-        def fused_f2(A):
-            C = stencil1(A)
-            return stencil2(C)
-
         def unfused_f(A):
             return stencil3(stencil3(A))
 
         A = numpy.random.rand(width, width).astype(numpy.float32) * 100
 
         a = fused_f(A)
-        a = fused_f2(A)
         b = unfused_f(A)
         numpy.testing.assert_array_almost_equal(a[2:-2, 2:-2], b[2:-2, 2:-2])
         # x.append(width)
