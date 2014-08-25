@@ -6,7 +6,6 @@ import ast
 
 from ctree.frontend import get_ast
 
-from stencil_code.stencil_kernel import StencilKernel
 
 from hindemith.fusion.core import BlockBuilder, get_blocks, Fuser, fuse
 # from hindemith.types.common import Array
@@ -225,34 +224,6 @@ class TestSimpleFusion(unittest.TestCase):
             self.fail("Arrays not almost equal: {0}".format(e))
 
 
-stdev_d = 3
-stdev_s = 70
-radius = 1
-width = 64 + radius * 2
-height = width
-
-
-class Stencil(StencilKernel):
-    @property
-    def dim(self):
-        return 2
-
-    @property
-    def ghost_depth(self):
-        return 1
-
-    def neighbors(self, pt, defn=0):
-        if defn == 0:
-            for x in range(-radius, radius+1):
-                for y in range(-radius, radius+1):
-                    yield (pt[0] - x, pt[1] - y)
-
-    def kernel(self, in_grid, out_grid):
-        for x in self.interior_points(out_grid):
-            for y in self.neighbors(x, 0):
-                out_grid[x] += in_grid[y]
-
-
 class TestDecorator(unittest.TestCase):
     def _check(self, actual, expected):
         try:
@@ -313,36 +284,6 @@ class TestDecorator(unittest.TestCase):
         actual = test_func(A, B, C)
         expected = (C - A * B) + 3
         self._check(actual, expected)
-
-    def test_fusing_stencil_array_op(self):
-        in_grid = numpy.random.rand(1024, 1024).astype(numpy.float32) * 100
-        kernel1 = Stencil(backend='ocl')
-        kernel2 = Stencil(backend='ocl')
-
-        @fuse
-        def f(in_grid):
-            out = kernel1(in_grid)
-            return array_scalar_add(out, 4)
-
-        actual = f(in_grid)
-        expected = kernel2(in_grid) + 4
-        self._check(actual, expected)
-
-    def test_fusing_stencils(self):
-        in_grid = numpy.random.rand(1024, 1024).astype(numpy.float32) * 10
-        kernel1 = Stencil(backend='ocl')
-        kernel2 = Stencil(backend='ocl')
-        py_kernel1 = Stencil(backend='ocl')
-        py_kernel2 = Stencil(backend='ocl')
-
-        @fuse
-        def f(in_grid):
-            a = kernel1(in_grid)
-            return kernel2(a)
-
-        actual = f(in_grid)
-        expected = py_kernel2(py_kernel1(in_grid))
-        self._check(actual[2:-2, 2:-2], expected[2:-2, 2:-2])
 
     # @unittest.skip("")
     # def test_hs_jacobi(self):
