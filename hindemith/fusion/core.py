@@ -318,8 +318,6 @@ class Fuser(object):
                     argtypes.append(cl.cl_kernel)
                 else:
                     raise Exception("Unsupported argtype")
-            print(project.files[0])
-            print(project.files[1])
             entry_pt = project.files[0].find(FunctionDecl)
             return fn.finalize(
                 entry_pt.name, project, ct.CFUNCTYPE(*argtypes), kernel_ptrs,
