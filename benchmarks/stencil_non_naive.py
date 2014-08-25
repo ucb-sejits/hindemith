@@ -1,4 +1,5 @@
 from hindemith.fusion.core import fuse
+from hindemith.fusion.core import dont_fuse_fusables
 
 from stencil_code.stencil_kernel import StencilKernel
 import numpy
@@ -31,27 +32,30 @@ class Stencil(StencilKernel):
 
 
 x = []
-iterations = 2
+iterations = 5
 results = [[] for _ in range(3)]
 speedup = [[] for _ in range(4)]
 
 
-for width in range(2**8, 2**13, 256):
+for width in range(2**8, 2**11 + 1, 256):
+# for width in (2**x for x in range(8, 12)):
     print("Running width: %d" % width)
-# for width in (2**x for x in range(8, 11)):
-    total0, total1, total2 = 0, 0, 0
+    total0, total1 = 0, 0
     for _ in range(iterations):
         stencil1 = Stencil(backend='ocl')
         stencil2 = Stencil(backend='ocl')
         stencil3 = Stencil(backend='ocl')
+        stencil4 = Stencil(backend='ocl')
 
         @fuse
         def fused_f(A):
             C = stencil1(A)
             return stencil2(C)
 
+        @dont_fuse_fusables
         def unfused_f(A):
-            return stencil3(stencil3(A))
+            C = stencil3(A)
+            return stencil4(C)
 
         A = numpy.random.rand(width, width).astype(numpy.float32) * 100
 
@@ -63,11 +67,6 @@ for width in range(2**8, 2**13, 256):
             fused_f(A)
         results[0].append(fused_time.interval)
         total0 += fused_time.interval
-
-        with Timer() as fused_time2:
-            fused_f(A)
-        results[1].append(fused_time2.interval)
-        total1 += fused_time.interval
 
         with Timer() as unfused_time:
             unfused_f(A)
@@ -83,6 +82,8 @@ for width in range(2**8, 2**13, 256):
         stencil2 = Stencil(backend='ocl')
         stencil3 = Stencil(backend='ocl')
         stencil4 = Stencil(backend='ocl')
+        stencil5 = Stencil(backend='ocl')
+        stencil6 = Stencil(backend='ocl')
 
         @fuse
         def fused_f(A):
@@ -90,8 +91,11 @@ for width in range(2**8, 2**13, 256):
             C = stencil2(B)
             return stencil3(C)
 
+        @dont_fuse_fusables
         def unfused_f(A):
-            return stencil4(stencil4(stencil4(A)))
+            B = stencil4(A)
+            C = stencil5(B)
+            return stencil6(C)
 
         A = numpy.random.rand(width, width).astype(numpy.float32) * 100
 
@@ -120,6 +124,9 @@ for width in range(2**8, 2**13, 256):
         stencil3 = Stencil(backend='ocl')
         stencil4 = Stencil(backend='ocl')
         stencil5 = Stencil(backend='ocl')
+        stencil6 = Stencil(backend='ocl')
+        stencil7 = Stencil(backend='ocl')
+        stencil8 = Stencil(backend='ocl')
 
         @fuse
         def fused_f(A):
@@ -128,8 +135,12 @@ for width in range(2**8, 2**13, 256):
             D = stencil3(C)
             return stencil4(D)
 
+        @dont_fuse_fusables
         def unfused_f(A):
-            return stencil5(stencil5(stencil5(stencil5(A))))
+            B = stencil5(A)
+            C = stencil6(B)
+            D = stencil7(C)
+            return stencil8(D)
 
         A = numpy.random.rand(width, width).astype(numpy.float32) * 100
 
@@ -158,6 +169,10 @@ for width in range(2**8, 2**13, 256):
         stencil4 = Stencil(backend='ocl')
         stencil5 = Stencil(backend='ocl')
         stencil6 = Stencil(backend='ocl')
+        stencil7 = Stencil(backend='ocl')
+        stencil8 = Stencil(backend='ocl')
+        stencil9 = Stencil(backend='ocl')
+        stencil10 = Stencil(backend='ocl')
 
         @fuse
         def fused_f(A):
@@ -167,8 +182,13 @@ for width in range(2**8, 2**13, 256):
             E = stencil4(D)
             return stencil5(E)
 
+        @dont_fuse_fusables
         def unfused_f(A):
-            return stencil6(stencil6(stencil6(stencil6(stencil6(A)))))
+            B = stencil6(A)
+            C = stencil7(B)
+            D = stencil8(C)
+            E = stencil9(D)
+            return stencil10(E)
 
         A = numpy.random.rand(width, width).astype(numpy.float32) * 100
 
