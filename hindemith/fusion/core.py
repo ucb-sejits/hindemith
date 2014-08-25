@@ -368,6 +368,7 @@ def fuse_at_file_level(files, entry_points):
         file_map[type(_file)].body.extend(_file.body)
 
     c_file = fuse_entry_points(c_file, entry_points)
+    ocl_file.body = list(map(uniqueify_names, ocl_file.body))
     return [c_file, ocl_file]
 
 
@@ -418,10 +419,9 @@ def fuse_fusables(nodes):
             setter.args[0].name = kernel._setargs[0].args[0].name
             setter.args[1].value += offset
         offset += len(node._setargs)
-        unique = UniqueNamer().visit(node._kernel)
-        kernel._kernel.params.extend(unique.params)
+        kernel._kernel.params.extend(node._kernel.params)
         kernel._kernel.defn.append(barrier(CLK_LOCAL_MEM_FENCE()))
-        kernel._kernel.defn.extend(unique.defn)
+        kernel._kernel.defn.extend(node._kernel.defn)
         node._kernel.delete()
         if node is not nodes[-1]:
             clear_kernel_call(node)
