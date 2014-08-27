@@ -574,8 +574,8 @@ def increment_local_ids(body, incr):
     idx_map = {}
     for i in range(0, len(body) - 1, 2):
         body[i].right = Add(body[i].right, Constant(incr))
-        n = len(body) / 2 - 1
-        idx_map[(n - i / 2)] = body[i].left.name
+        n = len(body) // 2
+        idx_map[(n - i // 2) - 1] = body[i].left.name
     return idx_map
 
 
@@ -709,7 +709,7 @@ class FusedFn(ConcreteSpecializedFunction):
                     processed += (self.arg_buf_map[arg.ctypes.data],)
                 else:
                     buf, evt = cl.buffer_from_ndarray(self.queue, arg,
-                                                      blocking=False)
+                                                      blocking=True)
                     evt.wait()
                     processed += (buf,)
                     self.arg_buf_map[arg.ctypes.data] = buf
