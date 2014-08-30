@@ -218,11 +218,14 @@ class DLAOclTransformer(ast.NodeTransformer):
         if node.name == self.loop_var:
             index = get_global_id(self.ndim - 1)
             for d in reversed(range(self.ndim - 1)):
+                base = self.shape[-1]
+                for s in range(d + 1, self.ndim - 1):
+                    base *= self.shape[d]
                 index = Add(
                     Mul(
-                        index,
-                        Constant(self.shape[d])
-                    ), get_global_id(d)
+                        get_global_id(d),
+                        Constant(base)
+                    ), index
                 )
             return index
         return node
