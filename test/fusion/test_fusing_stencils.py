@@ -81,7 +81,7 @@ class TestFusingStencils(unittest.TestCase):
         self._check(actual, expected)
 
     def test_fusing_stencils(self):
-        in_grid = numpy.random.rand(1024, 1024).astype(numpy.float32) * 10
+        in_grid = numpy.random.rand(8, 8).astype(numpy.float32) * 10
         kernel1 = Stencil(backend='ocl')
         kernel2 = Stencil(backend='ocl')
         py_kernel1 = Stencil(backend='ocl')

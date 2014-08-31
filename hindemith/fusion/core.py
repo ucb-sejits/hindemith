@@ -294,8 +294,8 @@ class Fuser(object):
             project = fuse_at_project_level(projects, entry_points)
             if self._fuse_fusables:
                 fuse_fusables(fusable_nodes)
-            # print(project.files[0])
-            # print(project.files[1])
+            print(project.files[0])
+            print(project.files[1])
 
             return project
 
@@ -574,8 +574,7 @@ def increment_local_ids(body, incr):
     idx_map = {}
     for i in range(0, len(body) - 1, 2):
         body[i].right = Add(body[i].right, Constant(incr))
-        n = len(body) // 2
-        idx_map[(n - i // 2) - 1] = body[i].left.name
+        idx_map[(i // 2)] = body[i].left.name
     return idx_map
 
 
