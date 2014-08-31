@@ -305,19 +305,7 @@ class Fuser(object):
             # print(ocl_file)
             kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
 
-            argtypes = [None]
-
-            for arg in project.files[0].body[-1].params:
-                if isinstance(arg.type, ct.c_float):
-                    argtypes.append(ct.c_float)
-                elif isinstance(arg.type, cl.cl_mem):
-                    argtypes.append(cl.cl_mem)
-                elif isinstance(arg.type, cl.cl_command_queue):
-                    argtypes.append(cl.cl_command_queue)
-                elif isinstance(arg.type, cl.cl_kernel):
-                    argtypes.append(cl.cl_kernel)
-                else:
-                    raise Exception("Unsupported argtype")
+            argtypes = process_argtypes(project.files[0].body[-1].params)
             entry_pt = project.files[0].find(FunctionDecl)
             return fn.finalize(
                 entry_pt.name, project, ct.CFUNCTYPE(*argtypes), kernel_ptrs,
@@ -794,3 +782,20 @@ class KernelCall(object):
         self._stencil_op = stencil_op
         self._macro_defns = macro_defns
         self._ghost_depth = ghost_depth
+
+
+def process_argtypes(args):
+    argtypes = [None]
+
+    for arg in args:
+        if isinstance(arg.type, ct.c_float):
+            argtypes.append(ct.c_float)
+        elif isinstance(arg.type, cl.cl_mem):
+            argtypes.append(cl.cl_mem)
+        elif isinstance(arg.type, cl.cl_command_queue):
+            argtypes.append(cl.cl_command_queue)
+        elif isinstance(arg.type, cl.cl_kernel):
+            argtypes.append(cl.cl_kernel)
+        else:
+            raise Exception("Unsupported argtype")
+    return argtypes
