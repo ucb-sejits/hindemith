@@ -294,8 +294,8 @@ class Fuser(object):
             project = fuse_at_project_level(projects, entry_points)
             if self._fuse_fusables:
                 fuse_fusables(fusable_nodes)
-            print(project.files[0])
-            print(project.files[1])
+            # print(project.files[0])
+            # print(project.files[1])
 
             return project
 
@@ -478,13 +478,11 @@ def fuse_fusables(nodes):
 
 
 def update_block_sizes(nodes):
-    i = 1
-    next_node = nodes[i]
-    while next_node._load_shared_memory_block is not None \
-            and i < len(nodes):
-        next_node = nodes[i]
-        for node in nodes[:i]:
-            node._ghost_depth += next_node._ghost_depth
+    for i, curr_node in enumerate(nodes[1:]):
+        if nodes[i]._load_shared_memory_block is None:
+            break
+        for node in nodes[:i + 1]:
+            node._ghost_depth += curr_node._ghost_depth
             local_size = reduce(
                 operator.mul,
                 (item.value + node._ghost_depth * 2
@@ -497,29 +495,24 @@ def update_block_sizes(nodes):
             block_size_changer.visit(node._load_shared_memory_block[-1])
             block_size_changer.visit(node._macro_defns[0])
 
-        i += 1
-
 
 def incr_ids_and_move_ops(nodes):
-    i = 1
-    next_node = nodes[i]
-    while next_node._load_shared_memory_block is not None \
-            and i < len(nodes):
-        next_node = nodes[i]
+    for i, curr_node in enumerate(nodes[1:]):
+        if curr_node._load_shared_memory_block is None:
+            break
         idx_map = increment_local_ids(
-            next_node._load_shared_memory_block[-1].body,
+            curr_node._load_shared_memory_block[-1].body,
             # next_node._ghost_depth)
             1)  # Assume ghost_depth 1 for now
         new_ops = move_stencil_op(
-            nodes[i - 1]._stencil_op,
-            next_node._load_shared_memory_block[-1].body[-1].left,
+            nodes[i]._stencil_op,
+            curr_node._load_shared_memory_block[-1].body[-1].left,
             idx_map
         )
         for index, op in enumerate(new_ops[1:]):
             new_ops[index + 1] = AddAssign(op.target, op.value)
-        next_node._load_shared_memory_block[-1].body.pop()
-        next_node._load_shared_memory_block[-1].body.extend(new_ops)
-        i += 1
+        curr_node._load_shared_memory_block[-1].body.pop()
+        curr_node._load_shared_memory_block[-1].body.extend(new_ops)
 
 
 def move_stencil_op(stencil_op, new_target, idx_map):
