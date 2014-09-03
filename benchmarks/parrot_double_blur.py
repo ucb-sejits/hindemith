@@ -176,6 +176,7 @@ class PyStencil(object):
 
 
 def pure_vs_opencl():
+    iterations = 1
     width, height, pixels, metadata = png.Reader('pa.png').read_flat()
     A = numpy.array(pixels).reshape(height, width, metadata['planes'])
 
