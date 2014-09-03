@@ -14,7 +14,7 @@ import copy
 from ctree.frontend import get_ast
 from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
 from ctree.c.nodes import CFile, FunctionDecl, Op, FunctionCall, Constant, \
-    Add, Assign, AddAssign
+    Add, Assign, AugAssign
 from ctree.ocl.macros import barrier, CLK_LOCAL_MEM_FENCE
 from ctree.ocl.nodes import OclFile
 from ctree.ocl import get_context_and_queue_from_devices
@@ -510,7 +510,10 @@ def incr_ids_and_move_ops(nodes):
             idx_map
         )
         for index, op in enumerate(new_ops[1:]):
-            new_ops[index + 1] = AddAssign(op.target, op.value)
+            if isinstance(op, AugAssign):
+                new_ops[index + 1] = AugAssign(op.target, op.op, op.value)
+            else:
+                new_ops[index + 1] = op
         curr_node._load_shared_memory_block[-1].body.pop()
         curr_node._load_shared_memory_block[-1].body.extend(new_ops)
 
