@@ -32,7 +32,7 @@ class Stencil(StencilKernel):
 
 
 x = []
-iterations = 5
+iterations = 3
 results = [[] for _ in range(3)]
 speedup = [[] for _ in range(4)]
 
@@ -40,6 +40,7 @@ speedup = [[] for _ in range(4)]
 for width in range(2**8, 2**11 + 1, 256):
 # for width in (2**x for x in range(8, 12)):
     print("Running width: %d" % width)
+    x.append(width)
     total0, total1 = 0, 0
     for _ in range(iterations):
         stencil1 = Stencil(backend='ocl')
@@ -115,7 +116,7 @@ for width in range(2**8, 2**11 + 1, 256):
     total0 /= iterations
     total1 /= iterations
     speedup[1].append(total1/total0)
-    x.append(width)
+    # x.append(width)
 
     total0, total1 = 0, 0
     for _ in range(iterations):
@@ -213,15 +214,34 @@ for width in range(2**8, 2**11 + 1, 256):
 colors = ['b', 'c', 'r', 'g']
 import matplotlib.pyplot as plt
 
-r1 = plt.scatter(x, speedup[0], marker='x', color=colors[0])
-r2 = plt.scatter(x, speedup[1], marker='x', color=colors[1])
-r3 = plt.scatter(x, speedup[2], marker='x', color=colors[2])
-r4 = plt.scatter(x, speedup[3], marker='x', color=colors[3])
+# r1 = plt.scatter(x, speedup[0], marker='x', color=colors[0])
+# r2 = plt.scatter(x, speedup[1], marker='x', color=colors[1])
+# r3 = plt.scatter(x, speedup[2], marker='x', color=colors[2])
+# r4 = plt.scatter(x, speedup[3], marker='x', color=colors[3])
 
-plt.legend((r1, r2, r3, r4),
-           ('2 Stencils', '3 Stencils', '4 Stencils', '5 Stencils'),
-           scatterpoints=1,
-           loc='lower left',
-           ncol=3,
-           fontsize=8)
+# plt.legend((r1, r2, r3, r4),
+#            ('2 Stencils', '3 Stencils', '4 Stencils', '5 Stencils'),
+#            scatterpoints=1,
+#            loc='lower left',
+#            ncol=3,
+#            fontsize=8)
+# plt.show()
+
+width = .15
+fig, ax = plt.subplots()
+x = [2 * i for i in x]
+rects1 = ax.bar([index for index, _ in enumerate(x)], speedup[0], width, color='c')
+
+rects2 = ax.bar([index + width for index, _ in enumerate(x)], speedup[1], width, color='g')
+rects3 = ax.bar([index + width * 2 for index, _ in enumerate(x)], speedup[2], width, color='b')
+rects4 = ax.bar([index + width * 3 for index, _ in enumerate(x)], speedup[3], width, color='m')
+
+ax.set_title('Speedup of fusing OpenCL Kernels on the GPU')
+ax.set_ylabel('Speedup')
+ax.set_xlabel('Square Matrix Size')
+ax.set_xticks([index + width for index, _ in enumerate(x)])
+ax.set_xticklabels(x)
+
+# ax.legend((rects1[0], rects2[0], rects3[0]), ('Fused v1', 'Unfused', 'Numpy'), loc=2)
+ax.legend((rects1[0], rects2[0], rects3[0], rects4[0]), ('2 Stencils', '3 Stencils', '4 Stencils','5 Stencils'), loc=2)
 plt.show()
