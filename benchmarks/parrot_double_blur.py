@@ -55,7 +55,7 @@ def main():
     results = [[] for _ in range(3)]
     speedup = [[] for _ in range(4)]
 
-    width, height, pixels, metadata = png.Reader('pa.png').read_flat()
+    width, height, pixels, metadata = png.Reader('parrot.png').read_flat()
     A = numpy.array(pixels).reshape(height, width, metadata['planes'])
 
     print("A.shape {}".format(A.shape))
@@ -63,11 +63,9 @@ def main():
 
     A = A.astype(numpy.float32)
 
-    B = numpy.random.rand(A.shape[0], A.shape[1]).astype(numpy.float32) * 100
-    print A[7]
-
     total0, total1, total2 = 0, 0, 0
-    for _ in range(iterations):
+    for iteration in range(iterations):
+        print("iteration {}".format(iteration))
         backend = 'ocl'
         stencil1 = Stencil(backend=backend)
         stencil2 = Stencil(backend=backend)
@@ -111,33 +109,29 @@ def main():
     print("total   fused {0} times {1}".format(total0, ["{:6.4f} ".format(x) for x in results[0]]))
     print("total unfused {0} times {1}".format(total1, ["{:6.4f} ".format(x) for x in results[1]]))
 
-    def write_image(image_array, out_file):
-        m = metadata
-        print("m {}".format(m))
-        writer = png.Writer(width, height, alpha=m['alpha'], greyscale=m['greyscale'], bitdepth=m['bitdepth'],
-                            interlace=m['interlace'], planes=m['planes'])
-        output = array.array('B', image_array.reshape(width * height * m['planes']))
-        writer.write_array(out_file, output)
-
-    # index = numpy.nditer(a, flags=["multi_index"])
-    # while not index.finished:
-    #     if index[0] > 255:
-    #         print("a[{}] > {} out of range".format(index.multi_index, index[0]))
-    #         exit(0)
-    #     index.iternext()
-
-    with open('blurred_control.png', 'wb') as out_file:
-        write_image(A, out_file)
-
-    with open('blurred_fused_b.png', 'wb') as out_file:
-        write_image(b, out_file)
-
-    with open('blurred_fused_a.png', 'wb') as out_file:
-        write_image(a, out_file)
-
-
-if __name__ == '__main__':
-    main()
+    # def write_image(image_array, out_file):
+    #     m = metadata
+    #     print("m {}".format(m))
+    #     writer = png.Writer(width, height, alpha=m['alpha'], greyscale=m['greyscale'], bitdepth=m['bitdepth'],
+    #                         interlace=m['interlace'], planes=m['planes'])
+    #     output = array.array('B', image_array.reshape(width * height * m['planes']))
+    #     writer.write_array(out_file, output)
+    #
+    index = numpy.nditer(b, flags=["multi_index"])
+    while not index.finished:
+        if index[0] > 255:
+            print("b[{}] > {} out of range".format(index.multi_index, index[0]))
+            exit(0)
+        index.iternext()
+    #
+    # with open('blurred_control.png', 'wb') as out_file:
+    #     write_image(A, out_file)
+    #
+    # with open('blurred_fused_b.png', 'wb') as out_file:
+    #     write_image(b, out_file)
+    #
+    # with open('blurred_fused_a.png', 'wb') as out_file:
+    #     write_image(a, out_file)
 
 
 class PyStencil(object):
@@ -185,7 +179,6 @@ def pure_vs_opencl():
 
     A = A.astype(numpy.float32)
 
-    B = numpy.random.rand(A.shape[0], A.shape[1]).astype(numpy.float32) * 100
     print A[7]
 
     total0, total1, total2 = 0, 0, 0
@@ -219,3 +212,11 @@ def pure_vs_opencl():
         b = stencil3(A)
         print("done b")
         numpy.testing.assert_array_almost_equal(a[2:-2, 2:-2], b[2:-2, 2:-2], decimal=4)
+
+
+if __name__ == '__main__':
+    # pure_vs_opencl()
+    # exit(1)
+    main()
+
+
