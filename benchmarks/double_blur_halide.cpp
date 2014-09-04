@@ -2,12 +2,12 @@
 // put this file in the halide/tutorials directory and
 //
 // On linux, you can compile and run it like so:
-// g++ double_blur_halide.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
+// g++ double_blur_halide.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o double_blur_halide
 // LD_LIBRARY_PATH=../bin ./double_blur_halide
 
 // On os x:
-// g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
-// DYLD_LIBRARY_PATH=../bin ./lesson_07
+// g++ double_blur_halide.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o double_blur_halide
+// DYLD_LIBRARY_PATH=../bin ./double_blur_halide
 
 #include <Halide.h>
 #include <stdio.h>
@@ -53,6 +53,8 @@ int main(int argc, char **argv) {
 
     // The same pipeline, with a boundary condition on the input.
     {
+        halide_set_ocl_device_type("gpu");
+
         // Take a color 8-bit input
         Image<uint8_t> input = load<uint8_t>("images/rgb.png");
 
@@ -81,31 +83,31 @@ int main(int argc, char **argv) {
 
         // The rest of the pipeline will be the same...
 
+        // Blur it horizontally:
+        Func blur_x("blur_x");
+        blur_x(x, y, c) = (input_16(x-1, y, c) + input_16(x, y, c) + input_16(x+1, y, c))/3;
+
+        // Blur it vertically:
+        Func blur_y("blur_y");
+        blur_y(x, y, c) = (blur_x(x, y-1, c) + blur_x(x, y, c) + blur_x(x, y+1, c))/3;
+
+        // Blur it horizontally again:
+        Func blur_x2("blur_x2");
+        blur_x2(x, y, c) = (blur_y(x-1, y, c) + blur_y(x, y, c) + blur_y(x+1, y, c))/3;
+
+        // Blur it vertically:
+        Func blur_y2("blur_y2");
+        blur_y2(x, y, c) = (blur_x2(x, y-1, c) + blur_x2(x, y, c) + blur_x2(x, y+1, c))/3;
+
+        // Convert back to 8-bit.
+        Func output("output");
+        output(x, y, c) = cast<uint8_t>(blur_y2(x, y, c));
+
 #ifdef __MACH__
     	uint64_t start = mach_absolute_time();
 #else
 	    clock_gettime( CLOCK_REALTIME, &start);
 #endif
-
-        // Blur it horizontally:
-        Func blur_x("blur_x");
-        blur_x(x, y, c) = (input_16(x-1, y, c) + 2*input_16(x, y, c) + input_16(x+1, y, c))/4;
-
-        // Blur it vertically:
-        Func blur_y("blur_y");
-        blur_y(x, y, c) = (blur_x(x, y-1, c) + 2*blur_x(x, y, c) + blur_x(x, y+1, c))/4;
-
-        // Blur it horizontally again:
-        Func blur_x2("blur_x2");
-        blur_x2(x, y, c) = (blur_y(x-1, y, c) + 2*blur_y(x, y, c) + blur_y(x+1, y, c))/4;
-
-        // Blur it vertically:
-        Func blur_y2("blur_y2");
-        blur_y2(x, y, c) = (blur_x2(x, y-1, c) + 2*blur_x2(x, y, c) + blur_x2(x, y+1, c))/4;
-
-        // Convert back to 8-bit.
-        Func output("output");
-        output(x, y, c) = cast<uint8_t>(blur_x2(x, y, c));
 
         // This time it's safe to evaluate the output over the some
         // domain as the input, because we have a boundary condition.
