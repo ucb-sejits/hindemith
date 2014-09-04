@@ -88,7 +88,7 @@ def main():
         a = fused_f(A)
         b = unfused_f(A)
 
-        # numpy.testing.assert_array_almost_equal(a[2:-2, 2:-2], b[2:-2, 2:-2], decimal=4)
+        numpy.testing.assert_array_almost_equal(a[2:-2, 2:-2], b[2:-2, 2:-2], decimal=4)
 
         with Timer() as fused_time:
             fused_f(A)
