@@ -375,7 +375,13 @@ class Fuser(object):
 
 
 class LazyFused(LazySpecializedFunction):
-    pass
+    def args_to_subconfig(self, args):
+        """
+        """
+        return tuple(
+            (len(arg), arg.dtype, arg.ndim, arg.shape)
+            for arg in args
+        )
 
 
 def fuse_at_project_level(projects, entry_points):
@@ -665,6 +671,7 @@ class FusedFn(ConcreteSpecializedFunction):
         self.orig_args = ()
         self.arg_buf_map = {}
         self.outputs = outputs
+        self.dirty_outputs = False
         self.is_return = is_return
         self.kernels = []
         self._c_function = None
@@ -725,18 +732,20 @@ class FusedFn(ConcreteSpecializedFunction):
             # FIXME: Assuming only one output is returned
             output = self.outputs[-1]
             buf = self.arg_buf_map[output.ctypes.data]
-            out, evt = cl.buffer_to_ndarray(self.queue, buf, output)
+            out, evt = cl.buffer_to_ndarray(self.queue, buf, like=output)
             evt.wait()
+            self.arg_buf_map = {}
             return out
         for output in self.outputs:
             try:
                 buf = self.arg_buf_map[output.ctypes.data]
-                out, evt = cl.buffer_to_ndarray(self.queue, buf, output)
+                out, evt = cl.buffer_to_ndarray(self.queue, buf, like=output)
                 evt.wait()
                 retvals += (out,)
             except KeyError:
                 # TODO: Make this a better exception
                 raise Exception("Could not find corresponding buffer")
+        self.arg_buf_map = {}
         return retvals
 
 
