@@ -21,7 +21,7 @@ class Stencil(StencilKernel):
 
     @property
     def ghost_depth(self):
-        return 1
+        return (1, 1, 0)
 
     def neighbors(self, pt, defn=0):
         if defn == 0:

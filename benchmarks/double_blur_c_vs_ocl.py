@@ -24,6 +24,8 @@ class Stencil(StencilKernel):
     def ghost_depth(self):
         return 1
 
+    neighbor_definition = [[(x, y, 0) for y in range(-radius, radius+1)] for x in range(-radius, radius+1)]
+
     def neighbors(self, pt, defn=0):
         if defn == 0:
             for x in range(-radius, radius+1):
