@@ -23,7 +23,7 @@ class Stencil(StencilKernel):
 
     @property
     def ghost_depth(self):
-        return 1
+        return (1, 1)
 
     def neighbors(self, pt, defn=0):
         if defn == 0:
@@ -44,7 +44,7 @@ class Stencil3D(StencilKernel):
 
     @property
     def ghost_depth(self):
-        return 1
+        return (1, 1, 1)
 
     def neighbors(self, pt, defn=0):
         if defn == 0:
@@ -84,8 +84,7 @@ class TestFusingStencils(unittest.TestCase):
         in_grid = numpy.random.rand(8, 8).astype(numpy.float32) * 10
         kernel1 = Stencil(backend='ocl')
         kernel2 = Stencil(backend='ocl')
-        py_kernel1 = Stencil(backend='ocl')
-        py_kernel2 = Stencil(backend='ocl')
+        kernel3 = Stencil(backend='ocl')
 
         @fuse
         def f(in_grid):
@@ -93,7 +92,7 @@ class TestFusingStencils(unittest.TestCase):
             return kernel2(a)
 
         actual = f(in_grid)
-        expected = py_kernel2(py_kernel1(in_grid))
+        expected = kernel3(kernel3(in_grid))
         self._check(actual[2:-2, 2:-2], expected[2:-2, 2:-2])
 
     def test_fusing_3_stencils(self):
