@@ -247,8 +247,7 @@ class TestDecorator(unittest.TestCase):
         @fuse
         def test_func(A, B, C):
             D = array_mul(A, B)
-            E = array_sub(C, D)
-            return E
+            return array_sub(C, D)
 
         actual = test_func(A, B, C)
         expected = C - (A * B)

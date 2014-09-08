@@ -93,6 +93,8 @@ def fuse(func):
         # Remove Decorator
         tree.body[0].decorator_list = []
         tree = ast.fix_missing_locations(tree)
+        import ctree
+        # ctree.browser_show_ast(tree, 'tmp.png')
         my_exec(compile(tree, '', 'exec'), symbol_table)
         func.hm_fused = symbol_table[func.__name__]
         return symbol_table[func.__name__](*args, **kwargs)
@@ -375,13 +377,14 @@ class Fuser(object):
 
 
 class LazyFused(LazySpecializedFunction):
-    def args_to_subconfig(self, args):
-        """
-        """
-        return tuple(
-            (len(arg), arg.dtype, arg.ndim, arg.shape)
-            for arg in args
-        )
+    pass
+    # def args_to_subconfig(self, args):
+    #     """
+    #     """
+    #     return tuple(
+    #         (len(arg), arg.dtype, arg.ndim, arg.shape)
+    #         for arg in args
+    #     )
 
 
 def fuse_at_project_level(projects, entry_points):
@@ -485,14 +488,17 @@ def fuse_fusables(nodes):
 
 def update_block_sizes(nodes):
     for i, curr_node in enumerate(nodes[1:]):
-        if nodes[i]._load_shared_memory_block is None:
+        if curr_node._load_shared_memory_block is None:
             break
         for node in nodes[:i + 1]:
-            node._ghost_depth += curr_node._ghost_depth
+            node._ghost_depth = tuple(
+                item + curr_node._ghost_depth[i]
+                for i, item in enumerate(node._ghost_depth)
+            )
             local_size = reduce(
                 operator.mul,
-                (item.value + node._ghost_depth * 2
-                    for item in node._local_size_decl.body),
+                (item.value + node._ghost_depth[index] * 2
+                    for index, item in enumerate(node._local_size_decl.body)),
                 ct.sizeof(cl.cl_float())
             )
             node._setargs[-1].args[2].value = local_size
@@ -577,7 +583,8 @@ class BlockSizeChanger(ast.NodeTransformer):
         if isinstance(node.op, Op.Add) and \
             isinstance(node.left, FunctionCall) and \
                 node.left.func.name is 'get_local_size':
-            return Add(node.left, Constant(self._amt * 2))
+            return Add(node.left,
+                       Constant(self._amt[node.left.args[0].value] * 2))
         else:
             node.left = self.visit(node.left)
             node.right = self.visit(node.right)
@@ -585,7 +592,7 @@ class BlockSizeChanger(ast.NodeTransformer):
 
     def visit_FunctionCall(self, node):
         if node.func.name == 'clamp':
-            node.args[0].value.right.value = self._amt
+            node.args[0].value.right.value = self._amt[0]
         else:
             node.args = list(map(self.visit, node.args))
         return node
@@ -671,7 +678,6 @@ class FusedFn(ConcreteSpecializedFunction):
         self.orig_args = ()
         self.arg_buf_map = {}
         self.outputs = outputs
-        self.dirty_outputs = False
         self.is_return = is_return
         self.kernels = []
         self._c_function = None
