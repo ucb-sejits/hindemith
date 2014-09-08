@@ -1,6 +1,11 @@
+from ctree import util
+
 __author__ = 'leonardtruong'
 
 nameCnt = 0
+
+import sys
+from ctree.util import Timer
 
 
 def unique_name():
@@ -44,3 +49,19 @@ class UnsupportedBackendError(TellerException):
 
 class UnsupportedTypeError(TellerException):
     pass
+
+
+def get_best_time(function, trials=3, iterations=100):
+    best_time = sys.float_info.max
+    for trial in xrange(trials):
+        # print("Starting trial {}".format(trial))
+        with Timer() as t:
+            for iteration in xrange(iterations):
+                # print("iteration {}".format(iteration))
+                function()
+        elapsed = t.interval / float(iterations)
+        if elapsed < best_time:
+            best_time = elapsed
+    return best_time * 1000.0
+
+
