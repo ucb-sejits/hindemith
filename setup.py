@@ -8,6 +8,7 @@ setup(
     author='Leonard Truong',
     author_email='leonardtruong@berkeley.edu',
     description='Package containing a suite of high performance pattern specializers',
+    url='https://github.com/ucb-sejits/hindemith',
 
     packages=find_packages(),
 
