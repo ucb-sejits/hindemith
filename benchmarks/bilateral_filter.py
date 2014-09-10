@@ -10,31 +10,15 @@ import time
 
 from stencil_code.stencil_kernel import StencilKernel
 
-radius = 1
+radius = 3
 
 
 class BilateralKernel(StencilKernel):
-    # def __init__(self, radius):
-    #     self.radius = radius
-    #     super(BilateralKernel, self).__init__()
-
-    @property
-    def radius(self):
-        return 1
-
     @property
     def dim(self):
         return 3
 
-    @property
-    def ghost_depth(self):
-        return self.radius
-
-    def neighbors(self, point, neighbor_index=0):
-        assert neighbor_index == 0
-        for x in range(-self.radius, self.radius+1):
-            for y in range(-self.radius, self.radius+1):
-                yield (point[0] - x, point[1] - y, point[2])
+    neighbor_definition = [[(x, y, 0) for y in range(-radius, radius+1)] for x in range(-radius, radius+1)]
 
     def kernel(self, in_img, filter_d, filter_s, out_img):
         for x in self.interior_points():
@@ -47,7 +31,7 @@ def gaussian(stdev, length):
     scale = 1.0 / (stdev*math.sqrt(2.0*math.pi))
     divisor = -1.0 / (2.0 * stdev * stdev)
 
-    return numpy.array([scale * math.exp(float(x) * float(x) * divisor) for x in range(length)])
+    return numpy.array([scale * math.exp(float(x) * float(x) * divisor) for x in range(length)]).astype(numpy.float32)
 
 
 def distance(x, y):
@@ -79,19 +63,18 @@ def main():
 
     kernel = BilateralKernel(backend='ocl')
 
-    out_grid = numpy.empty_like(pixels)
+    # out_grid = numpy.empty_like(pixels)
 
     gaussian1 = gaussian(sigma_s, radius*2)
     gaussian2 = gaussian(stdev_s, 256)
 
-    print("gaussian1 {}".format(gaussian1))
-    print("gaussian2 {}".format(gaussian2))
-
-    kernel(pixels, gaussian1, gaussian2, out_grid)
+    out_grid = kernel(pixels, gaussian1, gaussian2)
 
     for x in range(0, width):
         for y in range(0,height):
-            pixels[y * width + x] = out_grid.data[(x, y)]
+            for z in range(3):
+                print("({}, {}, {}) {}".format(x, y, z, out_grid.data[x][y][z]))
+                pixels[y * width * 3 + x * 3 + z] = out_grid.data[x][y][z]
 
     out_intensity = float(sum(pixels))/len(pixels)
     for i in range(0, len(pixels)):
