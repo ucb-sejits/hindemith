@@ -18,6 +18,7 @@ from ctree.c.nodes import CFile, FunctionDecl, Op, FunctionCall, Constant, \
 from ctree.ocl.macros import barrier, CLK_LOCAL_MEM_FENCE
 from ctree.ocl.nodes import OclFile
 from ctree.ocl import get_context_and_queue_from_devices
+from ctree.util import Timer
 
 from hindemith.utils import unique_kernel_name, unique_name
 
@@ -714,7 +715,9 @@ class FusedFn(ConcreteSpecializedFunction):
         return processed
 
     def __call__(self, *args):
-        processed = self._process_args(args)
+        with Timer() as t:
+            processed = self._process_args(args)
+        print("Copy input time: %.2fms" % (t.interval * 1000))
         args = []
         offset = 0
         for index, num in enumerate(self.num_args):
@@ -726,8 +729,13 @@ class FusedFn(ConcreteSpecializedFunction):
             args.extend(processed[offset:offset + num])
             offset += num
         # args.extend(processed)
-        self._c_function(*args)
-        return self._process_outputs()
+        with Timer() as t:
+            self._c_function(*args)
+        print("Call time: %.2fms" % (t.interval * 1000))
+        with Timer() as t:
+            outputs = self._process_outputs()
+        print("Copy Output Time: %.2fms" % (t.interval * 1000))
+        return outputs
 
     def _process_outputs(self):
         """
