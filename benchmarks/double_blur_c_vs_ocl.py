@@ -70,13 +70,13 @@ def main():
     b = fused_c(A)
 
     print("array computed by ocl")
-    for ii in range(6):
+    for ii in range(10):
         for jj in range(10):
             print("{:20s}".format(":".join(["{:.2f}".format(a[ii][jj][kk]) for kk in range(3)])), end="")
         print()
 
     print("array computed by c")
-    for ii in range(6):
+    for ii in range(10):
         for jj in range(10):
             print("{:20s}".format(":".join(["{:.2f}".format(b[ii][jj][kk]) for kk in range(3)])), end="")
         print()
