@@ -15,22 +15,11 @@ from hindemith.utils import get_best_time
 radius = 1
 
 
-class Stencil(StencilKernel):
-    @property
-    def dim(self):
-        return 3
-
-    @property
-    def ghost_depth(self):
-        return 1
-
-    neighbor_definition = [[(x, y, 0) for y in range(-radius, radius+1)] for x in range(-radius, radius+1)]
-
-    def neighbors(self, pt, defn=0):
-        if defn == 0:
-            for x in range(-radius, radius+1):
-                for y in range(-radius, radius+1):
-                    yield (pt[0] - x, pt[1] - y, pt[2])
+class Blur(StencilKernel):
+    neighbor_definition = [
+        [(x, y, 0) for y in range(-radius, radius+1)]
+        for x in range(-radius, radius+1)
+    ]
 
     def kernel(self, in_grid, out_grid):
         for x in self.interior_points(out_grid):
@@ -44,10 +33,10 @@ def main():
     A = numpy.array(pixels).reshape(height, width, metadata['planes']).astype(numpy.float32)
 
     backend = 'ocl'
-    stencil_f1 = Stencil(backend=backend)
-    stencil_f2 = Stencil(backend=backend)
-    stencil_u1 = Stencil(backend=backend)
-    stencil_u4 = Stencil(backend=backend)
+    stencil_f1 = Blur(backend=backend)
+    stencil_f2 = Blur(backend=backend)
+    stencil_u1 = Blur(backend=backend)
+    stencil_u4 = Blur(backend=backend)
 
     @fuse
     def fused_ocl(A):
