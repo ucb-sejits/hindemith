@@ -8,8 +8,8 @@ from stencil_code.stencil_kernel import StencilKernel
 import numpy
 from hindemith.utils import get_best_time
 
-# import logging
-# logging.basicConfig(level=20)
+import logging
+logging.basicConfig(level=20)
 
 
 radius = 1

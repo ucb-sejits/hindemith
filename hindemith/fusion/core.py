@@ -298,14 +298,13 @@ class Fuser(object):
             if self._fuse_fusables:
                 fuse_fusables(fusable_nodes)
             # print(project.files[0])
-            # print(project.files[1])
+            print(project.files[1])
 
             return project
 
         def finalize(project, program_cfg):
             fn = FusedFn(outputs, is_return)
             ocl_file = project.find(OclFile)
-            # print(ocl_file)
             kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
 
             argtypes = process_argtypes(project.files[0].body[-1].params)
@@ -364,7 +363,7 @@ class Fuser(object):
 
             outputs.append(output)
             tree, entry_type, entry_point = specializer.transform(
-                specializer.original_tree,
+                copy.deepcopy(specializer.original_tree),
                 program_cfg
             )
             kernel_names.extend(kernel_names)
