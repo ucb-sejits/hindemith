@@ -15,19 +15,7 @@ radius = 1
 
 
 class Stencil(StencilKernel):
-    @property
-    def dim(self):
-        return 3
-
-    @property
-    def ghost_depth(self):
-        return (1, 1, 0)
-
-    def neighbors(self, pt, defn=0):
-        if defn == 0:
-            for x in range(-radius, radius+1):
-                for y in range(-radius, radius+1):
-                    yield (pt[0] - x, pt[1] - y, pt[2])
+    neighbor_definition = [[(x, y, 0) for y in range(-radius, radius+1)] for x in range(-radius, radius+1)]
 
     def kernel(self, in_grid, out_grid):
         for x in self.interior_points(out_grid):
@@ -35,18 +23,6 @@ class Stencil(StencilKernel):
                 out_grid[x] += in_grid[y]
             out_grid[x] /= 9.0
 
-    # def __init__(self, backend='a'):
-    #     pass
-    #
-    # def __call__(self, m):
-    #     n = numpy.empty_like(m)
-    #     for i in range(1,m.shape[0]-1):
-    #         for j in range(1,m.shape[1]-1):
-    #             for k in range(0,m.shape[2]):
-    #                 for nn in self.neighbors((i, j, k), 0):
-    #                     n[i, j, k] += m[nn[0], nn[1], nn[2]]
-    #                 n[i, j, k] /= 9.0
-    #     return n
 
 
 
