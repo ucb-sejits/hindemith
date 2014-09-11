@@ -11,19 +11,11 @@ radius = 1
 
 
 class Stencil(StencilKernel):
-    @property
-    def dim(self):
-        return 2
-
-    @property
-    def ghost_depth(self):
-        return 1
-
-    def neighbors(self, pt, defn=0):
-        if defn == 0:
-            for x in range(-radius, radius+1):
-                for y in range(-radius, radius+1):
-                    yield (pt[0] - x, pt[1] - y)
+    neighbor_definition = [[
+        (-1, 1),  (0, 1),  (1, 1),
+        (-1, 0),  (0, 0),  (1, 0),
+        (-1, -1), (-1, 0), (-1, 1)
+    ]]
 
     def kernel(self, in_grid, out_grid):
         for x in self.interior_points(out_grid):
