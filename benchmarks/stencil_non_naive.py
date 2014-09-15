@@ -6,6 +6,9 @@ import numpy
 
 from ctree.util import Timer
 
+# import logging
+# logging.basicConfig(level=20)
+
 
 radius = 1
 
@@ -14,7 +17,7 @@ class Stencil(StencilKernel):
     neighbor_definition = [[
         (-1, 1),  (0, 1),  (1, 1),
         (-1, 0),  (0, 0),  (1, 0),
-        (-1, -1), (-1, 0), (-1, 1)
+        (-1, -1), (0, -1), (1, -1)
     ]]
 
     def kernel(self, in_grid, out_grid):
@@ -24,13 +27,13 @@ class Stencil(StencilKernel):
 
 
 x = []
-iterations = 3
+iterations = 1
 results = [[] for _ in range(3)]
 speedup = [[] for _ in range(4)]
 
 
-for width in range(2**8, 2**11 + 1, 256):
-# for width in (2**x for x in range(8, 12)):
+# for width in range(2**8, 2**13 + 1, 512):
+for width in (2**x for x in range(8, 12)):
     print("Running width: %d" % width)
     x.append(width)
     total0, total1 = 0, 0
@@ -65,11 +68,12 @@ for width in range(2**8, 2**11 + 1, 256):
             unfused_f(A)
         results[1].append(unfused_time.interval)
         total1 += unfused_time.interval
-    total0 /= iterations
-    total1 /= iterations
+    # total0 /= iterations
+    # total1 /= iterations
     speedup[0].append(total1/total0)
     # x.append(width)
 
+    total0, total1 = 0, 0
     for _ in range(iterations):
         stencil1 = Stencil(backend='ocl')
         stencil2 = Stencil(backend='ocl')
@@ -105,8 +109,8 @@ for width in range(2**8, 2**11 + 1, 256):
             unfused_f(A)
         results[1].append(unfused_time.interval)
         total1 += unfused_time.interval
-    total0 /= iterations
-    total1 /= iterations
+    # total0 /= iterations
+    # total1 /= iterations
     speedup[1].append(total1/total0)
     # x.append(width)
 
@@ -150,8 +154,8 @@ for width in range(2**8, 2**11 + 1, 256):
             unfused_f(A)
         results[1].append(unfused_time.interval)
         total1 += unfused_time.interval
-    total0 /= iterations
-    total1 /= iterations
+    # total0 /= iterations
+    # total1 /= iterations
     speedup[2].append(total1/total0)
     # x.append(width)
     total0, total1 = 0, 0
@@ -198,8 +202,8 @@ for width in range(2**8, 2**11 + 1, 256):
             unfused_f(A)
         results[1].append(unfused_time.interval)
         total1 += unfused_time.interval
-    total0 /= iterations
-    total1 /= iterations
+    # total0 /= iterations
+    # total1 /= iterations
     speedup[3].append(total1/total0)
 
 
@@ -219,9 +223,9 @@ import matplotlib.pyplot as plt
 #            fontsize=8)
 # plt.show()
 
-width = .15
+width = .2
 fig, ax = plt.subplots()
-x = [2 * i for i in x]
+# x = [2 * i for i in x]
 rects1 = ax.bar([index for index, _ in enumerate(x)], speedup[0], width, color='c')
 
 rects2 = ax.bar([index + width for index, _ in enumerate(x)], speedup[1], width, color='g')

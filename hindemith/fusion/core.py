@@ -298,7 +298,7 @@ class Fuser(object):
             if self._fuse_fusables:
                 fuse_fusables(fusable_nodes)
             # print(project.files[0])
-            print(project.files[1])
+            # print(project.files[1])
 
             return project
 
@@ -705,7 +705,7 @@ class FusedFn(ConcreteSpecializedFunction):
                     processed += (self.arg_buf_map[arg.ctypes.data],)
                 else:
                     buf, evt = cl.buffer_from_ndarray(self.queue, arg,
-                                                      blocking=True)
+                                                      blocking=False)
                     evt.wait()
                     processed += (buf,)
                     self.arg_buf_map[arg.ctypes.data] = buf
@@ -714,9 +714,9 @@ class FusedFn(ConcreteSpecializedFunction):
         return processed
 
     def __call__(self, *args):
-        with Timer() as t:
-            processed = self._process_args(args)
-        print("Copy input time: %.2fms" % (t.interval * 1000))
+        # with Timer() as t:
+        processed = self._process_args(args)
+        # print("Copy input time: %.2fms" % (t.interval * 1000))
         args = []
         offset = 0
         for index, num in enumerate(self.num_args):
@@ -728,12 +728,12 @@ class FusedFn(ConcreteSpecializedFunction):
             args.extend(processed[offset:offset + num])
             offset += num
         # args.extend(processed)
-        with Timer() as t:
-            self._c_function(*args)
-        print("Call time: %.2fms" % (t.interval * 1000))
-        with Timer() as t:
-            outputs = self._process_outputs()
-        print("Copy Output Time: %.2fms" % (t.interval * 1000))
+        # with Timer() as t:
+        self._c_function(*args)
+        # print("Call time: %.2fms" % (t.interval * 1000))
+        # with Timer() as t:
+        outputs = self._process_outputs()
+        # print("Copy Output Time: %.2fms" % (t.interval * 1000))
         return outputs
 
     def _process_outputs(self):
