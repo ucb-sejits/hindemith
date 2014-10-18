@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from ctree.meta.core import meta
+from hindemith.meta.core import meta
 from .array_add import array_add
 from .simple_stencil import simple_stencil
 from .kernels import laplacian_2d, x_gradient, y_gradient

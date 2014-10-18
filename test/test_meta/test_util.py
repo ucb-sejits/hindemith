@@ -1,4 +1,4 @@
-from ctree.meta.util import UniqueNamer, get_unique_func_name, \
+from hindemith.meta.util import UniqueNamer, get_unique_func_name, \
     find_entry_point, SymbolReplacer
 from ctree.c.nodes import Assign, SymbolRef, Add, CFile, FunctionDecl
 import unittest
