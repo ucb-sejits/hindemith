@@ -1,7 +1,7 @@
 import unittest
 from ctree.frontend import get_ast
 
-from ctree.meta.basic_blocks import get_basic_block, \
+from hindemith.meta.basic_blocks import get_basic_block, \
     separate_composable_blocks, NonComposableBlock, ComposableBlock
 
 import ast

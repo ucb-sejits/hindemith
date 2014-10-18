@@ -1,6 +1,6 @@
-from ctree.meta.liveness_analysis import perform_liveness_analysis
+from hindemith.meta.liveness_analysis import perform_liveness_analysis
 from ctree.frontend import get_ast
-from ctree.meta.basic_blocks import get_basic_block, separate_composable_blocks
+from hindemith.meta.basic_blocks import get_basic_block, separate_composable_blocks
 import unittest
 import numpy as np
 
