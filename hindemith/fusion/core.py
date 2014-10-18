@@ -18,7 +18,7 @@ from ctree.c.nodes import CFile, FunctionDecl, Op, FunctionCall, Constant, \
 from ctree.ocl.macros import barrier, CLK_LOCAL_MEM_FENCE
 from ctree.ocl.nodes import OclFile
 from ctree.ocl import get_context_and_queue_from_devices
-from ctree.util import Timer
+# from ctree.util import Timer
 
 from hindemith.utils import unique_kernel_name, unique_name
 
@@ -94,7 +94,7 @@ def fuse(func):
         # Remove Decorator
         tree.body[0].decorator_list = []
         tree = ast.fix_missing_locations(tree)
-        import ctree
+        # import ctree
         # ctree.browser_show_ast(tree, 'tmp.png')
         my_exec(compile(tree, '', 'exec'), symbol_table)
         func.hm_fused = symbol_table[func.__name__]
@@ -514,7 +514,7 @@ def incr_ids_and_move_ops(nodes):
             break
         idx_map = increment_local_ids(
             curr_node._load_shared_memory_block[-1].body,
-            # next_node._ghost_depth)
+            # nodes[i]._ghost_depth[0])
             1)  # Assume ghost_depth 1 for now
         new_ops = move_stencil_op(
             nodes[i]._stencil_op,
@@ -728,9 +728,10 @@ class FusedFn(ConcreteSpecializedFunction):
             args.extend(processed[offset:offset + num])
             offset += num
         # args.extend(processed)
-        # with Timer() as t:
-        self._c_function(*args)
-        # print("Call time: %.2fms" % (t.interval * 1000))
+        from ctree.util import Timer
+        with Timer() as t:
+            self._c_function(*args)
+        print("Call time: %.2fms" % (t.interval * 1000))
         # with Timer() as t:
         outputs = self._process_outputs()
         # print("Copy Output Time: %.2fms" % (t.interval * 1000))
@@ -745,14 +746,14 @@ class FusedFn(ConcreteSpecializedFunction):
             # FIXME: Assuming only one output is returned
             output = self.outputs[-1]
             buf = self.arg_buf_map[output.ctypes.data]
-            out, evt = cl.buffer_to_ndarray(self.queue, buf, like=output)
+            out, evt = cl.buffer_to_ndarray(self.queue, buf, like=output, blocking=True)
             evt.wait()
             self.arg_buf_map = {}
             return out
         for output in self.outputs:
             try:
                 buf = self.arg_buf_map[output.ctypes.data]
-                out, evt = cl.buffer_to_ndarray(self.queue, buf, like=output)
+                out, evt = cl.buffer_to_ndarray(self.queue, buf, like=output, blocking=True)
                 evt.wait()
                 retvals += (out,)
             except KeyError:

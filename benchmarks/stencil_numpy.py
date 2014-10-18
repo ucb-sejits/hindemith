@@ -14,33 +14,39 @@ radius = 1
 
 np_blur = np.array(
     [
-        [1, 1, 1],
-        [1, 1, 1],
-        [1, 1, 1]
+        [.111111111, .111111111, .111111111],
+        [.111111111, .111111111, .111111111],
+        [.111111111, .111111111, .111111111],
     ]
 )
 
 
 class Stencil(StencilKernel):
-    neighbor_definition = [[
-        (-1, 1),  (0, 1),  (1, 1),
-        (-1, 0),  (0, 0),  (1, 0),
-        (-1, -1), (0, -1), (1, -1)
-    ]]
+    neighbor_definition = [
+        # [(0, 1), (-1, 0),(1, 0), (0, -1)],
+        # [(0, 0)]]
+        [(-1, 1), (0, 1), (1, 1),
+         (-1, 0), (0, 0), (1, 0),
+         (-1, -1), (0, -1), (1, -1)]]
 
     def kernel(self, in_grid, out_grid):
         for x in self.interior_points(out_grid):
             for y in self.neighbors(x, 0):
-                out_grid[x] += in_grid[y]
+                out_grid[x] += .111111111 * in_grid[y]
+            # for y in self.neighbors(x, 1):
+            #     out_grid[x] += -4 * in_grid[y]
 
 
 x = []
-iterations = 1
+iterations = 10
 results = [[] for _ in range(4)]
 speedup = [[] for _ in range(4)]
 
-for width in range(2**10, 2**13, 1024):
+# for width in range(2**13, 2**13 + 1, 512):
 # for width in range(2**8, 2**10, 256):
+# for y in range(8, 13):
+#     width = 2 ** y
+for width in range(2**10, 2**13, 1024):
     print("Running width: %d" % width)
     total0, total1, total2, total3 = 0, 0, 0, 0
     for _ in range(iterations):
@@ -75,26 +81,34 @@ for width in range(2**10, 2**13, 1024):
         b = unfused_f(A)
         c = numpy_unfused(A)
         d = naive_f(A)
-        np.testing.assert_array_almost_equal(a[2:-2, 2:-2], b[2:-2, 2:-2], decimal=2)
-        np.testing.assert_array_almost_equal(a[2:-2, 2:-2], c[2:-2, 2:-2], decimal=2)
-        np.testing.assert_array_almost_equal(a[2:-2, 2:-2], d[2:-2, 2:-2], decimal=2)
+        np.testing.assert_array_almost_equal(a[4:-4, 4:-4], b[4:-4, 4:-4], decimal=1)
+        np.testing.assert_array_almost_equal(a[4:-4, 4:-4], c[4:-4, 4:-4], decimal=1)
+        np.testing.assert_array_almost_equal(a[4:-4, 4:-4], d[4:-4, 4:-4], decimal=1)
         # x.append(width)
-        with Timer() as fused_time:
-            fused_f(A)
-        # results[0].append(fused_time.interval)
-        total0 += fused_time.interval
 
-        with Timer() as unfused_time:
-            unfused_f(A)
-        total1 += unfused_time.interval
+        with Timer() as numpy_time:
+            numpy_unfused(A)
+        total3 += numpy_time.interval
 
         with Timer() as naive_time:
             naive_f(A)
         total2 += naive_time.interval
 
-        with Timer() as numpy_time:
-            numpy_unfused(A)
-        total3 += numpy_time.interval
+        print("---------unfused--------")
+        with Timer() as unfused_time:
+            unfused_f(A)
+        total1 += unfused_time.interval
+        print("----------------------")
+
+        print("---------fused--------")
+        with Timer() as fused_time:
+            fused_f(A)
+        # results[0].append(fused_time.interval)
+        total0 += fused_time.interval
+        print("------------------------")
+
+
+
 
     numpy = total3
     results[0].append(numpy / total0)
