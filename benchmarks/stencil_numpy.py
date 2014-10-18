@@ -4,6 +4,7 @@ from hindemith.fusion.core import dont_fuse_fusables
 from stencil_code.stencil_kernel import StencilKernel
 import numpy as np
 from scipy.ndimage import convolve
+from scipy.ndimage.filters import laplace
 
 from ctree.util import Timer
 
@@ -23,29 +24,31 @@ np_blur = np.array(
 
 class Stencil(StencilKernel):
     neighbor_definition = [
-        # [(0, 1), (-1, 0),(1, 0), (0, -1)],
-        # [(0, 0)]]
-        [(-1, 1), (0, 1), (1, 1),
-         (-1, 0), (0, 0), (1, 0),
-         (-1, -1), (0, -1), (1, -1)]]
+        [(0, 1), (-1, 0),(1, 0), (0, -1)],
+        [(0, 0)]]
+        # [(-1, 1), (0, 1), (1, 1),
+        #  (-1, 0), (0, 0), (1, 0),
+        #  (-1, -1), (0, -1), (1, -1)]]
 
     def kernel(self, in_grid, out_grid):
         for x in self.interior_points(out_grid):
+            # for y in self.neighbors(x, 0):
+            #     out_grid[x] += .111111111 * in_grid[y]
             for y in self.neighbors(x, 0):
-                out_grid[x] += .111111111 * in_grid[y]
-            # for y in self.neighbors(x, 1):
-            #     out_grid[x] += -4 * in_grid[y]
+                out_grid[x] += in_grid[y]
+            for y in self.neighbors(x, 1):
+                out_grid[x] += -4 * in_grid[y]
 
 
 x = []
-iterations = 10
+iterations = 5
 results = [[] for _ in range(4)]
 speedup = [[] for _ in range(4)]
 
 # for width in range(2**13, 2**13 + 1, 512):
 # for width in range(2**8, 2**10, 256):
 # for y in range(8, 13):
-#     width = 2 ** y
+    # width = 2 ** y
 for width in range(2**10, 2**13, 1024):
     print("Running width: %d" % width)
     total0, total1, total2, total3 = 0, 0, 0, 0
@@ -72,8 +75,7 @@ for width in range(2**10, 2**13, 1024):
             return stencil6(C)
 
         def numpy_unfused(A):
-            tmp = convolve(A, np_blur)
-            return convolve(tmp, np_blur)
+            return laplace(laplace(A))
 
         A = np.random.rand(width, width).astype(np.float32) * 256
 
