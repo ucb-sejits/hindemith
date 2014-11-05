@@ -1,7 +1,9 @@
 import unittest
 import numpy as np
 from hindemith.types.hmarray import hmarray
-from hindemith.types.hmarray import add, sub, mul, div
+from hindemith.types.hmarray import add, sub, mul, div, EltWiseArrayOp
+
+EltWiseArrayOp.backend = 'c'
 
 
 class TestOverride(unittest.TestCase):
