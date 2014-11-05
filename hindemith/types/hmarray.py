@@ -23,6 +23,10 @@ class hmarray(np.ndarray):
         else:
             obj = np.ndarray.__new__(subtype, shape, dtype, buffer, offset,
                                      strides, order)
+        obj.__add__ = add
+        obj.__sub__ = sub
+        obj.__mul__ = mul
+        obj.__div__ = div
         obj._ocl_buf = None
         obj._host_dirty = False
         obj._ocl_dirty = True
@@ -43,24 +47,6 @@ class hmarray(np.ndarray):
             cl.buffer_to_ndarray(self.queue, self._ocl_buf, self,
                                  blocking=True)
         return np.ndarray.__getitem__(self, item)
-
-    def __add__(self, other):
-        return add(self, other)
-
-    def __sub__(self, other):
-        return sub(self, other)
-
-    def __mul__(self, other):
-        return mul(self, other)
-
-    def __div__(self, other):
-        return div(self, other)
-
-
-
-
-
-
 
 
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
@@ -247,7 +233,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
         arg_cfgs = ()
         out_cfg = None
         for arg in args:
-            if isinstance(arg, np.ndarray):
+            if isinstance(arg, hmarray):
                 arg_cfgs += (NdArrCfg(arg.dtype, arg.ndim, arg.shape), )
                 out_cfg = (NdArrCfg(arg.dtype, arg.ndim, arg.shape), )
             else:
