@@ -11,7 +11,7 @@ from ctree.c.nodes import FunctionCall, FunctionDecl, SymbolRef, Constant, \
 from ctree.templates.nodes import StringTemplate
 from ctree.ocl.nodes import OclFile
 from ctree.ocl.macros import clSetKernelArg, get_global_id, NULL
-from ctree.meta.merge import MergeableInfo, FusableKernel, LoopDependence
+from hindemith.meta.merge import MergeableInfo, FusableKernel, LoopDependence
 
 import ctree.np
 
