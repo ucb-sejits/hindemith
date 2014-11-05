@@ -1,7 +1,18 @@
 import numpy as np
-# from hindemith.linalg import add, sub, mul, div
 import pycl as cl
 from ctree.ocl import get_context_and_queue_from_devices
+from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
+from ctree.c.nodes import FunctionDecl, SymbolRef, For, ArrayRef, Add, Assign, \
+    Constant, AddAssign, Lt, Mul, Sub, Div, CFile, FunctionCall, ArrayDef
+from ctree.templates.nodes import StringTemplate
+from ctree.ocl.macros import clSetKernelArg, NULL, get_global_id
+from ctree.ocl.nodes import OclFile
+from ctree.nodes import Project
+import ctree.np
+ctree.np
+from collections import namedtuple
+import ctypes as ct
+from functools import reduce
 
 
 class hmarray(np.ndarray):
@@ -42,42 +53,45 @@ class hmarray(np.ndarray):
         self._host_dirty = getattr(obj, '_host_dirty', False)
         self._ocl_dirty = getattr(obj, '_ocl_dirty', True)
 
+    @property
+    def ocl_buf(self):
+        if self._ocl_dirty is True:
+            buf, evt = cl.buffer_from_ndarray(self.queue, self,
+                                              blocking=True)
+            evt.wait()
+            self._ocl_buf = buf
+            self._ocl_dirty = False
+        return self._ocl_buf
+
+    def copy_to_host_if_dirty(self):
+        if self._host_dirty:
+            _, evt = cl.buffer_to_ndarray(self.queue, self._ocl_buf,
+                                          self, blocking=True)
+            evt.wait()
+            self._host_dirty = False
+
     def __getitem__(self, item):
         if self._host_dirty:
-            cl.buffer_to_ndarray(self.queue, self._ocl_buf, self,
-                                 blocking=True)
+            _, evt = cl.buffer_to_ndarray(self.queue, self._ocl_buf, self,
+                                          blocking=True)
+            evt.wait()
+
         return np.ndarray.__getitem__(self, item)
-
-
-from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from ctree.c.nodes import FunctionDecl, SymbolRef, For, ArrayRef, Add, Assign, \
-    Constant, AddAssign, Lt, Mul, Sub, Div, CFile, FunctionCall, ArrayDef
-from ctree.templates.nodes import StringTemplate
-from ctree.ocl.macros import clSetKernelArg, NULL, get_global_id
-from ctree.ocl.nodes import OclFile
-from ctree.ocl import get_context_and_queue_from_devices
-from ctree.nodes import Project
-import ctree.np
-ctree.np
-import numpy as np
-from collections import namedtuple
-import ctypes as ct
-import pycl as cl
-from functools import reduce
-# from hindemith.types import hmarray
 
 
 NdArrCfg = namedtuple('NdArrCfg', ['dtype', 'ndim', 'shape'])
 ScalarCfg = namedtuple('ScalarCfg', ['dtype'])
 
 
-curr_u = 0
+class LoopVarGenerator():
+    def __init__(self):
+        self.curr = 0
 
+    def __call__(self):
+        self.curr += 1
+        return "_l{}".format(self.curr)
 
-def next_loop_var():
-    global curr_u
-    curr_u += 1
-    return "_l{}".format(curr_u)
+next_loop_var = LoopVarGenerator()
 
 
 def gen_loop_index(loop_vars, shape):
@@ -176,9 +190,10 @@ class CConcreteEltOp(ConcreteSpecializedFunction):
     def __call__(self, *args):
         output = None
         for arg in args:
-            if isinstance(arg, np.ndarray):
-                output = np.zeros_like(arg)
-                break
+            if isinstance(arg, hmarray):
+                if output is None:
+                    output = hmarray(np.empty_like(arg))
+                output.copy_to_host_if_dirty()
         self._c_function(args[0], args[1], output)
         return output
 
@@ -207,13 +222,8 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
                     output._ocl_buf = out_buf
                     output._ocl_dirty = False
                     output._host_dirty = True
-                if arg._ocl_dirty is True:
-                    buf, evt = cl.buffer_from_ndarray(self.queue, arg,
-                                                      blocking=True)
-                    arg._ocl_buf = buf
-                    arg._ocl_dirty = False
                 evt.wait()
-                processed.append(arg._ocl_buf)
+                processed.append(arg.ocl_buf)
             else:
                 processed.append(arg)
         print(processed)

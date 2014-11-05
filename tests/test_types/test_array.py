@@ -11,7 +11,7 @@ class TestOverride(unittest.TestCase):
         self.c = np.random.rand(1024, 1024).astype(np.float32) * 100
 
     def _check(self, expected, actual):
-        expected[0]  # Looking up an item copies item back to host
+        expected.copy_to_host_if_dirty()
         expected = expected.view(np.ndarray)
         try:
             np.testing.assert_array_almost_equal(expected, actual)
@@ -42,7 +42,7 @@ class TestElt(unittest.TestCase):
         self.c = np.random.rand(1024, 1024).astype(np.float32) * 100
 
     def _check(self, expected, actual):
-        expected[0]  # Looking up an item copies item back to host
+        expected.copy_to_host_if_dirty()
         expected = expected.view(np.ndarray)
         try:
             np.testing.assert_array_almost_equal(expected, actual)
@@ -117,7 +117,7 @@ class TestScalarArrayElt(unittest.TestCase):
         self.c = np.random.rand(1024, 1024).astype(np.float32) * 100
 
     def _check(self, expected, actual):
-        expected[0]  # Looking up an item copies item back to host
+        expected.copy_to_host_if_dirty()
         expected = expected.view(np.ndarray)
         try:
             np.testing.assert_array_almost_equal(expected, actual)
