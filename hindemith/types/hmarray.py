@@ -75,6 +75,7 @@ class hmarray(np.ndarray):
             _, evt = cl.buffer_to_ndarray(self.queue, self._ocl_buf, self,
                                           blocking=True)
             evt.wait()
+            self._host_dirty = False
 
         return np.ndarray.__getitem__(self, item)
 
@@ -136,10 +137,14 @@ def for_range(r, step, body):
 
 
 def kernel_range(r, arg_types, body):
-    control = [
-        clSetKernelArg('kernel', 0, ct.sizeof(cl.cl_mem), 'arg0'),
-        clSetKernelArg('kernel', 1, ct.sizeof(cl.cl_mem), 'arg1'),
-        clSetKernelArg('kernel', 2, ct.sizeof(cl.cl_mem), 'output'),
+    control = []
+    params = []
+    for index, arg in enumerate(arg_types):
+        control.append(
+            clSetKernelArg('kernel', index, ct.sizeof(cl.cl_mem),
+                           'arg{}'.format(index)))
+        params.append(SymbolRef('arg{}'.format(index), arg()))
+    control.extend([
         ArrayDef(SymbolRef('global_size', ct.c_size_t()),
                  Constant(len(r)), r),
         ArrayDef(SymbolRef('local_size', ct.c_size_t()),
@@ -151,20 +156,18 @@ def kernel_range(r, arg_types, body):
                 Constant(0), NULL(), NULL()
             ]
         )
-    ]
+    ])
     body.insert(0, gen_ocl_loop_index(r))
     kernel = FunctionDecl(
         None,
-        SymbolRef('op_kernel'),
-        [SymbolRef('arg0', arg_types[0]()),
-         SymbolRef('arg1', arg_types[1]()),
-         SymbolRef('output', arg_types[2]())],
+        SymbolRef('kern'),
+        params,
         body,
     )
     for index, arg in enumerate(arg_types):
         if isinstance(arg(), np.ctypeslib._ndptr):
             kernel.params[index].set_global()
-            if index < 2:
+            if index < len(arg_types) - 1:
                 kernel.params[index].set_const()
     kernel.set_kernel()
     return control, OclFile('op_file', [kernel])
@@ -226,7 +229,6 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
                 processed.append(arg.ocl_buf)
             else:
                 processed.append(arg)
-        print(processed)
         self._c_function(processed[0], processed[1], out_buf, self.queue,
                          self.kernel)
         # buf, evt = cl.buffer_to_ndarray(self.queue, out_buf, output,
@@ -250,9 +252,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
                 arg_cfgs += (ScalarCfg(type(arg)), )
         return arg_cfgs + out_cfg
 
-    def transform(self, tree, program_cfg):
-        op = op_map[tree]
-        arg_cfg, tune_cfg = program_cfg
+    def process_arg_cfg(self, arg_cfg):
         arg_types = ()
         op_args = ()
         kernel_arg_types = ()
@@ -277,15 +277,21 @@ class EltWiseArrayOp(LazySpecializedFunction):
                     op_args += (SymbolRef('arg{}'.format(index)), )
                 if EltWiseArrayOp.backend == 'ocl':
                     kernel_arg_types += (py_to_ctypes[cfg.dtype], )
+        return arg_types, op_args, kernel_arg_types
+
+    def transform(self, tree, program_cfg):
+        op = op_map[tree]
+        arg_cfg, tune_cfg = program_cfg
+        arg_types, op_args, kernel_arg_types = self.process_arg_cfg(arg_cfg)
         loop_body = [
-            Assign(ArrayRef(SymbolRef('output'), SymbolRef('loop_idx')),
+            Assign(ArrayRef(SymbolRef('arg2'), SymbolRef('loop_idx')),
                    op(*op_args))]
         func = FunctionDecl(
             None,
             SymbolRef('op'),
             [SymbolRef('arg0', arg_types[0]()),
              SymbolRef('arg1', arg_types[1]()),
-             SymbolRef('output', arg_types[2]())],
+             SymbolRef('arg2', arg_types[2]())],
             []
         )
         proj = Project([CFile('op', [func])])
@@ -315,7 +321,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
             print(kernel)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
-            return fn.finalize(program['op_kernel'])
+            return fn.finalize(program['kern'])
 
 
 add = EltWiseArrayOp('+')
