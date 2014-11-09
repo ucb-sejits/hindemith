@@ -14,7 +14,7 @@ class TestOverride(unittest.TestCase):
         expected.copy_to_host_if_dirty()
         expected = expected.view(np.ndarray)
         try:
-            np.testing.assert_array_almost_equal(expected, actual)
+            np.testing.assert_array_almost_equal(expected, actual, decimal=5)
         except AssertionError as e:
             self.fail(e)
 
@@ -45,7 +45,7 @@ class TestElt(unittest.TestCase):
         expected.copy_to_host_if_dirty()
         expected = expected.view(np.ndarray)
         try:
-            np.testing.assert_array_almost_equal(expected, actual)
+            np.testing.assert_array_almost_equal(expected, actual, decimal=5)
         except AssertionError as e:
             self.fail(e)
 
