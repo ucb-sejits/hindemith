@@ -137,6 +137,7 @@ def for_range(r, step, body):
 
 
 def kernel_range(r, arg_types, body):
+    """TODO: Make local size computation dynamic"""
     control = []
     params = []
     for index, arg in enumerate(arg_types):
@@ -148,7 +149,7 @@ def kernel_range(r, arg_types, body):
         ArrayDef(SymbolRef('global_size', ct.c_size_t()),
                  Constant(len(r)), r),
         ArrayDef(SymbolRef('local_size', ct.c_size_t()),
-                 Constant(len(r)), [32 for _ in r]),
+                 Constant(len(r)), [16 for _ in r]),
         FunctionCall(
             SymbolRef('clEnqueueNDRangeKernel'), [
                 SymbolRef('queue'), SymbolRef('kernel'), Constant(len(r)),
