@@ -26,7 +26,7 @@ install:
   - pip install -e git://github.com/ucb-sejits/pycl.git#egg=pycl
   - pip install -e git://github.com/ucb-sejits/ctree.git#egg=ctree
   - pip install -e git://github.com/ucb-sejits/stencil_code.git#egg=stencil_code
-  script:
+script:
   - nosetests --verbose --with-coverage --cover-package=hindemith --cover-erase
 deploy:
   provider: pypi
