@@ -51,7 +51,7 @@ class MapOclTransform(ast.NodeTransformer):
 
     def visit_StoreOutput(self, node):
         return Assign(ArrayRef(SymbolRef(node.target), SymbolRef('loop_idx')),
-                      node.value)
+                      self.visit(node.value))
 
 
 class OclConcreteMap(ConcreteSpecializedFunction):
