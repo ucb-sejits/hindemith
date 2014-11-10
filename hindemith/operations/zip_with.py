@@ -78,6 +78,8 @@ class ZipWith(LazySpecializedFunction):
         arg_cfg, tune_cfg = program_config
         if hasattr(arg_cfg[0], '_hm_symbols'):
             symbols = arg_cfg[0]._hm_symbols
+        else:
+            symbols = {}
         tree = get_ast(arg_cfg[0])
         arg_cfg = arg_cfg[1:]
 
