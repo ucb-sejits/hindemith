@@ -55,7 +55,7 @@ class ZipWithFrontendTransformer(PyBasicConversions):
         for index, target in enumerate(self.targets):
             if target == node.id:
                 return ElementReference("arg{}".format(index))
-        return node
+        return PyBasicConversions.visit_Name(self, node)
 
     def visit_Return(self, node):
         return StoreOutput("arg{}".format(len(self.targets)),
@@ -76,6 +76,7 @@ class ZipWith(LazySpecializedFunction):
 
     def transform(self, tree, program_config):
         arg_cfg, tune_cfg = program_config
+        symbols = arg_cfg[0]._hm_symbols
         tree = get_ast(arg_cfg[0])
         arg_cfg = arg_cfg[1:]
 
@@ -102,7 +103,10 @@ class ZipWith(LazySpecializedFunction):
         )
         proj = Project([CFile('map', [func])])
         if ZipWith.backend == 'ocl':
-            backend = MapOclTransform()
+            type_table = {}
+            for index, t in enumerate(kernel_arg_types):
+                type_table['arg{}'.format(index)] = t
+            backend = MapOclTransform(symbols, type_table)
             loop_body = list(map(backend.visit, tree))
             proj.files[0].body.insert(0, StringTemplate("""
                 #ifdef __APPLE__
