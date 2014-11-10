@@ -76,7 +76,8 @@ class ZipWith(LazySpecializedFunction):
 
     def transform(self, tree, program_config):
         arg_cfg, tune_cfg = program_config
-        symbols = arg_cfg[0]._hm_symbols
+        if hasattr(arg_cfg[0], '_hm_symbols'):
+            symbols = arg_cfg[0]._hm_symbols
         tree = get_ast(arg_cfg[0])
         arg_cfg = arg_cfg[1:]
 
