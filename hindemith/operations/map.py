@@ -1,13 +1,15 @@
 __author__ = 'leonardtruong'
 
 from ctree.frontend import get_ast
-from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, Assign, ArrayRef
+from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, Assign, ArrayRef, \
+    Constant, BinaryOp, Op, FunctionCall, Cast
 from ctree.ocl import get_context_and_queue_from_devices
 from ctree.nodes import Project, CtreeNode
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
-from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray
+from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray, \
+    py_to_ctypes
 import ast
 import sys
 
@@ -50,12 +52,67 @@ class MapFrontendTransformer(PyBasicConversions):
 
 
 class MapOclTransform(ast.NodeTransformer):
+    def __init__(self, symbols=None, type_table=None):
+        if symbols is None:
+            self.symbols = {}
+        else:
+            self.symbols = symbols
+        if type_table is None:
+            self.type_table = {}
+        else:
+            self.type_table = type_table
+
+    def infer_type(self, node):
+        if isinstance(node, SymbolRef):
+            try:
+                return self.type_table[node.name]
+            except KeyError:
+                raise Exception(
+                    "Could not infer type of variable {}".format(node.name))
+        if isinstance(node, BinaryOp):
+            if isinstance(node.op, Op.ArrayRef):
+                return self.infer_type(node.left)._dtype_.type
+            left = self.infer_type(node.left)
+            right = self.infer_type(node.right)
+            return left
+        elif isinstance(node, FunctionCall):
+            if node.func.name == 'fabs':
+                return self.infer_type(node.args[0])
+            if node.func.name == 'pow':
+                return self.infer_type(node.args[0])
+            raise Exception(
+                "Could not infer type of call to function {}".format(
+                    node.func.name))
+        elif isinstance(node, Constant):
+            return py_to_ctypes[type(node.value)]
+        raise Exception(
+            "Could not infer type of variable {}".format(node.name))
+
     def visit_ElementReference(self, node):
         return ArrayRef(SymbolRef(node.name), SymbolRef('loop_idx'))
 
     def visit_StoreOutput(self, node):
         return Assign(ArrayRef(SymbolRef(node.target), SymbolRef('loop_idx')),
                       self.visit(node.value))
+
+    def visit_BinaryOp(self, node):
+        node.left = self.visit(node.left)
+        node.right = self.visit(node.right)
+        if isinstance(node.op, Op.Assign):
+            if isinstance(node.left, SymbolRef) and \
+               node.left.type is None:
+                node.left.type = self.infer_type(node.right)()
+            return node
+        return node
+
+    def visit_SymbolRef(self, node):
+        if node.name in self.symbols:
+            return Constant(self.symbols[node.name])
+        if node.name == 'abs':
+            node.name = 'fabs'
+        if node.type is not None:
+            self.type_table[node.name] = node.type
+        return node
 
 
 class OclConcreteMap(ConcreteSpecializedFunction):
