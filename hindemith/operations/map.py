@@ -9,6 +9,7 @@ from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
 from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray
 import ast
+import sys
 
 import numpy as np
 import pycl as cl
@@ -32,7 +33,10 @@ class StoreOutput(CtreeNode):
 
 class MapFrontendTransformer(PyBasicConversions):
     def visit_FunctionDef(self, node):
-        self.target = node.args.args[0].arg
+        if sys.version_info < (3, 0):
+            self.target = node.args.args[0].id
+        else:
+            self.target = node.args.args[0].arg
         node.body = list(map(self.visit, node.body))
         return node
 

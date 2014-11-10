@@ -13,6 +13,7 @@ from ctree.frontend import get_ast
 import numpy as np
 import ctypes as ct
 import pycl as cl
+import sys
 
 
 class OclConcreteZipWith(ConcreteSpecializedFunction):
@@ -43,7 +44,10 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
 
 class ZipWithFrontendTransformer(PyBasicConversions):
     def visit_FunctionDef(self, node):
-        self.targets = [arg.arg for arg in node.args.args]
+        if sys.version_info < (3, 0):
+            self.targets = [arg.id for arg in node.args.args]
+        else:
+            self.targets = [arg.arg for arg in node.args.args]
         node.body = list(map(self.visit, node.body))
         return node
 

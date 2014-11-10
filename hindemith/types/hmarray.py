@@ -99,7 +99,7 @@ def gen_loop_index(loop_vars, shape):
     base = SymbolRef(loop_vars[0])
     for index, var in enumerate(loop_vars[1:]):
         curr = Mul(SymbolRef(var),
-                   Constant(reduce(lambda x, y: x * y, shape[:index], 1)))
+                   Constant(reduce(lambda x, y: x * y, shape[:index + 1], 1)))
         base = Add(curr, base)
     return Assign(SymbolRef('loop_idx', ct.c_int()), base)
 
