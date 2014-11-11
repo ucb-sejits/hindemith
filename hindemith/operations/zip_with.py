@@ -9,7 +9,6 @@ from ctree.ocl import get_context_and_queue_from_devices
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
 from ctree.frontend import get_ast
-from ctree.util import Timer
 
 import numpy as np
 import ctypes as ct
@@ -23,9 +22,7 @@ class CConcreteZipWith(ConcreteSpecializedFunction):
 
     def __call__(self, *args):
         output = hmarray(np.empty_like(args[1]))
-        with Timer() as t:
-            self._c_function(*(args[1:] + (output, )))
-        print(t.interval)
+        self._c_function(*(args[1:] + (output, )))
         return output
 
 
@@ -50,9 +47,7 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
         output._host_dirty = True
         processed = [arg.ocl_buf for arg in args]
         processed.extend([out_buf, self.queue, self.kernel])
-        with Timer() as t:
-            self._c_function(*processed)
-        print(t.interval)
+        self._c_function(*processed)
         cl.clFinish(self.queue)
         return output
 
