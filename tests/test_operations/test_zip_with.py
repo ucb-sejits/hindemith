@@ -9,8 +9,8 @@ from hindemith.types.hmarray import hmarray
 
 class TestZipWith(unittest.TestCase):
     def setUp(self):
-        self.a = np.random.rand(1024).astype(np.float32) * 100
-        self.b = np.random.rand(1024).astype(np.float32) * 100
+        self.a = np.random.rand(32768).astype(np.float32) * 100
+        self.b = np.random.rand(32768).astype(np.float32) * 100
 
     def _check(self, actual, expected):
         actual.copy_to_host_if_dirty()
