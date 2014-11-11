@@ -52,6 +52,7 @@ class hmarray(np.ndarray):
         self._ocl_buf = getattr(obj, '_ocl_buf', None)
         self._host_dirty = getattr(obj, '_host_dirty', False)
         self._ocl_dirty = getattr(obj, '_ocl_dirty', True)
+        self.queue = getattr(obj, 'queue', None)
 
     @property
     def ocl_buf(self):
@@ -145,11 +146,46 @@ def kernel_range(r, arg_types, body):
             clSetKernelArg('kernel', index, ct.sizeof(cl.cl_mem),
                            'arg{}'.format(index)))
         params.append(SymbolRef('arg{}'.format(index), arg()))
+    devices = cl.clGetDeviceIDs()
+    max_sizes = cl.clGetDeviceInfo(
+        devices[-1], cl.cl_device_info.CL_DEVICE_MAX_WORK_ITEM_SIZES)
+    max_total = cl.clGetDeviceInfo(
+        devices[-1], cl.cl_device_info.CL_DEVICE_MAX_WORK_GROUP_SIZE)
+
+    if len(arg_types[0]._shape_) == 2:
+        x_len, y_len = 1, 1
+        while True:
+            if arg_types[0]._shape_[0] % 2 == 1:
+                x_len = 1
+            else:
+                x_len = min(max_sizes[0], x_len * 2)
+                if arg_types[0]._shape_[0] % x_len != 0:
+                    x_len /= 2
+                    break
+            if max_total - x_len * y_len <= 0:
+                break
+            if arg_types[0]._shape_[1] % 2 == 1:
+                y_len = 1
+            else:
+                y_len = min(max_sizes[1], y_len * 2)
+                if arg_types[0]._shape_[1] % y_len != 0:
+                    y_len /= 2
+                    break
+            if max_total - x_len * y_len <= 0:
+                break
+            if x_len == arg_types[0]._shape_[0] or \
+                    y_len == arg_types[0]._shape_[1]:
+                break
+
+        local_size = (x_len, y_len)
+    else:
+        local_size = (min(
+            max_total, max_sizes[0], arg_types[0]._shape_[0] / 2), )
     control.extend([
         ArrayDef(SymbolRef('global_size', ct.c_size_t()),
                  Constant(len(r)), r),
         ArrayDef(SymbolRef('local_size', ct.c_size_t()),
-                 Constant(len(r)), [16 for _ in r]),
+                 Constant(len(r)), local_size),
         FunctionCall(
             SymbolRef('clEnqueueNDRangeKernel'), [
                 SymbolRef('queue'), SymbolRef('kernel'), Constant(len(r)),

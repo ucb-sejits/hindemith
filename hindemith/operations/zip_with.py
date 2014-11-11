@@ -1,5 +1,5 @@
-from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray
-from .map import MapOclTransform, OclConcreteMap, ElementReference, \
+from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray, for_range
+from .map import MapOclTransform, ElementReference, \
     StoreOutput
 
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
@@ -9,11 +9,24 @@ from ctree.ocl import get_context_and_queue_from_devices
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
 from ctree.frontend import get_ast
+from ctree.util import Timer
 
 import numpy as np
 import ctypes as ct
 import pycl as cl
 import sys
+
+
+class CConcreteZipWith(ConcreteSpecializedFunction):
+    def __init__(self, entry_name, proj, entry_type):
+        self._c_function = self._compile(entry_name, proj, entry_type)
+
+    def __call__(self, *args):
+        output = hmarray(np.empty_like(args[1]))
+        with Timer() as t:
+            self._c_function(*(args[1:] + (output, )))
+        print(t.interval)
+        return output
 
 
 class OclConcreteZipWith(ConcreteSpecializedFunction):
@@ -37,7 +50,9 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
         output._host_dirty = True
         processed = [arg.ocl_buf for arg in args]
         processed.extend([out_buf, self.queue, self.kernel])
-        self._c_function(*processed)
+        with Timer() as t:
+            self._c_function(*processed)
+        print(t.interval)
         cl.clFinish(self.queue)
         return output
 
@@ -85,11 +100,11 @@ class ZipWith(LazySpecializedFunction):
 
         arg_types, kernel_arg_types = (), ()
 
-        if ZipWith.backend == 'c':
+        if self.backend == 'c':
             for cfg in arg_cfg:
                 arg_types += (np.ctypeslib.ndpointer(cfg.dtype, cfg.ndim,
                                                      cfg.shape),)
-        else:
+        elif self.backend == 'ocl':
             for cfg in arg_cfg:
                 kernel_arg_types += (
                     np.ctypeslib.ndpointer(cfg.dtype, cfg.ndim, cfg.shape),)
@@ -105,12 +120,20 @@ class ZipWith(LazySpecializedFunction):
             []
         )
         proj = Project([CFile('map', [func])])
-        if ZipWith.backend == 'ocl':
-            type_table = {}
+        type_table = {}
+        if self.backend == 'c':
+            for index, t in enumerate(arg_types):
+                type_table['arg{}'.format(index)] = t
+        elif self.backend == 'ocl':
             for index, t in enumerate(kernel_arg_types):
                 type_table['arg{}'.format(index)] = t
-            backend = MapOclTransform(symbols, type_table)
-            loop_body = list(map(backend.visit, tree))
+        backend = MapOclTransform(symbols, type_table)
+        loop_body = list(map(backend.visit, tree))
+        if self.backend == 'c':
+            func.defn.append(for_range(arg_cfg[0].shape, 1, loop_body))
+            entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
+            return CConcreteZipWith('zip_with', proj, entry_type)
+        elif self.backend == 'ocl':
             proj.files[0].body.insert(0, StringTemplate("""
                 #ifdef __APPLE__
                 #include <OpenCL/opencl.h>
