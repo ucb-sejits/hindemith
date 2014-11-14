@@ -14,7 +14,7 @@ class TestZipWith(unittest.TestCase):
 
     def _check(self, actual, expected):
         actual.copy_to_host_if_dirty()
-        actual.view(np.ndarray)
+        actual = np.copy(actual)
         try:
             np.testing.assert_array_almost_equal(actual, expected,
                                                  decimal=5)
