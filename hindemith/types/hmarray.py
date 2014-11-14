@@ -3,11 +3,14 @@ import pycl as cl
 from ctree.ocl import get_context_and_queue_from_devices
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.c.nodes import FunctionDecl, SymbolRef, For, ArrayRef, Add, Assign, \
-    Constant, AddAssign, Lt, Mul, Sub, Div, CFile, FunctionCall, ArrayDef
+    Constant, AddAssign, Lt, Mul, Sub, Div, CFile, FunctionCall, ArrayDef, If, \
+    And
 from ctree.templates.nodes import StringTemplate
 from ctree.ocl.macros import clSetKernelArg, NULL, get_global_id
 from ctree.ocl.nodes import OclFile
 from ctree.nodes import Project
+from ctree.omp.nodes import OmpParallelFor
+from ctree.omp.macros import IncludeOmpHeader
 import ctree.np
 ctree.np
 from collections import namedtuple
@@ -34,10 +37,10 @@ class hmarray(np.ndarray):
         else:
             obj = np.ndarray.__new__(subtype, shape, dtype, buffer, offset,
                                      strides, order)
-        obj.__add__ = add
-        obj.__sub__ = sub
-        obj.__mul__ = mul
-        obj.__div__ = div
+        subtype.__add__ = add
+        subtype.__sub__ = sub
+        subtype.__mul__ = mul
+        subtype.__div__ = div
         obj._ocl_buf = None
         obj._host_dirty = False
         obj._ocl_dirty = True
@@ -53,6 +56,7 @@ class hmarray(np.ndarray):
         self._host_dirty = getattr(obj, '_host_dirty', False)
         self._ocl_dirty = getattr(obj, '_ocl_dirty', True)
         self.queue = getattr(obj, 'queue', None)
+        self.__add__ = getattr(obj, '__add__')
 
     @property
     def ocl_buf(self):
@@ -70,6 +74,7 @@ class hmarray(np.ndarray):
                                           self, blocking=True)
             evt.wait()
             self._host_dirty = False
+            return _
 
     def __getitem__(self, item):
         if self._host_dirty:
@@ -97,8 +102,8 @@ next_loop_var = LoopVarGenerator()
 
 
 def gen_loop_index(loop_vars, shape):
-    base = SymbolRef(loop_vars[0])
-    for index, var in enumerate(loop_vars[1:]):
+    base = SymbolRef(loop_vars[-1])
+    for index, var in reversed(list(enumerate(loop_vars[:-1]))):
         curr = Mul(SymbolRef(var),
                    Constant(reduce(lambda x, y: x * y, shape[:index + 1], 1)))
         base = Add(curr, base)
@@ -127,7 +132,7 @@ def for_range(r, step, body):
         loop_vars.append(next_loop_var())
         curr_body.append(
             For(Assign(SymbolRef(loop_vars[-1], ct.c_int()), Constant(0)),
-                Lt(SymbolRef(loop_vars[-1]), Constant(r[-1])),
+                Lt(SymbolRef(loop_vars[-1]), Constant(dim)),
                 AddAssign(SymbolRef(loop_vars[-1]), step),
                 next_body)
         )
@@ -135,6 +140,19 @@ def for_range(r, step, body):
     curr_body.append(gen_loop_index(loop_vars, r))
     curr_body.extend(body)
     return node
+
+
+def gen_kernel_cond(global_size, shape):
+    conds = ()
+    for index, g, s in zip(range(len(global_size)), global_size, shape):
+        if s < g:
+            conds += (Lt(get_global_id(index), Constant(s)), )
+    if len(conds) == 0:
+        return None
+    cond = conds[0]
+    for c in conds[1:]:
+        cond = And(c, cond)
+    return cond
 
 
 def kernel_range(r, arg_types, body):
@@ -146,44 +164,52 @@ def kernel_range(r, arg_types, body):
             clSetKernelArg('kernel', index, ct.sizeof(cl.cl_mem),
                            'arg{}'.format(index)))
         params.append(SymbolRef('arg{}'.format(index), arg()))
-    devices = cl.clGetDeviceIDs()
-    max_sizes = cl.clGetDeviceInfo(
-        devices[-1], cl.cl_device_info.CL_DEVICE_MAX_WORK_ITEM_SIZES)
-    max_total = cl.clGetDeviceInfo(
-        devices[-1], cl.cl_device_info.CL_DEVICE_MAX_WORK_GROUP_SIZE)
+    # devices = cl.clGetDeviceIDs()
+    # max_sizes = cl.clGetDeviceInfo(
+    #     devices[-1], cl.cl_device_info.CL_DEVICE_MAX_WORK_ITEM_SIZES)
+    # max_total = cl.clGetDeviceInfo(
+    #     devices[-1], cl.cl_device_info.CL_DEVICE_MAX_WORK_GROUP_SIZE)
 
     if len(arg_types[0]._shape_) == 2:
-        x_len, y_len = 1, 1
-        while True:
-            if arg_types[0]._shape_[0] % 2 == 1:
-                x_len = 1
-            else:
-                x_len = min(max_sizes[0], x_len * 2)
-                if arg_types[0]._shape_[0] % x_len != 0:
-                    x_len /= 2
-                    break
-            if max_total - x_len * y_len <= 0:
-                break
-            if arg_types[0]._shape_[1] % 2 == 1:
-                y_len = 1
-            else:
-                y_len = min(max_sizes[1], y_len * 2)
-                if arg_types[0]._shape_[1] % y_len != 0:
-                    y_len /= 2
-                    break
-            if max_total - x_len * y_len <= 0:
-                break
-            if x_len == arg_types[0]._shape_[0] or \
-                    y_len == arg_types[0]._shape_[1]:
-                break
+        # x_len, y_len = 1, 1
+        # while True:
+        #     if arg_types[0]._shape_[0] % 2 == 1:
+        #         x_len = 1
+        #     else:
+        #         x_len = min(max_sizes[0], x_len * 2)
+        #         if arg_types[0]._shape_[0] % x_len != 0:
+        #             x_len /= 2
+        #             break
+        #     if max_total - x_len * y_len <= 0:
+        #         break
+        #     if arg_types[0]._shape_[1] % 2 == 1:
+        #         y_len = 1
+        #     else:
+        #         y_len = min(max_sizes[1], y_len * 2)
+        #         if arg_types[0]._shape_[1] % y_len != 0:
+        #             y_len /= 2
+        #             break
+        #     if max_total - x_len * y_len <= 0:
+        #         break
+        #     if x_len == arg_types[0]._shape_[0] or \
+        #             y_len == arg_types[0]._shape_[1]:
+        #         break
 
-        local_size = (x_len, y_len)
+        # local_size = (x_len, y_len)
+        local_size = (32, 32)
     else:
-        local_size = (min(
-            max_total, max_sizes[0], arg_types[0]._shape_[0] / 2), )
+        local_size = (32, )
+        # local_size = (min(
+        #     max_total, max_sizes[0], arg_types[0]._shape_[0] / 2), )
+    global_size = ()
+    for d in r:
+        if d % 32 != 0:
+            global_size += ((d + 31) & (~31),)
+        else:
+            global_size += (d,)
     control.extend([
         ArrayDef(SymbolRef('global_size', ct.c_size_t()),
-                 Constant(len(r)), r),
+                 Constant(len(r)), global_size),
         ArrayDef(SymbolRef('local_size', ct.c_size_t()),
                  Constant(len(r)), local_size),
         FunctionCall(
@@ -192,14 +218,18 @@ def kernel_range(r, arg_types, body):
                 Constant(0), SymbolRef('global_size'), SymbolRef('local_size'),
                 Constant(0), NULL(), NULL()
             ]
-        )
+        ),
+        FunctionCall(SymbolRef('clFinish'), [SymbolRef('queue')])
     ])
     body.insert(0, gen_ocl_loop_index(r))
+    cond = gen_kernel_cond(global_size, r)
+    if cond:
+        body = If(cond, body)
     kernel = FunctionDecl(
         None,
         SymbolRef('kern'),
         params,
-        body,
+        body
     )
     for index, arg in enumerate(arg_types):
         if isinstance(arg(), np.ctypeslib._ndptr):
@@ -225,6 +255,7 @@ op_map = {
 
 class CConcreteEltOp(ConcreteSpecializedFunction):
     def __init__(self, entry_name, proj, entry_type):
+        print(proj.files[0])
         self._c_function = self._compile(entry_name, proj, entry_type)
 
     def __call__(self, *args):
@@ -232,8 +263,8 @@ class CConcreteEltOp(ConcreteSpecializedFunction):
         for arg in args:
             if isinstance(arg, hmarray):
                 if output is None:
-                    output = hmarray(np.empty_like(arg))
-                output.copy_to_host_if_dirty()
+                    output = hmarray(np.zeros_like(arg))
+                arg.copy_to_host_if_dirty()
         self._c_function(args[0], args[1], output)
         return output
 
@@ -268,15 +299,11 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
                 processed.append(arg)
         self._c_function(processed[0], processed[1], out_buf, self.queue,
                          self.kernel)
-        # buf, evt = cl.buffer_to_ndarray(self.queue, out_buf, output,
-        #                                 blockking=True)
-        cl.clFinish(self.queue)
-        # evt.wait()
         return output
 
 
 class EltWiseArrayOp(LazySpecializedFunction):
-    backend = 'ocl'
+    backend = 'omp'
 
     def args_to_subconfig(self, args):
         arg_cfgs = ()
@@ -295,7 +322,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
         kernel_arg_types = ()
         for index, cfg in enumerate(arg_cfg):
             if isinstance(cfg, NdArrCfg):
-                if EltWiseArrayOp.backend == 'c':
+                if self.backend in {'c', 'omp'}:
                     arg_types += (np.ctypeslib.ndpointer(
                         cfg.dtype, cfg.ndim, cfg.shape), )
                     if index < 2:
@@ -332,11 +359,15 @@ class EltWiseArrayOp(LazySpecializedFunction):
             []
         )
         proj = Project([CFile('op', [func])])
-        if EltWiseArrayOp.backend == 'c':
+        if self.backend in {'c', 'omp'}:
+            if self.backend == 'omp':
+                func.defn.append(OmpParallelFor())
+                proj.files[0].config_target = 'omp'
+            proj.files[0].body.insert(0, IncludeOmpHeader())
             func.defn.append(for_range(arg_cfg[2].shape, 1, loop_body))
             entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
             return CConcreteEltOp('op', proj, entry_type)
-        elif EltWiseArrayOp.backend == 'ocl':
+        elif self.backend == 'ocl':
             proj.files[0].body.insert(0, StringTemplate("""
                 #ifdef __APPLE__
                 #include <OpenCL/opencl.h>
@@ -361,7 +392,23 @@ class EltWiseArrayOp(LazySpecializedFunction):
             return fn.finalize(program['kern'])
 
 
-add = EltWiseArrayOp('+')
-sub = EltWiseArrayOp('-')
-mul = EltWiseArrayOp('*')
-div = EltWiseArrayOp('/')
+spec_add = EltWiseArrayOp('+')
+spec_sub = EltWiseArrayOp('-')
+spec_mul = EltWiseArrayOp('*')
+spec_div = EltWiseArrayOp('/')
+
+
+def add(a, b):
+    return spec_add(a, b)
+
+
+def sub(a, b):
+    return spec_sub(a, b)
+
+
+def mul(a, b):
+    return spec_mul(a, b)
+
+
+def div(a, b):
+    return spec_div(a, b)

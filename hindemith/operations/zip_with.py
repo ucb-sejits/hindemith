@@ -9,6 +9,8 @@ from ctree.ocl import get_context_and_queue_from_devices
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
 from ctree.frontend import get_ast
+from ctree.omp.macros import IncludeOmpHeader
+from ctree.omp.nodes import OmpParallelFor
 
 import numpy as np
 import ctypes as ct
@@ -18,10 +20,12 @@ import sys
 
 class CConcreteZipWith(ConcreteSpecializedFunction):
     def __init__(self, entry_name, proj, entry_type):
+        print(proj.files[0])
         self._c_function = self._compile(entry_name, proj, entry_type)
 
     def __call__(self, *args):
-        output = hmarray(np.empty_like(args[1]))
+        # output = hmarray(np.zeros_like(args[1]))
+        output = np.zeros(args[1].shape, dtype=args[1].dtype)
         self._c_function(*(args[1:] + (output, )))
         return output
 
@@ -38,7 +42,7 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
         return self
 
     def __call__(self, f, *args):
-        output = hmarray(np.empty_like(args[0]))
+        output = hmarray(np.zeros_like(args[0]))
         out_buf, evt = cl.buffer_from_ndarray(self.queue, output,
                                               blocking=True)
         evt.wait()
@@ -48,7 +52,6 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
         processed = [arg.ocl_buf for arg in args]
         processed.extend([out_buf, self.queue, self.kernel])
         self._c_function(*processed)
-        cl.clFinish(self.queue)
         return output
 
 
@@ -73,7 +76,7 @@ class ZipWithFrontendTransformer(PyBasicConversions):
 
 
 class ZipWith(LazySpecializedFunction):
-    backend = 'ocl'
+    backend = 'omp'
 
     def args_to_subconfig(self, args):
         """TODO: Type check"""
@@ -95,7 +98,7 @@ class ZipWith(LazySpecializedFunction):
 
         arg_types, kernel_arg_types = (), ()
 
-        if self.backend == 'c':
+        if self.backend == 'c' or self.backend == 'omp':
             for cfg in arg_cfg:
                 arg_types += (np.ctypeslib.ndpointer(cfg.dtype, cfg.ndim,
                                                      cfg.shape),)
@@ -116,7 +119,7 @@ class ZipWith(LazySpecializedFunction):
         )
         proj = Project([CFile('map', [func])])
         type_table = {}
-        if self.backend == 'c':
+        if self.backend == 'c' or self.backend == 'omp':
             for index, t in enumerate(arg_types):
                 type_table['arg{}'.format(index)] = t
         elif self.backend == 'ocl':
@@ -124,7 +127,11 @@ class ZipWith(LazySpecializedFunction):
                 type_table['arg{}'.format(index)] = t
         backend = MapOclTransform(symbols, type_table)
         loop_body = list(map(backend.visit, tree))
-        if self.backend == 'c':
+        if self.backend == 'omp':
+            func.defn.append(OmpParallelFor())
+            proj.files[0].config_target = 'omp'
+            proj.files[0].body.insert(0, IncludeOmpHeader())
+        if self.backend == 'c' or self.backend == 'omp':
             func.defn.append(for_range(arg_cfg[0].shape, 1, loop_body))
             entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
             return CConcreteZipWith('zip_with', proj, entry_type)
