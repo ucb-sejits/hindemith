@@ -73,6 +73,15 @@ class ZipWithFrontendTransformer(PyBasicConversions):
                            self.visit(node.value))
 
 
+ocl_header = StringTemplate("""
+                #ifdef __APPLE__
+                #include <OpenCL/opencl.h>
+                #else
+                #include <CL/cl.h>
+                #endif
+                """)
+
+
 class ZipWith(LazySpecializedFunction):
     backend = 'c'
 
@@ -85,17 +94,8 @@ class ZipWith(LazySpecializedFunction):
             out_cfg = (NdArrCfg(arg.dtype, arg.ndim, arg.shape), )
         return arg_cfgs + out_cfg
 
-    def transform(self, tree, program_config):
-        arg_cfg, tune_cfg = program_config
-        if hasattr(arg_cfg[0], '_hm_symbols'):
-            symbols = arg_cfg[0]._hm_symbols
-        else:
-            symbols = {}
-        tree = get_ast(arg_cfg[0])
-        arg_cfg = arg_cfg[1:]
-
+    def process_arg_types(self, arg_cfg):
         arg_types, kernel_arg_types = (), ()
-
         if self.backend == 'c' or self.backend == 'omp':
             for cfg in arg_cfg:
                 arg_types += (np.ctypeslib.ndpointer(cfg.dtype, cfg.ndim,
@@ -105,6 +105,28 @@ class ZipWith(LazySpecializedFunction):
                 kernel_arg_types += (
                     np.ctypeslib.ndpointer(cfg.dtype, cfg.ndim, cfg.shape),)
                 arg_types += (cl.cl_mem, )
+        return arg_types, kernel_arg_types
+
+    def build_type_table(self, arg_types, kernel_arg_types):
+        type_table = {}
+        if self.backend == 'c' or self.backend == 'omp':
+            for index, t in enumerate(arg_types):
+                type_table['arg{}'.format(index)] = t
+        elif self.backend == 'ocl':
+            for index, t in enumerate(kernel_arg_types):
+                type_table['arg{}'.format(index)] = t
+        return type_table
+
+    def transform(self, tree, program_config):
+        arg_cfg, tune_cfg = program_config
+        if hasattr(arg_cfg[0], '_hm_symbols'):
+            symbols = arg_cfg[0]._hm_symbols
+        else:
+            symbols = {}
+        tree = get_ast(arg_cfg[0])
+        arg_cfg = arg_cfg[1:]
+
+        arg_types, kernel_arg_types = self.process_arg_types(arg_cfg)
 
         tree = ZipWithFrontendTransformer().visit(tree).files[0].body[0].body
 
@@ -116,31 +138,19 @@ class ZipWith(LazySpecializedFunction):
             []
         )
         proj = Project([CFile('map', [func])])
-        type_table = {}
-        if self.backend == 'c' or self.backend == 'omp':
-            for index, t in enumerate(arg_types):
-                type_table['arg{}'.format(index)] = t
-        elif self.backend == 'ocl':
-            for index, t in enumerate(kernel_arg_types):
-                type_table['arg{}'.format(index)] = t
+        type_table = self.build_type_table(arg_types, kernel_arg_types)
         backend = MapOclTransform(symbols, type_table)
         loop_body = list(map(backend.visit, tree))
-        if self.backend == 'omp':
-            func.defn.append(OmpParallelFor())
-            proj.files[0].config_target = 'omp'
-            proj.files[0].body.insert(0, IncludeOmpHeader())
         if self.backend == 'c' or self.backend == 'omp':
+            if self.backend == 'omp':
+                func.defn.append(OmpParallelFor())
+                proj.files[0].config_target = 'omp'
+                proj.files[0].body.insert(0, IncludeOmpHeader())
             func.defn.append(for_range(arg_cfg[0].shape, 1, loop_body))
             entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
             return CConcreteZipWith('zip_with', proj, entry_type)
         elif self.backend == 'ocl':
-            proj.files[0].body.insert(0, StringTemplate("""
-                #ifdef __APPLE__
-                #include <OpenCL/opencl.h>
-                #else
-                #include <CL/cl.h>
-                #endif
-                """))
+            proj.files[0].body.insert(0, ocl_header)
             func.params.extend((
                 SymbolRef('queue', cl.cl_command_queue()),
                 SymbolRef('kernel', cl.cl_kernel())
@@ -151,8 +161,6 @@ class ZipWith(LazySpecializedFunction):
             func.defn = control
             entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
             fn = OclConcreteZipWith('zip_with', proj, entry_type)
-            print(kernel)
-            print(func)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
             return fn.finalize(program['kern'])
