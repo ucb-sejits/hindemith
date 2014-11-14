@@ -76,7 +76,7 @@ class ZipWithFrontendTransformer(PyBasicConversions):
 
 
 class ZipWith(LazySpecializedFunction):
-    backend = 'omp'
+    backend = 'c'
 
     def args_to_subconfig(self, args):
         """TODO: Type check"""

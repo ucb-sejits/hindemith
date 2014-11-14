@@ -303,7 +303,7 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
 
 
 class EltWiseArrayOp(LazySpecializedFunction):
-    backend = 'omp'
+    backend = 'c'
 
     def args_to_subconfig(self, args):
         arg_cfgs = ()
