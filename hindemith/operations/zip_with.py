@@ -20,12 +20,10 @@ import sys
 
 class CConcreteZipWith(ConcreteSpecializedFunction):
     def __init__(self, entry_name, proj, entry_type):
-        print(proj.files[0])
         self._c_function = self._compile(entry_name, proj, entry_type)
 
     def __call__(self, *args):
-        # output = hmarray(np.zeros_like(args[1]))
-        output = np.zeros(args[1].shape, dtype=args[1].dtype)
+        output = hmarray(np.zeros_like(args[1]))
         self._c_function(*(args[1:] + (output, )))
         return output
 
