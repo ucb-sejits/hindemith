@@ -361,9 +361,9 @@ class EltWiseArrayOp(LazySpecializedFunction):
         proj = Project([CFile('op', [func])])
         if self.backend in {'c', 'omp'}:
             if self.backend == 'omp':
+                proj.files[0].body.insert(0, IncludeOmpHeader())
                 func.defn.append(OmpParallelFor())
                 proj.files[0].config_target = 'omp'
-            proj.files[0].body.insert(0, IncludeOmpHeader())
             func.defn.append(for_range(arg_cfg[2].shape, 1, loop_body))
             entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
             return CConcreteEltOp('op', proj, entry_type)
