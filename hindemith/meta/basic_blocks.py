@@ -24,6 +24,8 @@ def str_dump(item, tab=0):
     elif isinstance(item, ast.Call):
         return "{}({})".format(str_dump(item.func),
                                ", ".join(map(str_dump, item.args)))
+    elif isinstance(item, ast.Expr):
+        return str_dump(item.value)
     elif isinstance(item, ast.Tuple):
         return "({})".format(", ".join(map(str_dump, item.elts)))
     elif isinstance(item, ast.Num):
@@ -94,9 +96,9 @@ BasicBlock
 
 def is_composable(statement, env):
     return isinstance(statement, ast.Assign) and \
-           isinstance(statement.value, ast.Call) and \
-           isinstance(eval_in_env(env, statement.value.func),
-                      LazySpecializedFunction)
+        isinstance(statement.value, ast.Call) and \
+        isinstance(eval_in_env(env, statement.value.func),
+                   LazySpecializedFunction)
 
 
 def separate_composable_blocks(basic_block, env):
@@ -219,6 +221,8 @@ def decompose(expr):
                 ), )
             else:
                 body += (ast.Call(visit(expr.func), args, [], None, None), )
+        elif isinstance(expr, ast.Expr):
+            return (ast.Expr(visit(expr.value)[0]), )
         else:
             raise Exception("Unsupported expression {}".format(expr))
         return body
@@ -237,9 +241,8 @@ def get_basic_block(module):
 def process_composable_blocks(basic_block, env):
     body = []
     for sub_block in basic_block:
-        # if isinstance(sub_block, ComposableBlock):
-        #     body.append(merge_entry_points(sub_block, env))
-        # else:
-        #     body.extend(sub_block.statements)
-        body.extend(sub_block.statements)
+        if isinstance(sub_block, ComposableBlock):
+            body.append(merge_entry_points(sub_block, env))
+        else:
+            body.extend(sub_block.statements)
     return BasicBlock(basic_block.name, basic_block.params, body)

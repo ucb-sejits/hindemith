@@ -2,7 +2,7 @@ __author__ = 'leonardtruong'
 
 from ctree.frontend import get_ast
 from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, Assign, ArrayRef, \
-    Constant, BinaryOp, Op, FunctionCall, Cast
+    Constant, BinaryOp, Op, FunctionCall
 from ctree.ocl import get_context_and_queue_from_devices
 from ctree.nodes import Project, CtreeNode
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
@@ -45,7 +45,7 @@ class MapFrontendTransformer(PyBasicConversions):
     def visit_Name(self, node):
         if node.id == self.target:
             return ElementReference("arg0")
-        return node
+        return super(MapFrontendTransformer, self).visit_Name(node)
 
     def visit_Return(self, node):
         return StoreOutput("arg1", self.visit(node.value))
@@ -129,7 +129,7 @@ class OclConcreteMap(ConcreteSpecializedFunction):
         return self
 
     def __call__(self, arg):
-        output = hmarray(np.empty_like(arg))
+        output = hmarray(np.zeros_like(arg))
         out_buf, evt = cl.buffer_from_ndarray(self.queue, output,
                                               blocking=True)
         output._ocl_buf = out_buf
@@ -137,7 +137,6 @@ class OclConcreteMap(ConcreteSpecializedFunction):
         output._host_dirty = True
         evt.wait()
         self._c_function(arg.ocl_buf, out_buf, self.queue, self.kernel)
-        cl.clFinish(self.queue)
         return output
 
 
@@ -183,23 +182,31 @@ class SpecializedMap(LazySpecializedFunction):
                 #include <CL/cl.h>
                 #endif
                 """))
-            func.params.extend((
-                SymbolRef('queue', cl.cl_command_queue()),
-                SymbolRef('kernel', cl.cl_kernel())
-            ))
             arg_types += (cl.cl_command_queue, cl.cl_kernel)
-            print(arg_cfg.shape)
-            control, kernel = kernel_range(arg_cfg.shape,
+            shape = arg_cfg.shape[::-1]
+            control, kernel = kernel_range(shape, shape,
                                            kernel_arg_types, loop_body)
             func.defn = control
             entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
+            func.params.extend((
+                SymbolRef('queue', cl.cl_command_queue()),
+                SymbolRef(kernel.body[0].name.name, cl.cl_kernel())
+            ))
             fn = OclConcreteMap('map', proj, entry_type)
             print(kernel)
             print(func)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
-            return fn.finalize(program['kern'])
+            return fn.finalize(program[kernel.body[0].name.name])
 
 
 def hmmap(fn):
     return SpecializedMap(get_ast(fn))
+
+
+def base_sqrt(elt):
+    return sqrt(elt)
+
+
+sqrt = hmmap(base_sqrt)
+
