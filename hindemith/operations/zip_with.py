@@ -83,7 +83,7 @@ ocl_header = StringTemplate("""
 
 
 class ZipWith(LazySpecializedFunction):
-    backend = 'c'
+    backend = 'ocl'
 
     def args_to_subconfig(self, args):
         """TODO: Type check"""
@@ -141,29 +141,30 @@ class ZipWith(LazySpecializedFunction):
         type_table = self.build_type_table(arg_types, kernel_arg_types)
         backend = MapOclTransform(symbols, type_table)
         loop_body = list(map(backend.visit, tree))
+        shape = arg_cfg[0].shape[::-1]
         if self.backend == 'c' or self.backend == 'omp':
             if self.backend == 'omp':
                 func.defn.append(OmpParallelFor())
                 proj.files[0].config_target = 'omp'
                 proj.files[0].body.insert(0, IncludeOmpHeader())
-            func.defn.append(for_range(arg_cfg[0].shape, 1, loop_body))
+            func.defn.append(for_range(shape, 1, loop_body))
             entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
             return CConcreteZipWith('zip_with', proj, entry_type)
         elif self.backend == 'ocl':
             proj.files[0].body.insert(0, ocl_header)
+            arg_types += (cl.cl_command_queue, cl.cl_kernel)
+            control, kernel = kernel_range(shape, shape,
+                                           kernel_arg_types, loop_body)
             func.params.extend((
                 SymbolRef('queue', cl.cl_command_queue()),
-                SymbolRef('kernel', cl.cl_kernel())
+                SymbolRef(kernel.body[0].name.name, cl.cl_kernel())
             ))
-            arg_types += (cl.cl_command_queue, cl.cl_kernel)
-            control, kernel = kernel_range(arg_cfg[0].shape,
-                                           kernel_arg_types, loop_body)
             func.defn = control
             entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
             fn = OclConcreteZipWith('zip_with', proj, entry_type)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
-            return fn.finalize(program['kern'])
+            return fn.finalize(program[kernel.body[0].name.name])
 
 
 specialized_zip_with = ZipWith(None)

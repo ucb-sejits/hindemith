@@ -38,9 +38,13 @@ class hmarray(np.ndarray):
             obj = np.ndarray.__new__(subtype, shape, dtype, buffer, offset,
                                      strides, order)
         subtype.__add__ = add
+        subtype.__radd__ = add
         subtype.__sub__ = sub
+        subtype.__rsub__ = sub
         subtype.__mul__ = mul
+        subtype.__rmul__ = mul
         subtype.__div__ = div
+        subtype.__rdiv__ = div
         obj._ocl_buf = None
         obj._host_dirty = False
         obj._ocl_dirty = True
@@ -56,7 +60,6 @@ class hmarray(np.ndarray):
         self._host_dirty = getattr(obj, '_host_dirty', False)
         self._ocl_dirty = getattr(obj, '_ocl_dirty', True)
         self.queue = getattr(obj, 'queue', None)
-        self.__add__ = getattr(obj, '__add__')
 
     @property
     def ocl_buf(self):
@@ -74,7 +77,6 @@ class hmarray(np.ndarray):
                                           self, blocking=True)
             evt.wait()
             self._host_dirty = False
-            return _
 
     def __getitem__(self, item):
         if self._host_dirty:
@@ -142,11 +144,12 @@ def for_range(r, step, body):
     return node
 
 
-def gen_kernel_cond(global_size, shape):
+def gen_kernel_cond(global_size, shape, offset):
     conds = ()
     for index, g, s in zip(range(len(global_size)), global_size, shape):
         if s < g:
-            conds += (Lt(get_global_id(index), Constant(s)), )
+            conds += (Lt(get_global_id(index),
+                         Constant(s + offset[index])), )
     if len(conds) == 0:
         return None
     cond = conds[0]
@@ -155,79 +158,99 @@ def gen_kernel_cond(global_size, shape):
     return cond
 
 
-def kernel_range(r, arg_types, body):
-    """TODO: Make local size computation dynamic"""
+def process_arg_types(arg_types, kernel):
     control = []
     params = []
     for index, arg in enumerate(arg_types):
         control.append(
-            clSetKernelArg('kernel', index, ct.sizeof(cl.cl_mem),
+            clSetKernelArg(kernel, index, ct.sizeof(cl.cl_mem),
                            'arg{}'.format(index)))
         params.append(SymbolRef('arg{}'.format(index), arg()))
-    # devices = cl.clGetDeviceIDs()
-    # max_sizes = cl.clGetDeviceInfo(
-    #     devices[-1], cl.cl_device_info.CL_DEVICE_MAX_WORK_ITEM_SIZES)
-    # max_total = cl.clGetDeviceInfo(
-    #     devices[-1], cl.cl_device_info.CL_DEVICE_MAX_WORK_GROUP_SIZE)
+    return control, params
 
-    if len(arg_types[0]._shape_) == 2:
-        # x_len, y_len = 1, 1
-        # while True:
-        #     if arg_types[0]._shape_[0] % 2 == 1:
-        #         x_len = 1
-        #     else:
-        #         x_len = min(max_sizes[0], x_len * 2)
-        #         if arg_types[0]._shape_[0] % x_len != 0:
-        #             x_len /= 2
-        #             break
-        #     if max_total - x_len * y_len <= 0:
-        #         break
-        #     if arg_types[0]._shape_[1] % 2 == 1:
-        #         y_len = 1
-        #     else:
-        #         y_len = min(max_sizes[1], y_len * 2)
-        #         if arg_types[0]._shape_[1] % y_len != 0:
-        #             y_len /= 2
-        #             break
-        #     if max_total - x_len * y_len <= 0:
-        #         break
-        #     if x_len == arg_types[0]._shape_[0] or \
-        #             y_len == arg_types[0]._shape_[1]:
-        #         break
 
-        # local_size = (x_len, y_len)
-        local_size = (32, 32)
+def get_local_size(shape):
+    """
+    Generate local size from shape.  If the size is less than 32, set it to
+    that else, set it to 32.
+
+    TODO: This should be dynamic with respect to the maximum amount of compute
+    units
+
+    :param tuple shape: The shape of the array being iterated over
+    """
+    local_size = ()
+    if len(shape) == 2:
+        for dim in shape:
+            if dim > 32:
+                local_size += (32, )
+            else:
+                local_size += (dim,)
     else:
         local_size = (32, )
-        # local_size = (min(
-        #     max_total, max_sizes[0], arg_types[0]._shape_[0] / 2), )
+    return local_size
+
+
+unique_kernel_num = -1
+
+
+def unique_kernel_name():
+    global unique_kernel_num
+    unique_kernel_num += 1
+    return "_kernel{}".format(unique_kernel_num)
+
+
+def kernel_range(shape, kernel_range, arg_types, body, offset=None):
+    """
+    Factory method for generating an OpenCL kernel corresponding
+    to a set of nested for loops.  Returns the control logic for
+    setting the arguments and launching the kernel as well as the
+    kernel itself.
+
+    TODO: Make local size computation dynamic
+    """
+    unique_name = unique_kernel_name()
+    control, params = process_arg_types(arg_types, unique_name)
+
     global_size = ()
-    for d in r:
-        if d % 32 != 0:
+    for d in kernel_range:
+        if d % 32 != 0 and d > 32:
             global_size += ((d + 31) & (~31),)
         else:
             global_size += (d,)
+
+    if offset is None:
+        offset = [0 for _ in global_size]
+
+    local_size = get_local_size(global_size)
+
+    global_size_decl = 'global_size_{}'.format(unique_name)
+    local_size_decl = 'local_size_{}'.format(unique_name)
+    offset_decl = 'offset_{}'.format(unique_name)
     control.extend([
-        ArrayDef(SymbolRef('global_size', ct.c_size_t()),
-                 Constant(len(r)), global_size),
-        ArrayDef(SymbolRef('local_size', ct.c_size_t()),
-                 Constant(len(r)), local_size),
+        ArrayDef(SymbolRef(global_size_decl, ct.c_size_t()),
+                 Constant(len(shape)), global_size),
+        ArrayDef(SymbolRef(local_size_decl, ct.c_size_t()),
+                 Constant(len(shape)), local_size),
+        ArrayDef(SymbolRef(offset_decl, ct.c_size_t()),
+                 Constant(len(offset)), offset),
         FunctionCall(
             SymbolRef('clEnqueueNDRangeKernel'), [
-                SymbolRef('queue'), SymbolRef('kernel'), Constant(len(r)),
-                Constant(0), SymbolRef('global_size'), SymbolRef('local_size'),
+                SymbolRef('queue'), SymbolRef(unique_name),
+                Constant(len(shape)), SymbolRef(offset_decl),
+                SymbolRef(global_size_decl), SymbolRef(local_size_decl),
                 Constant(0), NULL(), NULL()
             ]
         ),
         FunctionCall(SymbolRef('clFinish'), [SymbolRef('queue')])
     ])
-    body.insert(0, gen_ocl_loop_index(r))
-    cond = gen_kernel_cond(global_size, r)
+    body.insert(0, gen_ocl_loop_index(shape))
+    cond = gen_kernel_cond(global_size, kernel_range, offset)
     if cond:
         body = If(cond, body)
     kernel = FunctionDecl(
         None,
-        SymbolRef('kern'),
+        SymbolRef(unique_name),
         params,
         body
     )
@@ -237,7 +260,7 @@ def kernel_range(r, arg_types, body):
             if index < len(arg_types) - 1:
                 kernel.params[index].set_const()
     kernel.set_kernel()
-    return control, OclFile('op_file', [kernel])
+    return control, OclFile(unique_name, [kernel])
 
 
 py_to_ctypes = {
@@ -287,7 +310,7 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
         for arg in args:
             if isinstance(arg, hmarray):
                 if output is None:
-                    output = hmarray(np.empty_like(arg))
+                    output = hmarray(np.zeros_like(arg))
                     out_buf, evt = cl.buffer_from_ndarray(self.queue, output,
                                                           blocking=True)
                     output._ocl_buf = out_buf
@@ -303,7 +326,7 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
 
 
 class EltWiseArrayOp(LazySpecializedFunction):
-    backend = 'c'
+    backend = 'ocl'
 
     def args_to_subconfig(self, args):
         arg_cfgs = ()
@@ -375,21 +398,23 @@ class EltWiseArrayOp(LazySpecializedFunction):
                 #include <CL/cl.h>
                 #endif
                 """))
-            func.params.extend((
-                SymbolRef('queue', cl.cl_command_queue()),
-                SymbolRef('kernel', cl.cl_kernel())
-            ))
             arg_types += (cl.cl_command_queue, cl.cl_kernel)
-            control, kernel = kernel_range(arg_cfg[2].shape,
+            shape = arg_cfg[2].shape[::-1]
+            control, kernel = kernel_range(shape, shape,
                                            kernel_arg_types, loop_body)
             func.defn = control
             entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
+
+            func.params.extend((
+                SymbolRef('queue', cl.cl_command_queue()),
+                SymbolRef(kernel.body[0].name.name, cl.cl_kernel())
+            ))
             fn = OclConcreteEltOp('op', proj, entry_type)
             print(func)
             print(kernel)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
-            return fn.finalize(program['kern'])
+            return fn.finalize(program[kernel.body[0].name.name])
 
 
 spec_add = EltWiseArrayOp('+')
@@ -412,3 +437,7 @@ def mul(a, b):
 
 def div(a, b):
     return spec_div(a, b)
+
+
+def square(a):
+    return spec_mul(a, a)

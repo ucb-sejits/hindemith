@@ -6,9 +6,9 @@ from hindemith.types.hmarray import add, sub, mul, div
 
 class TestOverride(unittest.TestCase):
     def setUp(self):
-        self.a = np.random.rand(1024, 1024).astype(np.float32) * 100
-        self.b = np.random.rand(1024, 1024).astype(np.float32) * 100
-        self.c = np.random.rand(1024, 1024).astype(np.float32) * 100
+        self.a = np.random.rand(480, 640).astype(np.float32) * 100
+        self.b = np.random.rand(480, 640).astype(np.float32) * 100
+        self.c = np.random.rand(480, 640).astype(np.float32) * 100
 
     def _check(self, expected, actual):
         expected.copy_to_host_if_dirty()
