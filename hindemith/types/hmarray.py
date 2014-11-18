@@ -17,6 +17,10 @@ from collections import namedtuple
 import ctypes as ct
 from functools import reduce
 
+from hindemith.meta.merge import MergeableInfo, FusableKernel, LoopDependence
+
+import copy
+
 
 class hmarray(np.ndarray):
     def __new__(subtype, shape, dtype=float, buffer=None, offset=0,
@@ -320,8 +324,8 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
                 processed.append(arg.ocl_buf)
             else:
                 processed.append(arg)
-        self._c_function(processed[0], processed[1], out_buf, self.queue,
-                         self.kernel)
+        self._c_function(self.queue, self.kernel, processed[0], processed[1],
+                         out_buf)
         return output
 
 
@@ -388,8 +392,6 @@ class EltWiseArrayOp(LazySpecializedFunction):
                 func.defn.append(OmpParallelFor())
                 proj.files[0].config_target = 'omp'
             func.defn.append(for_range(arg_cfg[2].shape, 1, loop_body))
-            entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
-            return CConcreteEltOp('op', proj, entry_type)
         elif self.backend == 'ocl':
             proj.files[0].body.insert(0, StringTemplate("""
                 #ifdef __APPLE__
@@ -398,23 +400,59 @@ class EltWiseArrayOp(LazySpecializedFunction):
                 #include <CL/cl.h>
                 #endif
                 """))
-            arg_types += (cl.cl_command_queue, cl.cl_kernel)
+            arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
             shape = arg_cfg[2].shape[::-1]
             control, kernel = kernel_range(shape, shape,
                                            kernel_arg_types, loop_body)
             func.defn = control
-            entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
 
-            func.params.extend((
-                SymbolRef('queue', cl.cl_command_queue()),
-                SymbolRef(kernel.body[0].name.name, cl.cl_kernel())
-            ))
-            fn = OclConcreteEltOp('op', proj, entry_type)
-            print(func)
-            print(kernel)
+            func.params.insert(0, SymbolRef('queue', cl.cl_command_queue()))
+            func.params.insert(1, SymbolRef(kernel.body[0].name.name,
+                                            cl.cl_kernel()))
+            proj.files.append(kernel)
+        entry_type = (None,) + arg_types
+        return 'op', proj, entry_type
+
+    def finalize(self, entry_name, proj, entry_type):
+        entry_type = ct.CFUNCTYPE(*entry_type)
+        if self.backend == 'c':
+            return CConcreteEltOp(entry_name, proj, entry_type)
+        elif self.backend == 'ocl':
+            fn = OclConcreteEltOp(entry_name, proj, entry_type)
+            kernel = proj.find(OclFile)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
             return fn.finalize(program[kernel.body[0].name.name])
+
+    def get_placeholder_output(self, args):
+        return hmarray(np.zeros_like(args[0]))
+
+    def get_mergeable_info(self, args):
+        arg_cfg = self.args_to_subconfig(args)
+        tune_cfg = self.get_tuning_driver()
+        program_cfg = (arg_cfg, tune_cfg)
+        tree = copy.deepcopy(self.original_tree)
+        entry_point, proj, entry_type = self.transform(tree, program_cfg)
+        control = proj.find(CFile).find(FunctionDecl)
+        num_args = len(args) + 1
+        arg_setters = control.defn[:num_args]
+        global_size, local_size = control.defn[num_args:num_args + 2]
+        enqueue_call = control.defn[-2]
+        kernel_decl = proj.find(OclFile).find(FunctionDecl)
+        global_loads = []
+        global_stores = []
+        kernel = proj.find(OclFile)
+        return MergeableInfo(
+            proj=proj,
+            entry_point=entry_point,
+            entry_type=entry_type,
+            # TODO: This should use a namedtuple or object to be more explicit
+            kernels=[kernel],
+            fusable_node=FusableKernel(
+                (16, 16), tuple(value for value in global_size.body),
+                arg_setters, enqueue_call, kernel_decl, global_loads,
+                global_stores, [])
+        )
 
 
 spec_add = EltWiseArrayOp('+')

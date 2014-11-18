@@ -76,5 +76,5 @@ def get_callable(basic_block, env):
         )
     ast.fix_missing_locations(tree)
     # TODO: We have to pass in the real env dict here, is this problematic?
-    my_exec(compile(tree, filename="tmp", mode="exec"), env._env)
+    my_exec(compile(tree, filename="file", mode="exec"), env)
     return env[basic_block.name]

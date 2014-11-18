@@ -5,8 +5,78 @@ from .array_add import array_add
 from .simple_stencil import simple_stencil
 from .kernels import laplacian_2d, x_gradient, y_gradient
 
+from hindemith.utils import symbols
+from hindemith.operations.zip_with import zip_with
+from hindemith.types.hmarray import hmarray, spec_add, spec_mul
 
-@unittest.skip("arst")
+
+class TestFusion(unittest.TestCase):
+    def _check_arrays_equal(self, actual, expected):
+        try:
+            np.testing.assert_array_almost_equal(actual, expected)
+        except AssertionError as e:
+            self.fail(e)
+
+    def setUp(self):
+        self.a = np.random.rand(480, 640).astype(np.float32) * 255
+        self.b = np.random.rand(480, 640).astype(np.float32) * 255
+
+    def test_simple(self):
+        a = np.random.rand(480, 640).astype(np.float32) * 255
+        b = np.random.rand(480, 640).astype(np.float32) * 255
+        c = np.random.rand(480, 640).astype(np.float32) * 255
+        d = np.random.rand(480, 640).astype(np.float32) * 255
+        e = np.random.rand(480, 640).astype(np.float32) * 255
+        f = np.random.rand(480, 640).astype(np.float32) * 255
+        a = hmarray(a)
+        b = hmarray(b)
+        c = hmarray(c)
+        d = hmarray(d)
+        e = hmarray(e)
+        f = hmarray(f)
+
+        theta = .3
+        l = .15
+
+        @symbols({'l': l, 'theta': theta})
+        def ocl_th(rho_elt, gradient_elt, delta_elt, u_elt):
+            threshold = float(l * theta) * gradient_elt
+            if rho_elt < -threshold:
+                return float(l * theta) * delta_elt + u_elt
+            elif rho_elt > threshold:
+                return float(-l * theta) * delta_elt + u_elt
+            elif gradient_elt > 1e-10:
+                return -rho_elt / gradient_elt * delta_elt + u_elt
+            else:
+                return float(0)
+
+        threshold = zip_with(ocl_th)
+
+        def unfused(u1, u2, rho_c, gradient, I1wx, I1wy):
+            rho = rho_c + I1wx * u1 + I1wy * u2
+            v1 = threshold(rho, gradient, I1wx, u1)
+            v2 = threshold(rho, gradient, I1wy, u2)
+            return v1, v2
+
+        @meta
+        def fused(u1, u2, rho_c, gradient, I1wx, I1wy):
+            rho = spec_add(rho_c, spec_add(spec_mul(I1wx, u1),
+                                           spec_mul(I1wy, u2)))
+            v1 = threshold(rho, gradient, I1wx, u1)
+            v2 = threshold(rho, gradient, I1wy, u2)
+            return v1, v2
+
+        actual = fused(a, b, c, d, e, f)
+        expected = unfused(a, b, c, d, e, f)
+        actual[0].copy_to_host_if_dirty()
+        actual[1].copy_to_host_if_dirty()
+        expected[0].copy_to_host_if_dirty()
+        expected[1].copy_to_host_if_dirty()
+        self._check_arrays_equal(actual[0], expected[0])
+        self._check_arrays_equal(actual[1], expected[1])
+
+
+@unittest.skip("deprecated")
 class TestMetaDecorator(unittest.TestCase):
     def _check_arrays_equal(self, actual, expected):
         try:
@@ -116,7 +186,7 @@ class TestMetaDecorator(unittest.TestCase):
             self.fail("Arrays not almost equal\n{}".format(e))
 
 
-@unittest.skip("arst")
+@unittest.skip("deprecated")
 class TestKernels(unittest.TestCase):
     @unittest.skip("Dependency issues")
     def test_laplacian(self):
