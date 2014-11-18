@@ -24,7 +24,8 @@ class ConcreteMerged(ConcreteSpecializedFunction):
         self.context, self.queue = get_context_and_queue_from_devices(
             [devices[-1]])
 
-    def finalize(self, proj, entry_name, entry_type, kernels, outputs, retvals):
+    def finalize(self, proj, entry_name, entry_type, kernels, outputs,
+                 retvals):
         self.__entry_type = entry_type
         self._c_function = self._compile(entry_name, proj,
                                          ct.CFUNCTYPE(*entry_type))
@@ -267,7 +268,6 @@ def fuse_nodes(prev, next):
             setter.args[0] = new_kernel
         next.kernel_decl.params = prev.kernel_decl.params + \
             next.kernel_decl.params
-        print(next.kernel_decl)
         prev.kernel_decl.defn = [SymbolRef('return')]
         prev.enqueue_call.delete()
 
@@ -300,8 +300,6 @@ def merge_entry_points(composable_block, env):
         uniquifier = UniqueNamer()
         proj = uniquifier.visit(proj)
         merged_kernels.extend(kernels)
-        print(proj.files[0])
-        print(proj.files[1])
         entry_point = find_entry_point(uniquifier.seen[entry_point], proj)
         param_map[output_name] = entry_point.params[-1].name
         entry_points.append(entry_point)
@@ -324,14 +322,16 @@ def merge_entry_points(composable_block, env):
     merged_entry_type.insert(0, None)
     merged_entry = perform_merge(entry_points)
 
-    targets = [ast.Name(id, ast.Store()) for id in target_ids]
+    if len(target_ids) > 1:
+        targets = [ast.Tuple([ast.Name(id, ast.Store())
+                             for id in target_ids], ast.Store())]
+    else:
+        targets = [ast.Name(target_ids[0], ast.Store())]
     merged_name = get_unique_func_name(env)
     env[merged_name] = MergedSpecializedFunction(
         Project(files), merged_entry.name.name, merged_entry_type,
         merged_kernels, output_indexes, retval_indexes
     )
-    print(merged_entry)
-    # print(files[2])
     value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)
     return ast.Assign(targets, value)
 

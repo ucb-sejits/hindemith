@@ -2,10 +2,13 @@ from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray, for_range
 from .map import MapOclTransform, ElementReference, \
     StoreOutput
 
+from hindemith.meta.merge import MergeableInfo, FusableKernel
+
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.c.nodes import SymbolRef, FunctionDecl, CFile
 from ctree.nodes import Project
 from ctree.ocl import get_context_and_queue_from_devices
+from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
 from ctree.frontend import get_ast
@@ -16,6 +19,7 @@ import numpy as np
 import ctypes as ct
 import pycl as cl
 import sys
+import copy
 
 
 class CConcreteZipWith(ConcreteSpecializedFunction):
@@ -39,7 +43,7 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
         self.kernel = kernel
         return self
 
-    def __call__(self, f, *args):
+    def __call__(self, *args):
         output = hmarray(np.zeros_like(args[0]))
         out_buf, evt = cl.buffer_from_ndarray(self.queue, output,
                                               blocking=True)
@@ -48,7 +52,7 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
         output._ocl_dirty = False
         output._host_dirty = True
         processed = [arg.ocl_buf for arg in args]
-        processed.extend([out_buf, self.queue, self.kernel])
+        processed = [self.queue, self.kernel] + processed + [out_buf]
         self._c_function(*processed)
         return output
 
@@ -119,12 +123,11 @@ class ZipWith(LazySpecializedFunction):
 
     def transform(self, tree, program_config):
         arg_cfg, tune_cfg = program_config
-        if hasattr(arg_cfg[0], '_hm_symbols'):
-            symbols = arg_cfg[0]._hm_symbols
+        if hasattr(tree, '_hm_symbols'):
+            symbols = tree._hm_symbols
         else:
             symbols = {}
-        tree = get_ast(arg_cfg[0])
-        arg_cfg = arg_cfg[1:]
+        tree = get_ast(tree)
 
         arg_types, kernel_arg_types = self.process_arg_types(arg_cfg)
 
@@ -148,27 +151,59 @@ class ZipWith(LazySpecializedFunction):
                 proj.files[0].config_target = 'omp'
                 proj.files[0].body.insert(0, IncludeOmpHeader())
             func.defn.append(for_range(shape, 1, loop_body))
-            entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
-            return CConcreteZipWith('zip_with', proj, entry_type)
         elif self.backend == 'ocl':
             proj.files[0].body.insert(0, ocl_header)
-            arg_types += (cl.cl_command_queue, cl.cl_kernel)
+            arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
             control, kernel = kernel_range(shape, shape,
                                            kernel_arg_types, loop_body)
-            func.params.extend((
-                SymbolRef('queue', cl.cl_command_queue()),
-                SymbolRef(kernel.body[0].name.name, cl.cl_kernel())
-            ))
+            func.params.insert(0, SymbolRef('queue', cl.cl_command_queue()))
+            func.params.insert(1, SymbolRef(kernel.body[0].name.name,
+                                            cl.cl_kernel()))
             func.defn = control
-            entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
-            fn = OclConcreteZipWith('zip_with', proj, entry_type)
+            proj.files.append(kernel)
+        entry_type = (None,) + arg_types
+        return 'zip_with', proj, entry_type
+
+    def finalize(self, entry_name, proj, entry_type):
+        entry_type = ct.CFUNCTYPE(*entry_type)
+        if self.backend == 'c' or self.backend == 'omp':
+            return CConcreteZipWith(entry_name, proj, entry_type)
+        elif self.backend == 'ocl':
+            fn = OclConcreteZipWith(entry_name, proj, entry_type)
+            kernel = proj.find(OclFile)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
             return fn.finalize(program[kernel.body[0].name.name])
 
+    def get_placeholder_output(self, args):
+        return hmarray(np.zeros_like(args[0]))
 
-specialized_zip_with = ZipWith(None)
+    def get_mergeable_info(self, args):
+        arg_cfg = self.args_to_subconfig(args)
+        tune_cfg = self.get_tuning_driver()
+        program_cfg = (arg_cfg, tune_cfg)
+        tree = copy.deepcopy(self.original_tree)
+        entry_point, proj, entry_type = self.transform(tree, program_cfg)
+        control = proj.find(CFile).find(FunctionDecl)
+        num_args = len(args) + 1
+        arg_setters = control.defn[:num_args]
+        global_size, local_size = control.defn[num_args:num_args + 2]
+        enqueue_call = control.defn[-2]
+        kernel_decl = proj.find(OclFile).find(FunctionDecl)
+        global_loads = []
+        global_stores = []
+        kernel = proj.find(OclFile)
+        return MergeableInfo(
+            proj=proj,
+            entry_point=entry_point,
+            entry_type=entry_type,
+            # TODO: This should use a namedtuple or object to be more explicit
+            kernels=[kernel],
+            fusable_node=FusableKernel(
+                (16, 16), tuple(value for value in global_size.body),
+                arg_setters, enqueue_call, kernel_decl, global_loads,
+                global_stores, [])
+        )
 
 
-def zip_with(f, *args):
-    return specialized_zip_with(f, *args)
+zip_with = ZipWith

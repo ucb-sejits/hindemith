@@ -105,6 +105,7 @@ def separate_composable_blocks(basic_block, env):
     # TODO: This is a pretty convoluted function, simplify it to a
     # reduction across the block
     statements = []
+    print(basic_block)
     for statement in basic_block.body:
         if is_composable(statement, env):
             statement = Statement(statement, env[statement.value.func.id])
