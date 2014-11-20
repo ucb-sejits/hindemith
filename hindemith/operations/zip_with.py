@@ -27,8 +27,8 @@ class CConcreteZipWith(ConcreteSpecializedFunction):
         self._c_function = self._compile(entry_name, proj, entry_type)
 
     def __call__(self, *args):
-        output = hmarray(np.zeros_like(args[1]))
-        self._c_function(*(args[1:] + (output, )))
+        output = hmarray(np.zeros_like(args[0]))
+        self._c_function(*(args + (output, )))
         return output
 
 

@@ -42,6 +42,7 @@ def meta(func):
         basic_block = perform_liveness_analysis(basic_block)
         basic_block = process_composable_blocks(basic_block, symbol_table)
         print(basic_block)
+        print(symbol_table['_merged_f0'])
         fn = get_callable(basic_block, symbol_table)
         func._hm_callable = fn
         return fn(*args, **kwargs)
@@ -56,7 +57,7 @@ def my_exec(func, env):
     if sys.version_info >= (3, 0):
         exec(func, env)
     else:
-        exec(func) in env
+        exec(func) in env, env
 
 
 def get_callable(basic_block, env):
@@ -76,5 +77,5 @@ def get_callable(basic_block, env):
         )
     ast.fix_missing_locations(tree)
     # TODO: We have to pass in the real env dict here, is this problematic?
-    my_exec(compile(tree, filename="file", mode="exec"), env)
+    exec(compile(tree, filename="file", mode="exec"), env._env, env._env)
     return env[basic_block.name]

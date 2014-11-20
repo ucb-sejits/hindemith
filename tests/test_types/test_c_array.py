@@ -3,20 +3,20 @@ import numpy as np
 from hindemith.types.hmarray import hmarray
 from hindemith.types.hmarray import add, sub, mul, div, EltWiseArrayOp
 
-EltWiseArrayOp.backend = 'c'
 
 
 class TestOverride(unittest.TestCase):
     def setUp(self):
+	EltWiseArrayOp.backend = 'c'
         self.a = np.random.rand(1024, 1024).astype(np.float32) * 100
         self.b = np.random.rand(1024, 1024).astype(np.float32) * 100
         self.c = np.random.rand(1024, 1024).astype(np.float32) * 100
 
     def _check(self, expected, actual):
         expected.copy_to_host_if_dirty()
-        expected = expected.view(np.ndarray)
+        expected = np.copy(expected)
         try:
-            np.testing.assert_array_almost_equal(expected, actual, decimal=4)
+            np.testing.assert_array_almost_equal(expected, actual)
         except AssertionError as e:
             self.fail(e)
 
@@ -39,13 +39,14 @@ class TestOverride(unittest.TestCase):
 
 class TestElt(unittest.TestCase):
     def setUp(self):
+	EltWiseArrayOp.backend = 'c'
         self.a = np.random.rand(1024, 1024).astype(np.float32) * 100
         self.b = np.random.rand(1024, 1024).astype(np.float32) * 100
         self.c = np.random.rand(1024, 1024).astype(np.float32) * 100
 
     def _check(self, expected, actual):
         expected.copy_to_host_if_dirty()
-        expected = expected.view(np.ndarray)
+	expected = np.copy(expected)
         try:
             np.testing.assert_array_almost_equal(expected, actual, decimal=4)
         except AssertionError as e:

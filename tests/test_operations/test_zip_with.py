@@ -31,7 +31,8 @@ class TestZipWithOcl(unittest.TestCase):
             else:
                 return a - b
 
-        actual = zip_with(f, hmarray(a), hmarray(b))
+	specialized = zip_with(f)
+        actual = specialized(hmarray(a), hmarray(b))
         expected = np.array([f(x, y) for x, y in zip(a.tolist(), b.tolist())])
         self._check(actual, expected)
 
@@ -58,7 +59,8 @@ class TestZipWithOcl(unittest.TestCase):
                 return -threshold * (I1wg_elt / pow(abs(I1wg_elt), 2))
 
         a, b = self.a, self.b
-        actual = zip_with(th, hmarray(a), hmarray(b))
+        specialized = zip_with(th)
+        actual = specialized(hmarray(a), hmarray(b))
         expected = np.array([th(x, y) for x, y in zip(a.tolist(), b.tolist())])
         self._check(actual, expected)
 
@@ -86,8 +88,8 @@ class TestZipWithC(unittest.TestCase):
                 return a + b
             else:
                 return a - b
-
-        actual = zip_with(f, hmarray(a), hmarray(b))
+        specialized = zip_with(f)
+        actual = specialized(hmarray(a), hmarray(b))
         thv = np.vectorize(f, otypes=[np.float32])
         expected = thv(a, b)
         self._check(actual, expected)
@@ -121,7 +123,8 @@ class TestZipWithC(unittest.TestCase):
                 return -threshold * p_elt
 
         a, b = self.a, self.b
-        actual = zip_with(th, hmarray(a), hmarray(b))
+        specialized = zip_with(th)
+        actual = specialized(hmarray(a), hmarray(b))
         thv = np.vectorize(py_th, otypes=[np.float32])
         expected = thv(a, b)
         self._check(actual, expected)
