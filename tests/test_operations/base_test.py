@@ -13,6 +13,6 @@ class HMBaseTest(unittest.TestCase):
         try:
             actual.copy_to_host_if_dirty()
             actual = actual.view(np.ndarray)
-            np.testing.assert_array_almost_equal(actual, expected)
+            np.testing.assert_array_almost_equal(actual, expected, decimal=5)
         except AssertionError as e:
             self.fail(e)

@@ -6,14 +6,15 @@ from .simple_stencil import simple_stencil
 from .kernels import laplacian_2d, x_gradient, y_gradient
 
 from hindemith.utils import symbols
-from hindemith.operations.zip_with import zip_with
-from hindemith.types.hmarray import hmarray, spec_add, spec_mul
+from hindemith.operations.zip_with import zip_with, ZipWith
+from hindemith.types.hmarray import hmarray, spec_add, spec_mul, EltWiseArrayOp
+
 
 
 class TestFusion(unittest.TestCase):
     def _check_arrays_equal(self, actual, expected):
         try:
-            np.testing.assert_array_almost_equal(actual, expected)
+            np.testing.assert_array_almost_equal(actual, expected, decimal=4)
         except AssertionError as e:
             self.fail(e)
 
@@ -22,6 +23,8 @@ class TestFusion(unittest.TestCase):
         self.b = np.random.rand(480, 640).astype(np.float32) * 255
 
     def test_simple(self):
+	ZipWith.backend = 'ocl'
+	EltWiseArrayOp.backend = 'ocl'
         a = np.random.rand(480, 640).astype(np.float32) * 255
         b = np.random.rand(480, 640).astype(np.float32) * 255
         c = np.random.rand(480, 640).astype(np.float32) * 255
@@ -40,15 +43,15 @@ class TestFusion(unittest.TestCase):
 
         @symbols({'l': l, 'theta': theta})
         def ocl_th(rho_elt, gradient_elt, delta_elt, u_elt):
-            threshold = float(l * theta) * gradient_elt
+            threshold = l * theta * gradient_elt
             if rho_elt < -threshold:
-                return float(l * theta) * delta_elt + u_elt
+                return l * theta * delta_elt + u_elt
             elif rho_elt > threshold:
-                return float(-l * theta) * delta_elt + u_elt
+                return -l * theta * delta_elt + u_elt
             elif gradient_elt > 1e-10:
                 return -rho_elt / gradient_elt * delta_elt + u_elt
             else:
-                return float(0)
+                return 0
 
         threshold = zip_with(ocl_th)
 
