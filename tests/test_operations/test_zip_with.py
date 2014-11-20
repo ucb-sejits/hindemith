@@ -31,7 +31,7 @@ class TestZipWithOcl(unittest.TestCase):
             else:
                 return a - b
 
-	specialized = zip_with(f)
+        specialized = zip_with(f)
         actual = specialized(hmarray(a), hmarray(b))
         expected = np.array([f(x, y) for x, y in zip(a.tolist(), b.tolist())])
         self._check(actual, expected)
