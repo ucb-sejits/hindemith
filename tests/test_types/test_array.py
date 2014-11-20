@@ -12,7 +12,7 @@ class TestOverride(unittest.TestCase):
 
     def _check(self, expected, actual):
         expected.copy_to_host_if_dirty()
-	expected = np.copy(expected)
+        expected = np.copy(expected)
         try:
             np.testing.assert_array_almost_equal(expected, actual, decimal=1)
         except AssertionError as e:
@@ -43,7 +43,7 @@ class TestElt(unittest.TestCase):
 
     def _check(self, expected, actual):
         expected.copy_to_host_if_dirty()
-	expected = np.copy(expected)
+        expected = np.copy(expected)
         try:
             np.testing.assert_array_almost_equal(expected, actual, decimal=1)
         except AssertionError as e:
