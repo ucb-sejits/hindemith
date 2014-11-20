@@ -7,7 +7,7 @@ from hindemith.types.hmarray import add, sub, mul, div, EltWiseArrayOp
 
 class TestOverride(unittest.TestCase):
     def setUp(self):
-	EltWiseArrayOp.backend = 'c'
+        EltWiseArrayOp.backend = 'c'
         self.a = np.random.rand(1024, 1024).astype(np.float32) * 100
         self.b = np.random.rand(1024, 1024).astype(np.float32) * 100
         self.c = np.random.rand(1024, 1024).astype(np.float32) * 100
@@ -39,7 +39,7 @@ class TestOverride(unittest.TestCase):
 
 class TestElt(unittest.TestCase):
     def setUp(self):
-	EltWiseArrayOp.backend = 'c'
+        EltWiseArrayOp.backend = 'c'
         self.a = np.random.rand(1024, 1024).astype(np.float32) * 100
         self.b = np.random.rand(1024, 1024).astype(np.float32) * 100
         self.c = np.random.rand(1024, 1024).astype(np.float32) * 100
