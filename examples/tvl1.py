@@ -63,10 +63,13 @@ def ocl_th(rho_elt, gradient_elt, delta_elt, u_elt):
         return float(0)
 
 
+spec_th = zip_with(th)
+
+
 def threshold(u1, u2, rho_c, gradient, I1wx, I1wy):
     rho = rho_c + I1wx * u1 + I1wy * u2
-    v1 = zip_with(ocl_th, rho, gradient, I1wx, u1)
-    v2 = zip_with(ocl_th, rho, gradient, I1wy, u2)
+    v1 = spec_th(rho, gradient, I1wx, u1)
+    v2 = spec_th(rho, gradient, I1wy, u2)
     return v1, v2
     # v1 = zip_with(th, hmarray(rho), hmarray(gradient),
     #               hmarray(I1wx), hmarray(u[..., 0]))

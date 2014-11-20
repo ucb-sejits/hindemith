@@ -10,7 +10,6 @@ from hindemith.operations.zip_with import zip_with, ZipWith
 from hindemith.types.hmarray import hmarray, spec_add, spec_mul, EltWiseArrayOp
 
 
-
 class TestFusion(unittest.TestCase):
     def _check_arrays_equal(self, actual, expected):
         try:
@@ -23,8 +22,8 @@ class TestFusion(unittest.TestCase):
         self.b = np.random.rand(480, 640).astype(np.float32) * 255
 
     def test_simple(self):
-	ZipWith.backend = 'ocl'
-	EltWiseArrayOp.backend = 'ocl'
+        ZipWith.backend = 'ocl'
+        EltWiseArrayOp.backend = 'ocl'
         a = np.random.rand(480, 640).astype(np.float32) * 255
         b = np.random.rand(480, 640).astype(np.float32) * 255
         c = np.random.rand(480, 640).astype(np.float32) * 255
