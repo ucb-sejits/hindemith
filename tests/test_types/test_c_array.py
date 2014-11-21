@@ -4,7 +4,6 @@ from hindemith.types.hmarray import hmarray
 from hindemith.types.hmarray import add, sub, mul, div, EltWiseArrayOp
 
 
-
 class TestOverride(unittest.TestCase):
     def setUp(self):
         EltWiseArrayOp.backend = 'c'
@@ -46,7 +45,7 @@ class TestElt(unittest.TestCase):
 
     def _check(self, expected, actual):
         expected.copy_to_host_if_dirty()
-	expected = np.copy(expected)
+        expected = np.copy(expected)
         try:
             np.testing.assert_array_almost_equal(expected, actual, decimal=4)
         except AssertionError as e:
