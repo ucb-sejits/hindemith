@@ -58,6 +58,10 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
 
 
 class ZipWithFrontendTransformer(PyBasicConversions):
+    def __init__(self, params):
+        self.params = params
+        super(ZipWithFrontendTransformer, self).__init__()
+
     def visit_FunctionDef(self, node):
         if sys.version_info < (3, 0):
             self.targets = [arg.id for arg in node.args.args]
@@ -69,11 +73,11 @@ class ZipWithFrontendTransformer(PyBasicConversions):
     def visit_Name(self, node):
         for index, target in enumerate(self.targets):
             if target == node.id:
-                return ElementReference("arg{}".format(index))
+                return ElementReference(self.params[index].name)
         return PyBasicConversions.visit_Name(self, node)
 
     def visit_Return(self, node):
-        return StoreOutput("arg{}".format(len(self.targets)),
+        return StoreOutput(self.params[-1].name,
                            self.visit(node.value))
 
 
@@ -99,26 +103,29 @@ class ZipWith(LazySpecializedFunction):
         return arg_cfgs + out_cfg
 
     def process_arg_types(self, arg_cfg):
-        arg_types, kernel_arg_types = (), ()
+        arg_types, params, kernel_params = (), [], ()
         if self.backend == 'c' or self.backend == 'omp':
             for cfg in arg_cfg:
                 arg_types += (np.ctypeslib.ndpointer(cfg.dtype, cfg.ndim,
                                                      cfg.shape),)
+                params.append(SymbolRef.unique(sym_type=arg_types[-1]()))
         elif self.backend == 'ocl':
             for cfg in arg_cfg:
-                kernel_arg_types += (
-                    np.ctypeslib.ndpointer(cfg.dtype, cfg.ndim, cfg.shape),)
                 arg_types += (cl.cl_mem, )
-        return arg_types, kernel_arg_types
+                params.append(SymbolRef.unique(sym_type=arg_types[-1]()))
+                kernel_params += (SymbolRef(
+                    params[-1].name,
+                    np.ctypeslib.ndpointer(cfg.dtype, cfg.ndim, cfg.shape)()),)
+        return arg_types, params, kernel_params
 
-    def build_type_table(self, arg_types, kernel_arg_types):
+    def build_type_table(self, params, kernel_params):
         type_table = {}
         if self.backend == 'c' or self.backend == 'omp':
-            for index, t in enumerate(arg_types):
-                type_table['arg{}'.format(index)] = t
+            for index, param in enumerate(params):
+                type_table[param.name] = param.type.__class__
         elif self.backend == 'ocl':
-            for index, t in enumerate(kernel_arg_types):
-                type_table['arg{}'.format(index)] = t
+            for index, param in enumerate(kernel_params):
+                type_table[param.name] = param.type.__class__
         return type_table
 
     def transform(self, tree, program_config):
@@ -129,19 +136,19 @@ class ZipWith(LazySpecializedFunction):
             symbols = {}
         tree = get_ast(tree)
 
-        arg_types, kernel_arg_types = self.process_arg_types(arg_cfg)
+        arg_types, params, kernel_params = self.process_arg_types(arg_cfg)
 
-        tree = ZipWithFrontendTransformer().visit(tree).files[0].body[0].body
+        tree = ZipWithFrontendTransformer(
+            params).visit(tree).files[0].body[0].body
 
         func = FunctionDecl(
             None,
             SymbolRef('zip_with'),
-            [SymbolRef('arg{}'.format(index), type())
-             for index, type in enumerate(arg_types)],
+            params,
             []
         )
         proj = Project([CFile('map', [func])])
-        type_table = self.build_type_table(arg_types, kernel_arg_types)
+        type_table = self.build_type_table(params, kernel_params)
         backend = MapOclTransform(symbols, type_table)
         loop_body = list(map(backend.visit, tree))
         shape = arg_cfg[0].shape[::-1]
@@ -155,7 +162,7 @@ class ZipWith(LazySpecializedFunction):
             proj.files[0].body.insert(0, ocl_header)
             arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
             control, kernel = kernel_range(shape, shape,
-                                           kernel_arg_types, loop_body)
+                                           kernel_params, loop_body)
             func.params.insert(0, SymbolRef('queue', cl.cl_command_queue()))
             func.params.insert(1, SymbolRef(kernel.body[0].name.name,
                                             cl.cl_kernel()))

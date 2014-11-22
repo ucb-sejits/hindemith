@@ -34,6 +34,10 @@ class StoreOutput(CtreeNode):
 
 
 class MapFrontendTransformer(PyBasicConversions):
+    def __init__(self, params):
+        self.params = params
+        super(MapFrontendTransformer, self).__init__()
+
     def visit_FunctionDef(self, node):
         if sys.version_info < (3, 0):
             self.target = node.args.args[0].id
@@ -44,11 +48,11 @@ class MapFrontendTransformer(PyBasicConversions):
 
     def visit_Name(self, node):
         if node.id == self.target:
-            return ElementReference("arg0")
+            return ElementReference(self.params[0].name)
         return super(MapFrontendTransformer, self).visit_Name(node)
 
     def visit_Return(self, node):
-        return StoreOutput("arg1", self.visit(node.value))
+        return StoreOutput(self.params[-1].name, self.visit(node.value))
 
 
 class MapOclTransform(ast.NodeTransformer):
@@ -73,7 +77,7 @@ class MapOclTransform(ast.NodeTransformer):
             if isinstance(node.op, Op.ArrayRef):
                 return self.infer_type(node.left)._dtype_.type
             left = self.infer_type(node.left)
-            right = self.infer_type(node.right)
+            # right = self.infer_type(node.right)
             return left
         elif isinstance(node, FunctionCall):
             if node.func.name == 'fabs':
@@ -148,7 +152,7 @@ class SpecializedMap(LazySpecializedFunction):
 
     def transform(self, tree, program_cfg):
         arg_cfg, tune_cfg = program_cfg
-        arg_types, kernel_arg_types = None, None
+        arg_types, params, kernel_params = None, None, None
 
         if isinstance(arg_cfg, NdArrCfg):
             if SpecializedMap.backend == 'c':
@@ -156,20 +160,26 @@ class SpecializedMap(LazySpecializedFunction):
                     arg_cfg.dtype, arg_cfg.ndim, arg_cfg.shape),
                     np.ctypeslib.ndpointer(arg_cfg.dtype, arg_cfg.ndim,
                                            arg_cfg.shape))
+                params = [SymbolRef.unique(sym_type=arg_types[0]()),
+                          SymbolRef.unique(sym_type=arg_types[1]())]
             else:
                 arg_types = (cl.cl_mem, cl.cl_mem)
-                kernel_arg_types = (np.ctypeslib.ndpointer(
-                    arg_cfg.dtype, arg_cfg.ndim, arg_cfg.shape),
-                    np.ctypeslib.ndpointer(arg_cfg.dtype, arg_cfg.ndim,
-                                           arg_cfg.shape))
+                params = [SymbolRef.unique(sym_type=arg_types[0]()),
+                          SymbolRef.unique(sym_type=arg_types[0]())]
+                kernel_params = [
+                    SymbolRef(param.name,
+                              np.ctypeslib.ndpointer(arg_cfg.dtype,
+                                                     arg_cfg.ndim,
+                                                     arg_cfg.shape)())
+                    for param in params
+                ]
 
-        tree = MapFrontendTransformer().visit(tree).files[0].body[0].body
+        tree = MapFrontendTransformer(params).visit(tree).files[0].body[0].body
 
         func = FunctionDecl(
             None,
             SymbolRef('map'),
-            [SymbolRef('arg0', arg_types[0]()),
-             SymbolRef('arg1', arg_types[1]())]
+            params
         )
         proj = Project([CFile('map', [func])])
         if SpecializedMap.backend == 'ocl':
@@ -185,7 +195,7 @@ class SpecializedMap(LazySpecializedFunction):
             arg_types += (cl.cl_command_queue, cl.cl_kernel)
             shape = arg_cfg.shape[::-1]
             control, kernel = kernel_range(shape, shape,
-                                           kernel_arg_types, loop_body)
+                                           kernel_params, loop_body)
             func.defn = control
             entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
             func.params.extend((
@@ -209,4 +219,3 @@ def base_sqrt(elt):
 
 
 sqrt = hmmap(base_sqrt)
-
