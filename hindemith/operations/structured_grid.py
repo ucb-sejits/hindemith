@@ -85,11 +85,12 @@ class StructuredGridFrontend(PyBasicConversions):
 
 
 class StructuredGridBackend(ast.NodeTransformer):
-    def __init__(self, arg_cfg, arg_types, kernel_arg_types):
+    def __init__(self, arg_cfg, arg_types, params, kernel_params):
         self.arg_cfg = arg_cfg
         self.arg_table = {}
         self.arg_types = arg_types
-        self.kernel_arg_types = kernel_arg_types
+        self.params = params
+        self.kernel_params = kernel_params
         self.kernels = []
         self.arg_name_map = {}
         self.curr_offset = None
@@ -114,7 +115,7 @@ class StructuredGridBackend(ast.NodeTransformer):
     def visit_FunctionDecl(self, node):
         for index, param in enumerate(node.params):
             self.arg_table[param.name] = self.arg_cfg[index]
-            self.arg_name_map[param.name] = 'arg{}'.format(index)
+            self.arg_name_map[param.name] = self.params[index].name
             param.name = self.arg_name_map[param.name]
             param.type = self.arg_types[index]()
         node.params.extend((
@@ -150,7 +151,7 @@ class StructuredGridBackend(ast.NodeTransformer):
                 body = [self.visit(s) for s in deepcopy(node.body)]
                 self.curr_offset = None
                 control, kernel = kernel_range(shape, b_size,
-                                               self.kernel_arg_types, body, os)
+                                               self.kernel_params, body, os)
                 controls.append(control)
                 kernels.append(kernel)
                 self.kernels.append(kernel)
@@ -167,7 +168,7 @@ class StructuredGridBackend(ast.NodeTransformer):
                 body = [self.visit(s) for s in deepcopy(node.body)]
                 self.curr_offset = None
                 control, kernel = kernel_range(shape, b_size,
-                                               self.kernel_arg_types, body, os)
+                                               self.kernel_params, body, os)
                 controls.append(control)
                 kernels.append(kernel)
                 self.kernels.append(kernel)
@@ -175,7 +176,7 @@ class StructuredGridBackend(ast.NodeTransformer):
         self.project.files.extend(kernels)
 
         control, kernel = kernel_range(shape, g_size,
-                                       self.kernel_arg_types, body, offset)
+                                       self.kernel_params, body, offset)
         self.kernels.append(kernel)
         for launch in controls:
             control.extend(launch)
@@ -255,23 +256,32 @@ class StructuredGrid(LazySpecializedFunction):
 
     def process_arg_cfg(self, arg_cfg):
         arg_types = ()
-        kernel_arg_types = ()
+        kernel_params = ()
+        params = []
         for index, cfg in enumerate(arg_cfg):
             if self.backend in {'c', 'omp'}:
                 arg_types += (np.ctypeslib.ndpointer(
                     cfg.dtype, cfg.ndim, cfg.shape), )
+                params.append(
+                    SymbolRef.unique(sym_type=arg_types[-1]())
+                )
             else:
                 arg_types += (cl.cl_mem, )
-                kernel_arg_types += (np.ctypeslib.ndpointer(
-                    cfg.dtype, cfg.ndim, cfg.shape), )
-        return arg_types, kernel_arg_types
+                params.append(
+                    SymbolRef.unique(sym_type=arg_types[-1]())
+                )
+                kernel_params += (
+                    SymbolRef(params[-1].name,
+                              np.ctypeslib.ndpointer(
+                                  cfg.dtype, cfg.ndim, cfg.shape)()), )
+        return arg_types, params, kernel_params
 
     def transform(self, tree, program_cfg):
         arg_cfg, tune_cfg = program_cfg
-        arg_types, kernel_arg_types = self.process_arg_cfg(arg_cfg)
+        arg_types, params, kernel_params = self.process_arg_cfg(arg_cfg)
         tree = StructuredGridFrontend().visit(tree)
         backend = StructuredGridBackend(arg_cfg, arg_types,
-                                        kernel_arg_types)
+                                        params, kernel_params)
         tree = backend.visit(tree)
 
         arg_types += (cl.cl_command_queue, )
