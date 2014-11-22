@@ -285,12 +285,14 @@ class CConcreteEltOp(ConcreteSpecializedFunction):
 
     def __call__(self, *args):
         output = None
+        processed = []
         for arg in args:
             if isinstance(arg, hmarray):
+                arg.copy_to_host_if_dirty()
+                processed.append(arg)
                 if output is None:
                     output = hmarray(np.zeros_like(arg))
-                arg.copy_to_host_if_dirty()
-        self._c_function(args[0], args[1], output)
+        self._c_function(*(processed + [output]))
         return output
 
 
