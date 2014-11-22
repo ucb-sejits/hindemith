@@ -17,7 +17,8 @@ from collections import namedtuple
 import ctypes as ct
 from functools import reduce
 
-from hindemith.meta.merge import MergeableInfo, FusableKernel, LoopDependence
+from hindemith.meta.merge import MergeableInfo, FusableKernel
+# , LoopDependence
 
 import copy
 
@@ -93,7 +94,7 @@ class hmarray(np.ndarray):
 
 
 NdArrCfg = namedtuple('NdArrCfg', ['dtype', 'ndim', 'shape'])
-ScalarCfg = namedtuple('ScalarCfg', ['dtype'])
+ScalarCfg = namedtuple('ScalarCfg', ['value'])
 
 
 class LoopVarGenerator():
@@ -162,15 +163,12 @@ def gen_kernel_cond(global_size, shape, offset):
     return cond
 
 
-def process_arg_types(arg_types, kernel):
+def process_arg_types(params, kernel):
     control = []
-    params = []
-    for index, arg in enumerate(arg_types):
+    for index, param in enumerate(params):
         control.append(
-            clSetKernelArg(kernel, index, ct.sizeof(cl.cl_mem),
-                           'arg{}'.format(index)))
-        params.append(SymbolRef('arg{}'.format(index), arg()))
-    return control, params
+            clSetKernelArg(kernel, index, ct.sizeof(cl.cl_mem), param.name))
+    return control
 
 
 def get_local_size(shape):
@@ -204,7 +202,7 @@ def unique_kernel_name():
     return "_kernel{}".format(unique_kernel_num)
 
 
-def kernel_range(shape, kernel_range, arg_types, body, offset=None):
+def kernel_range(shape, kernel_range, params, body, offset=None):
     """
     Factory method for generating an OpenCL kernel corresponding
     to a set of nested for loops.  Returns the control logic for
@@ -214,7 +212,7 @@ def kernel_range(shape, kernel_range, arg_types, body, offset=None):
     TODO: Make local size computation dynamic
     """
     unique_name = unique_kernel_name()
-    control, params = process_arg_types(arg_types, unique_name)
+    control = process_arg_types(params, unique_name)
 
     global_size = ()
     for d in kernel_range:
@@ -228,9 +226,9 @@ def kernel_range(shape, kernel_range, arg_types, body, offset=None):
 
     local_size = get_local_size(global_size)
 
-    global_size_decl = 'global_size_{}'.format(unique_name)
-    local_size_decl = 'local_size_{}'.format(unique_name)
-    offset_decl = 'offset_{}'.format(unique_name)
+    global_size_decl = 'global_size{}'.format(unique_name)
+    local_size_decl = 'local_size{}'.format(unique_name)
+    offset_decl = 'offset{}'.format(unique_name)
     control.extend([
         ArrayDef(SymbolRef(global_size_decl, ct.c_size_t()),
                  Constant(len(shape)), global_size),
@@ -258,10 +256,10 @@ def kernel_range(shape, kernel_range, arg_types, body, offset=None):
         params,
         body
     )
-    for index, arg in enumerate(arg_types):
-        if isinstance(arg(), np.ctypeslib._ndptr):
+    for index, param in enumerate(params):
+        if isinstance(param.type, np.ctypeslib._ndptr):
             kernel.params[index].set_global()
-            if index < len(arg_types) - 1:
+            if index < len(params) - 1:
                 kernel.params[index].set_const()
     kernel.set_kernel()
     return control, OclFile(unique_name, [kernel])
@@ -322,10 +320,9 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
                     output._host_dirty = True
                 evt.wait()
                 processed.append(arg.ocl_buf)
-            else:
-                processed.append(arg)
-        self._c_function(self.queue, self.kernel, processed[0], processed[1],
-                         out_buf)
+            # else:
+            #     processed.append(arg)
+        self._c_function(*([self.queue, self.kernel] + processed + [out_buf]))
         return output
 
 
@@ -340,49 +337,55 @@ class EltWiseArrayOp(LazySpecializedFunction):
                 arg_cfgs += (NdArrCfg(arg.dtype, arg.ndim, arg.shape), )
                 out_cfg = (NdArrCfg(arg.dtype, arg.ndim, arg.shape), )
             else:
-                arg_cfgs += (ScalarCfg(type(arg)), )
+                arg_cfgs += (ScalarCfg(arg), )
         return arg_cfgs + out_cfg
 
     def process_arg_cfg(self, arg_cfg):
         arg_types = ()
         op_args = ()
-        kernel_arg_types = ()
+        kernel_params = ()
+        params = []
         for index, cfg in enumerate(arg_cfg):
             if isinstance(cfg, NdArrCfg):
                 if self.backend in {'c', 'omp'}:
                     arg_types += (np.ctypeslib.ndpointer(
                         cfg.dtype, cfg.ndim, cfg.shape), )
+                    unique = SymbolRef.unique(sym_type=arg_types[-1]())
+                    params.append(unique)
                     if index < 2:
-                        op_args += (ArrayRef(SymbolRef('arg{}'.format(index)),
+                        op_args += (ArrayRef(SymbolRef(unique.name),
                                              SymbolRef('loop_idx')), )
                 else:
                     arg_types += (cl.cl_mem, )
+                    unique = SymbolRef.unique(sym_type=arg_types[-1]())
+                    params.append(unique)
                     if index < 2:
-                        op_args += (ArrayRef(SymbolRef('arg{}'.format(index)),
+                        op_args += (ArrayRef(SymbolRef(unique.name),
                                              SymbolRef('loop_idx')), )
-                    kernel_arg_types += (np.ctypeslib.ndpointer(
-                        cfg.dtype, cfg.ndim, cfg.shape), )
+                    kernel_params += (
+                        SymbolRef(unique.name,
+                                  np.ctypeslib.ndpointer(
+                                      cfg.dtype, cfg.ndim, cfg.shape)()), )
             else:
-                arg_types += (py_to_ctypes[cfg.dtype], )
+                # arg_types += (py_to_ctypes[cfg.dtype], )
                 if index < 2:
-                    op_args += (SymbolRef('arg{}'.format(index)), )
-                if EltWiseArrayOp.backend == 'ocl':
-                    kernel_arg_types += (py_to_ctypes[cfg.dtype], )
-        return arg_types, op_args, kernel_arg_types
+                    op_args += (Constant(cfg.value), )
+                # if EltWiseArrayOp.backend == 'ocl':
+                #     kernel_arg_types += (py_to_ctypes[cfg.dtype], )
+        return arg_types, op_args, kernel_params, params
 
     def transform(self, tree, program_cfg):
         op = op_map[tree]
         arg_cfg, tune_cfg = program_cfg
-        arg_types, op_args, kernel_arg_types = self.process_arg_cfg(arg_cfg)
+        arg_types, op_args, kernel_params, params = \
+            self.process_arg_cfg(arg_cfg)
         loop_body = [
-            Assign(ArrayRef(SymbolRef('arg2'), SymbolRef('loop_idx')),
+            Assign(ArrayRef(SymbolRef(params[-1].name), SymbolRef('loop_idx')),
                    op(*op_args))]
         func = FunctionDecl(
             None,
             SymbolRef('op'),
-            [SymbolRef('arg0', arg_types[0]()),
-             SymbolRef('arg1', arg_types[1]()),
-             SymbolRef('arg2', arg_types[2]())],
+            params,
             []
         )
         proj = Project([CFile('op', [func])])
@@ -403,7 +406,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
             arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
             shape = arg_cfg[2].shape[::-1]
             control, kernel = kernel_range(shape, shape,
-                                           kernel_arg_types, loop_body)
+                                           kernel_params, loop_body)
             func.defn = control
 
             func.params.insert(0, SymbolRef('queue', cl.cl_command_queue()))

@@ -110,18 +110,17 @@ class TestElt(unittest.TestCase):
         self._check(mul(sub(hm_a, hm_b), hm_c), (a - b) * c)
 
 
-@unittest.skip("breaks travis")
 class TestScalarArrayElt(unittest.TestCase):
     def setUp(self):
-        self.a = np.random.rand(1024, 1024).astype(np.float32) * 100
-        self.b = np.random.rand(1024, 1024).astype(np.float32) * 100
-        self.c = np.random.rand(1024, 1024).astype(np.float32) * 100
+        self.a = np.random.rand(4, 4).astype(np.float32) * 100
+        self.b = np.random.rand(4, 4).astype(np.float32) * 100
+        self.c = np.random.rand(4, 4).astype(np.float32) * 100
 
     def _check(self, expected, actual):
         expected.copy_to_host_if_dirty()
-        expected = expected.view(np.ndarray)
+        expected = np.copy(expected)
         try:
-            np.testing.assert_array_almost_equal(expected, actual)
+            np.testing.assert_array_almost_equal(expected, actual, decimal=3)
         except AssertionError as e:
             self.fail(e)
 

@@ -15,8 +15,8 @@ ZipWith.backend = 'ocl'
 SpecializedMap.backend = 'ocl'
 
 
-num_warps = 5
-n_scales = 5
+num_warps = 1
+n_scales = 1
 n_inner = 30
 n_outer = 10
 median_filtering = 5
@@ -89,9 +89,18 @@ spec_th = zip_with(th)
 
 
 def threshold(u1, u2, rho_c, gradient, I1wx, I1wy):
+    rho_c = hmarray(rho_c)
+    gradient = hmarray(gradient)
+    I1wx = hmarray(I1wx)
+    I1wy = hmarray(I1wy)
+    u1 = hmarray(u1)
+    u2 = hmarray(u2)
     rho = rho_c + I1wx * u1 + I1wy * u2
     v1 = spec_th(rho, gradient, I1wx, u1)
     v2 = spec_th(rho, gradient, I1wy, u2)
+    v1.copy_to_host_if_dirty()
+    v2.copy_to_host_if_dirty()
+    v1, v2 = np.copy(v1), np.copy(v2)
     return v1, v2
     # v1 = zip_with(th, hmarray(rho), hmarray(gradient),
     #               hmarray(I1wx), hmarray(u[..., 0]))
@@ -235,13 +244,18 @@ def compute_flow(I0, I1, u1, u2):
             # u2 = cv2.medianBlur(u2, median_filtering)
             n1 = 0
             while n1 < n_inner and error > epsilon * epsilon * I0.size:
-                v1, v2 = py_threshold(u1, u2, rho_c, grad, I1wx, I1wy)
-                div_p1 = py_divergence(p11, p12)
-                div_p2 = py_divergence(p21, p22)
+                v1, v2 = threshold(u1, u2, rho_c, grad, I1wx, I1wy)
+                div_p1 = divergence(hmarray(p11), hmarray(p12))
+                div_p2 = divergence(hmarray(p21), hmarray(p22))
+                div_p1 = div_p1 * theta
+                div_p2 = div_p2 * theta
+                div_p1.copy_to_host_if_dirty()
+                div_p2.copy_to_host_if_dirty()
+                div_p1, div_p2 = np.copy(div_p1), np.copy(div_p2)
                 u1_old = u1
                 u2_old = u2
-                u1 = v1 + div_p1 * theta
-                u2 = v2 + div_p2 * theta
+                u1 = v1 + div_p1  # * theta
+                u2 = v2 + div_p2  # * theta
                 error = np.sum(np.square(u1 - u1_old) + np.square(u2 - u2_old))
                 u1x, u1y = py_forward_gradient(u1)
                 u2x, u2y = py_forward_gradient(u2)
