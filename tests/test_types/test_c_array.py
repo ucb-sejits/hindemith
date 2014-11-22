@@ -112,7 +112,6 @@ class TestElt(unittest.TestCase):
         self._check(mul(sub(hm_a, hm_b), hm_c), (a - b) * c)
 
 
-@unittest.skip("breaks travis")
 class TestScalarArrayElt(unittest.TestCase):
     def setUp(self):
         self.a = np.random.rand(1024, 1024).astype(np.float32) * 100
