@@ -1,4 +1,4 @@
-from base_test import HMBaseTest
+from .base_test import HMBaseTest
 
 from hindemith.operations.reduce import sum
 from hindemith.types.hmarray import hmarray
