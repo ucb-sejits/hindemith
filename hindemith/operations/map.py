@@ -154,25 +154,24 @@ class SpecializedMap(LazySpecializedFunction):
         arg_cfg, tune_cfg = program_cfg
         arg_types, params, kernel_params = None, None, None
 
-        if isinstance(arg_cfg, NdArrCfg):
-            if SpecializedMap.backend == 'c':
-                arg_types = (np.ctypeslib.ndpointer(
-                    arg_cfg.dtype, arg_cfg.ndim, arg_cfg.shape),
-                    np.ctypeslib.ndpointer(arg_cfg.dtype, arg_cfg.ndim,
-                                           arg_cfg.shape))
-                params = [SymbolRef.unique(sym_type=arg_types[0]()),
-                          SymbolRef.unique(sym_type=arg_types[1]())]
-            else:
-                arg_types = (cl.cl_mem, cl.cl_mem)
-                params = [SymbolRef.unique(sym_type=arg_types[0]()),
-                          SymbolRef.unique(sym_type=arg_types[0]())]
-                kernel_params = [
-                    SymbolRef(param.name,
-                              np.ctypeslib.ndpointer(arg_cfg.dtype,
-                                                     arg_cfg.ndim,
-                                                     arg_cfg.shape)())
-                    for param in params
-                ]
+        if self.backend == 'c':
+            arg_types = (np.ctypeslib.ndpointer(
+                arg_cfg.dtype, arg_cfg.ndim, arg_cfg.shape),
+                np.ctypeslib.ndpointer(arg_cfg.dtype, arg_cfg.ndim,
+                                       arg_cfg.shape))
+            params = [SymbolRef.unique(sym_type=arg_types[0]()),
+                      SymbolRef.unique(sym_type=arg_types[1]())]
+        else:
+            arg_types = (cl.cl_mem, cl.cl_mem)
+            params = [SymbolRef.unique(sym_type=arg_types[0]()),
+                      SymbolRef.unique(sym_type=arg_types[0]())]
+            kernel_params = [
+                SymbolRef(param.name,
+                          np.ctypeslib.ndpointer(arg_cfg.dtype,
+                                                 arg_cfg.ndim,
+                                                 arg_cfg.shape)())
+                for param in params
+            ]
 
         tree = MapFrontendTransformer(params).visit(tree).files[0].body[0].body
 
@@ -182,7 +181,7 @@ class SpecializedMap(LazySpecializedFunction):
             params
         )
         proj = Project([CFile('map', [func])])
-        if SpecializedMap.backend == 'ocl':
+        if self.backend == 'ocl':
             backend = MapOclTransform()
             loop_body = list(map(backend.visit, tree))
             proj.files[0].body.insert(0, StringTemplate("""
