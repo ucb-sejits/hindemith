@@ -6,7 +6,7 @@ from hindemith.types.hmarray import hmarray, square, EltWiseArrayOp
 from hindemith.operations.map import sqrt, SpecializedMap
 from hindemith.utils import symbols
 from hindemith.operations.structured_grid import structured_grid
-# from hindemith.operations.reduce import sum
+from hindemith.operations.reduce import sum
 # import logging
 # logging.basicConfig(level=20)
 
@@ -240,17 +240,7 @@ def compute_flow(I0, I1, u1, u2):
                 u2_old = u2
                 u1 = v1 + div_p1 * theta
                 u2 = v2 + div_p2 * theta
-                err = square(u1 - u1_old) + square(u2 - u2_old)
-                err.copy_to_host_if_dirty()
-                err = np.copy(err)
-                error = np.sum(err)
-                # error1 = np.sum(err1)
-                # if error != error1:
-                #     print(error)
-                #     print(error1)
-                # else:
-                #     print("Passed")
-                # exit()
+                error = sum(square(u1 - u1_old) + square(u2 - u2_old))
                 u1x, u1y = forward_gradient(u1)
                 u2x, u2y = forward_gradient(u2)
                 ng1 = 1.0 + tau / theta * sqrt(square(u1x) +
@@ -315,13 +305,13 @@ im1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
 # exit()
 py_u1, py_u2 = py_tvl1(im0, im1)
 u1, u2 = tvl1(im0, im1)
-np.testing.assert_array_almost_equal(py_u1, np.copy(u1), decimal=1)
-np.testing.assert_array_almost_equal(py_u2, np.copy(u2), decimal=1)
-print("Passed")
+np.testing.assert_allclose(py_u1, np.copy(u1), 1e-7, 1)
+np.testing.assert_allclose(py_u2, np.copy(u2), 1e-7, 1)
+print("PASSED")
 from ctree.util import Timer
-with Timer() as t:
-    py_tvl1(im0, im1)
-print("Python time: {}".format(t.interval))
+# with Timer() as t:
+#     py_tvl1(im0, im1)
+# print("Python time: {}".format(t.interval))
 with Timer() as t:
     tvl1(im0, im1)
 print("Specialized time: {}".format(t.interval))
