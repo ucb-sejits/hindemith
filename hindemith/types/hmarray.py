@@ -338,8 +338,11 @@ class EltWiseArrayOp(LazySpecializedFunction):
             if isinstance(arg, hmarray):
                 arg_cfgs += (NdArrCfg(arg.dtype, arg.ndim, arg.shape), )
                 out_cfg = (NdArrCfg(arg.dtype, arg.ndim, arg.shape), )
-            else:
+            elif type(arg) in {int, float}:
                 arg_cfgs += (ScalarCfg(arg), )
+            else:
+                raise Exception("EltWiseArrayOp can't handle this arg " +
+                                "type: {}".format(type(arg)))
         return arg_cfgs + out_cfg
 
     def process_arg_cfg(self, arg_cfg):

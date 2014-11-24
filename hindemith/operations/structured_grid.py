@@ -85,7 +85,8 @@ class StructuredGridFrontend(PyBasicConversions):
 
 
 class StructuredGridBackend(ast.NodeTransformer):
-    def __init__(self, arg_cfg, arg_types, params, kernel_params):
+    def __init__(self, arg_cfg, arg_types, params, kernel_params, border_type,
+                 cval):
         self.arg_cfg = arg_cfg
         self.arg_table = {}
         self.arg_types = arg_types
@@ -94,6 +95,8 @@ class StructuredGridBackend(ast.NodeTransformer):
         self.kernels = []
         self.arg_name_map = {}
         self.curr_offset = None
+        self.border_type = border_type
+        self.cval = cval
         super(StructuredGridBackend, self).__init__()
 
     def visit_Project(self, node):
@@ -141,37 +144,40 @@ class StructuredGridBackend(ast.NodeTransformer):
             if len(negs) > 0:
                 bottom_border = min(negs)
                 g_size[index] += bottom_border
-                b_size = list(shape[:])
-                os = [0 for _ in b_size]
-                os[index] = abs(bottom_border)
-                b_size[1 - index] = abs(bottom_border)
-                b_size[index] -= abs(bottom_border)
                 offset[index] = abs(bottom_border)
-                self.curr_offset = index
-                body = [self.visit(s) for s in deepcopy(node.body)]
-                self.curr_offset = None
-                control, kernel = kernel_range(shape, b_size,
-                                               self.kernel_params, body, os)
-                controls.append(control)
-                kernels.append(kernel)
-                self.kernels.append(kernel)
+                if self.border_type == 'constant':
+                    b_size = list(shape[:])
+                    os = [0 for _ in b_size]
+                    os[index] = abs(bottom_border)
+                    b_size[1 - index] = abs(bottom_border)
+                    b_size[index] -= abs(bottom_border)
+                    self.curr_offset = index
+                    body = [self.visit(s) for s in deepcopy(node.body)]
+                    self.curr_offset = None
+                    control, kernel = kernel_range(shape, b_size,
+                                                   self.kernel_params,
+                                                   body, os)
+                    controls.append(control)
+                    kernels.append(kernel)
+                    self.kernels.append(kernel)
             if len(pos) > 0:
                 top_border = min(pos)
                 g_size[1 - index] -= top_border
-                b_size = list(shape[:])
-                os = [0 for _ in b_size]
-                os[index] = g_size[index] - top_border
-                b_size[index] = abs(top_border)
-                b_size[1 - index] -= abs(top_border)
-                print(b_size)
-                self.curr_offset = index
-                body = [self.visit(s) for s in deepcopy(node.body)]
-                self.curr_offset = None
-                control, kernel = kernel_range(shape, b_size,
-                                               self.kernel_params, body, os)
-                controls.append(control)
-                kernels.append(kernel)
-                self.kernels.append(kernel)
+                if self.border_type == 'constant':
+                    b_size = list(shape[:])
+                    os = [0 for _ in b_size]
+                    os[index] = g_size[index] - top_border
+                    b_size[index] = abs(top_border)
+                    b_size[1 - index] -= abs(top_border)
+                    self.curr_offset = index
+                    body = [self.visit(s) for s in deepcopy(node.body)]
+                    self.curr_offset = None
+                    control, kernel = kernel_range(shape, b_size,
+                                                   self.kernel_params,
+                                                   body, os)
+                    controls.append(control)
+                    kernels.append(kernel)
+                    self.kernels.append(kernel)
         body = [self.visit(s) for s in node.body]
         self.project.files.extend(kernels)
 
@@ -198,7 +204,7 @@ class StructuredGridBackend(ast.NodeTransformer):
         for index, elt in enumerate(elts):
             if isinstance(elt, BinaryOp):
                 if self.curr_offset is not None and index == self.curr_offset:
-                    return Constant(0)
+                    return Constant(self.cval)
                 step = np.prod(shape[index + 1:])
                 elt.left = idx
                 if step > 1:
@@ -245,6 +251,11 @@ class OclConcreteStructuredGrid(ConcreteSpecializedFunction):
 class StructuredGrid(LazySpecializedFunction):
     backend = 'ocl'
 
+    def __init__(self, ast, border_type, cval):
+        super(StructuredGrid, self).__init__(ast)
+        self.border_type = border_type
+        self.cval = cval
+
     def args_to_subconfig(self, args):
         arg_cfgs = ()
         out_cfg = None
@@ -281,7 +292,8 @@ class StructuredGrid(LazySpecializedFunction):
         arg_types, params, kernel_params = self.process_arg_cfg(arg_cfg)
         tree = StructuredGridFrontend().visit(tree)
         backend = StructuredGridBackend(arg_cfg, arg_types,
-                                        params, kernel_params)
+                                        params, kernel_params,
+                                        self.border_type, self.cval)
         tree = backend.visit(tree)
 
         arg_types += (cl.cl_command_queue, )
@@ -296,9 +308,9 @@ class StructuredGrid(LazySpecializedFunction):
         return fn.finalize(kernels)
 
 
-def structured_grid(border='zero'):
+def structured_grid(border='zero', cval=0):
     def wrapper(fn):
-        spec_fn = StructuredGrid(get_ast(fn))
+        spec_fn = StructuredGrid(get_ast(fn), border, cval)
 
         def wrapped(*args):
             return spec_fn(*args)
