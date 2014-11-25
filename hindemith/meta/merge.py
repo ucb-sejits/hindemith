@@ -287,6 +287,8 @@ def merge_entry_points(composable_block, env):
     curr_fusable = None
     retval_indexes = []
     target_ids = composable_block.live_outs.intersection(composable_block.kill)
+    # print(composable_block.live_outs)
+    # print(composable_block.live_ins)
     for statement in composable_block.statements:
         specializer = statement.specializer
         output_name = statement.sinks[0]
@@ -297,6 +299,9 @@ def merge_entry_points(composable_block, env):
             mergeable_info.entry_point, mergeable_info.entry_type, \
             mergeable_info.kernels
         files.extend(proj.files)
+        for p in statement.sources:
+            if p[:2] == '_t':
+                print(p)
         uniquifier = UniqueNamer()
         proj = uniquifier.visit(proj)
         merged_kernels.extend(kernels)
@@ -328,6 +333,8 @@ def merge_entry_points(composable_block, env):
     else:
         targets = [ast.Name(target_ids[0], ast.Store())]
     merged_name = get_unique_func_name(env)
+    print(files[0])
+    print(files[-1])
     env[merged_name] = MergedSpecializedFunction(
         Project(files), merged_entry.name.name, merged_entry_type,
         merged_kernels, output_indexes, retval_indexes
