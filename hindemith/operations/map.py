@@ -22,6 +22,7 @@ class ElementReference(CtreeNode):
     _fields = ['name']
 
     def __init__(self, name):
+        super(ElementReference, self).__init__()
         self.name = name
 
 
@@ -29,6 +30,7 @@ class StoreOutput(CtreeNode):
     _fields = ['target', 'value']
 
     def __init__(self, target, value):
+        super(StoreOutput, self).__init__()
         self.target = target
         self.value = value
 

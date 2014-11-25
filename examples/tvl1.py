@@ -40,10 +40,10 @@ symbol_table = {
 
 @symbols(symbol_table)
 def th(rho_elt, gradient_elt, delta_elt, u_elt):
-    threshold = l * theta * gradient_elt
-    if rho_elt < -threshold:
+    thresh = l * theta * gradient_elt
+    if rho_elt < -thresh:
         return l * theta * delta_elt + u_elt
-    elif rho_elt > threshold:
+    elif rho_elt > thresh:
         return -l * theta * delta_elt + u_elt
     elif gradient_elt > 1e-10:
         return -rho_elt / gradient_elt * delta_elt + u_elt
@@ -52,10 +52,10 @@ def th(rho_elt, gradient_elt, delta_elt, u_elt):
 
 
 def py_th(rho_elt, gradient_elt, delta_elt, u_elt):
-    threshold = l * theta * gradient_elt
-    if rho_elt < -threshold:
+    thresh = l * theta * gradient_elt
+    if rho_elt < -thresh:
         return l * theta * delta_elt + u_elt
-    elif rho_elt > threshold:
+    elif rho_elt > thresh:
         return -l * theta * delta_elt + u_elt
     elif gradient_elt > 1e-10:
         return -rho_elt / gradient_elt * delta_elt + u_elt
@@ -75,10 +75,10 @@ def py_threshold(u1, u2, rho_c, gradient, I1wx, I1wy):
 
 @symbols(symbol_table)
 def ocl_th(rho_elt, gradient_elt, delta_elt, u_elt):
-    threshold = float(l * theta) * gradient_elt
-    if rho_elt < -threshold:
+    thresh = float(l * theta) * gradient_elt
+    if rho_elt < -thresh:
         return float(l * theta) * delta_elt + u_elt
-    elif rho_elt > threshold:
+    elif rho_elt > thresh:
         return float(-l * theta) * delta_elt + u_elt
     elif gradient_elt > 1e-10:
         return -rho_elt / gradient_elt * delta_elt + u_elt
