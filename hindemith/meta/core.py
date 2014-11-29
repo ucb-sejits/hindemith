@@ -40,9 +40,8 @@ def meta(func):
         basic_block = separate_composable_blocks(orig_basic_block,
                                                  symbol_table)
         basic_block = perform_liveness_analysis(basic_block)
-        basic_block = process_composable_blocks(basic_block, symbol_table)
         print(basic_block)
-        print(symbol_table['_merged_f0'])
+        basic_block = process_composable_blocks(basic_block, symbol_table)
         fn = get_callable(basic_block, symbol_table)
         func._hm_callable = fn
         return fn(*args, **kwargs)

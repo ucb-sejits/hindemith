@@ -4,16 +4,143 @@ import ast
 from ctree.ocl import get_context_and_queue_from_devices
 from ctree.ocl.macros import get_local_id, get_local_size, get_group_id
 from ctree.c.nodes import SymbolRef, Constant, Op, Assign, Add, For, \
-    AddAssign, Lt, Mul, Sub
+    AddAssign, Lt, Mul, Sub, FunctionDecl, FunctionCall, ArrayDef, If, \
+    And
+from ctree.ocl.nodes import OclFile
 import pycl as cl
 import ctypes as ct
 import numpy as np
-from ctree.nodes import Project
 from .util import get_unique_func_name, UniqueNamer, find_entry_point, \
     SymbolReplacer
 
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from functools import reduce
+from ctree.ocl.macros import clSetKernelArg, NULL, get_global_id
+
+
+def gen_ocl_loop_index(shape):
+    base = get_global_id(0)
+    for index in range(1, len(shape)):
+        curr = Mul(get_global_id(index),
+                   Constant(reduce(lambda x, y: x * y, shape[:index], 1)))
+        base = Add(curr, base)
+    return Assign(SymbolRef('loop_idx', ct.c_int()), base)
+
+
+def gen_kernel_cond(global_size, shape, offset):
+    conds = ()
+    for index, g, s in zip(range(len(global_size)), global_size, shape):
+        if s < g:
+            conds += (Lt(get_global_id(index),
+                         Constant(s + offset[index])), )
+    if len(conds) == 0:
+        return None
+    cond = conds[0]
+    for c in conds[1:]:
+        cond = And(c, cond)
+    return cond
+
+
+def process_arg_types(params, kernel):
+    control = []
+    for index, param in enumerate(params):
+        control.append(
+            clSetKernelArg(kernel, index, ct.sizeof(cl.cl_mem), param.name))
+    return control
+
+
+def get_local_size(shape):
+    """
+    Generate local size from shape.  If the size is less than 32, set it to
+    that else, set it to 32.
+
+    TODO: This should be dynamic with respect to the maximum amount of compute
+    units
+
+    :param tuple shape: The shape of the array being iterated over
+    """
+    local_size = ()
+    if len(shape) == 2:
+        for dim in shape:
+            if dim > 32:
+                local_size += (32, )
+            else:
+                local_size += (dim,)
+    else:
+        local_size = (32, )
+    return local_size
+
+
+unique_kernel_num = -1
+
+
+def unique_kernel_name():
+    global unique_kernel_num
+    unique_kernel_num += 1
+    return "_kernel{}".format(unique_kernel_num)
+
+
+def kernel_range(shape, kernel_range, params, body, offset=None):
+    """
+    Factory method for generating an OpenCL kernel corresponding
+    to a set of nested for loops.  Returns the control logic for
+    setting the arguments and launching the kernel as well as the
+    kernel itself.
+
+    TODO: Make local size computation dynamic
+    """
+    unique_name = unique_kernel_name()
+    control = process_arg_types(params, unique_name)
+
+    global_size = ()
+    for d in kernel_range:
+        if d % 32 != 0 and d > 32:
+            global_size += ((d + 31) & (~31),)
+        else:
+            global_size += (d,)
+
+    if offset is None:
+        offset = [0 for _ in global_size]
+
+    local_size = get_local_size(global_size)
+
+    global_size_decl = 'global_size{}'.format(unique_name)
+    local_size_decl = 'local_size{}'.format(unique_name)
+    offset_decl = 'offset{}'.format(unique_name)
+    control.extend([
+        ArrayDef(SymbolRef(global_size_decl, ct.c_size_t()),
+                 Constant(len(shape)), global_size),
+        ArrayDef(SymbolRef(local_size_decl, ct.c_size_t()),
+                 Constant(len(shape)), local_size),
+        ArrayDef(SymbolRef(offset_decl, ct.c_size_t()),
+                 Constant(len(offset)), offset),
+        FunctionCall(
+            SymbolRef('clEnqueueNDRangeKernel'), [
+                SymbolRef('queue'), SymbolRef(unique_name),
+                Constant(len(shape)), SymbolRef(offset_decl),
+                SymbolRef(global_size_decl), SymbolRef(local_size_decl),
+                Constant(0), NULL(), NULL()
+            ]
+        ),
+        FunctionCall(SymbolRef('clFinish'), [SymbolRef('queue')])
+    ])
+    body.insert(0, gen_ocl_loop_index(shape))
+    cond = gen_kernel_cond(global_size, kernel_range, offset)
+    if cond:
+        body = If(cond, body)
+    kernel = FunctionDecl(
+        None,
+        SymbolRef(unique_name),
+        params,
+        body
+    )
+    for index, param in enumerate(params):
+        if isinstance(param.type, np.ctypeslib._ndptr):
+            kernel.params[index].set_global()
+            if index < len(params) - 1:
+                kernel.params[index].set_const()
+    kernel.set_kernel()
+    return control, OclFile(unique_name, [kernel])
 
 
 class ConcreteMerged(ConcreteSpecializedFunction):
@@ -272,75 +399,159 @@ def fuse_nodes(prev, next):
         prev.enqueue_call.delete()
 
 
+class PromoteToRegister(ast.NodeTransformer):
+    def __init__(self, name):
+        super(PromoteToRegister, self).__init__()
+        self.name = name
+
+    def visit_BinaryOp(self, node):
+        if isinstance(node.op, Op.ArrayRef):
+            if node.left.name == self.name:
+                return SymbolRef(node.left.name)
+        return super(PromoteToRegister, self).generic_visit(node)
+
+
+def fuse(sources, sinks, nodes, to_promote):
+    seen = {}
+    fused_body = []
+    kernel_params = []
+    param_types = []
+    params = []
+    for loop in nodes:
+        body = loop.body
+        for param, _type in zip(loop.sources, loop.types):
+            source = sources.pop(0)
+            if source in seen:
+                visitor = SymbolReplacer(param.name, seen[source])
+                body = [visitor.visit(s) for s in body]
+                if source in to_promote:
+                    visitor = PromoteToRegister(seen[source])
+                    body = [visitor.visit(s) for s in body]
+            else:
+                seen[source] = param.name
+                param_types.append(cl.cl_mem)
+                params.append(SymbolRef(param.name, cl.cl_mem()))
+                kernel_params.append(SymbolRef(param.name, _type()))
+
+        # FIXME: Assuming fusability
+        # FIXME: Assuming one sink per node
+        sink = sinks.pop(0)
+        if sink in to_promote:
+            seen[sink] = loop.sinks[0].name
+            body.insert(0, SymbolRef(seen[sink],
+                                     loop.types[-1]._dtype_.type()))
+            visitor = SymbolReplacer(loop.sinks[0].name, seen[sink])
+            body = [visitor.visit(s) for s in body]
+            visitor = PromoteToRegister(loop.sinks[0].name)
+            body = [visitor.visit(s) for s in body]
+        else:
+            output = loop.sinks[0]
+            seen[sink] = output.name
+            kernel_params.append(SymbolRef(output.name, loop.types[-1]()))
+            params.append(SymbolRef(output.name, cl.cl_mem()))
+            param_types.append(cl.cl_mem)
+        fused_body.extend(body)
+    control = FunctionDecl(None, SymbolRef('control'), params, [])
+    control_body, kernel = kernel_range(nodes[0].shape, nodes[0].shape,
+                                        kernel_params, fused_body)
+    control.defn = control_body
+    return control, kernel
+
+
 def merge_entry_points(composable_block, env):
-    """
-    A hideosly complex function that needs to be cleaned up and modularized
-    Proceed at your own risk.
-    """
-    args = get_merged_arguments(composable_block)
-    merged_entry_type = []
-    entry_points = []
-    param_map = {}
-    files = []
-    merged_kernels = []
-    output_indexes = []
-    curr_fusable = None
-    retval_indexes = []
-    target_ids = composable_block.live_outs.intersection(composable_block.kill)
-    # print(composable_block.live_outs)
-    # print(composable_block.live_ins)
+    fused_sources_set = []
+    fused_sources_list = []
+    fused_sinks_list = []
+    fused_sinks_set = []
+    fused_nodes = []
     for statement in composable_block.statements:
+        arg_vals = tuple(env[source] for source in statement.sources)
+        dependencies = set(fused_sinks_set).intersection(statement.sources)
         specializer = statement.specializer
         output_name = statement.sinks[0]
-        arg_vals = tuple(env[source] for source in statement.sources)
         env[output_name] = specializer.get_placeholder_output(arg_vals)
-        mergeable_info = specializer.get_mergeable_info(arg_vals)
-        proj, entry_point, entry_type, kernels = mergeable_info.proj, \
-            mergeable_info.entry_point, mergeable_info.entry_type, \
-            mergeable_info.kernels
-        files.extend(proj.files)
-        for p in statement.sources:
-            if p[:2] == '_t':
-                print(p)
-        uniquifier = UniqueNamer()
-        proj = uniquifier.visit(proj)
-        merged_kernels.extend(kernels)
-        entry_point = find_entry_point(uniquifier.seen[entry_point], proj)
-        param_map[output_name] = entry_point.params[-1].name
-        entry_points.append(entry_point)
-        entry_type = remove_seen_symbols(statement.sources, param_map,
-                                         entry_point, entry_type)
-        merged_entry_type.extend(entry_type[1:])
-        if output_name in target_ids:
-            retval_indexes.append(len(output_indexes))
-        output_indexes.append(len(merged_entry_type) - 1)
-        fusable_node = mergeable_info.fusable_node
-        if fusable_node is not None:
-            sources = [source for source in statement.sources]
-            sinks = [sink for sink in statement.sinks]
-            fusable_node.sources = sources
-            fusable_node.sinks = sinks
-            if curr_fusable is not None:
-                fuse_nodes(curr_fusable, fusable_node)
-            curr_fusable = fusable_node
-
-    merged_entry_type.insert(0, None)
-    merged_entry = perform_merge(entry_points)
-
-    if len(target_ids) > 1:
-        targets = [ast.Tuple([ast.Name(id, ast.Store())
-                             for id in target_ids], ast.Store())]
-    else:
-        targets = [ast.Name(target_ids[0], ast.Store())]
-    merged_name = get_unique_func_name(env)
-    print(files[0])
-    print(files[-1])
-    env[merged_name] = MergedSpecializedFunction(
-        Project(files), merged_entry.name.name, merged_entry_type,
-        merged_kernels, output_indexes, retval_indexes
-    )
-    value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)
-    return ast.Assign(targets, value)
+        # fused_sources_set |= set(statement.sources)
+        for source in statement.sources:
+            if source not in fused_sources_set:
+                fused_sources_set.append(source)
+        fused_sources_list.extend(statement.sources)
+        fused_sinks_list.extend(statement.sinks)
+        # fused_sinks_set |= set(statement.sinks)
+        for sink in statement.sinks:
+            if sink not in fused_sinks_set:
+                fused_sinks_set.append(sink)
+        fused_nodes.extend(specializer.get_ir_nodes(arg_vals))
+    to_promote = []
+    for src in fused_sources_set:
+        if src not in composable_block.live_ins:
+            to_promote.append(src)
+    fused = fuse(fused_sources_list, fused_sinks_list, fused_nodes, to_promote)
+    target_ids = composable_block.live_outs.intersection(composable_block.kill)
+    raise NotImplementedError()
+    # args = get_merged_arguments(composable_block)
+    # merged_entry_type = []
+    # entry_points = []
+    # param_map = {}
+    # files = []
+    # merged_kernels = []
+    # output_indexes = []
+    # curr_fusable = None
+    # retval_indexes = []
+    # target_ids = composable_block.live_outs.intersection(composable_block.kill)
+    # print(composable_block.live_outs)
+    # print(composable_block.live_ins)
+    # for statement in composable_block.statements:
+    #     specializer = statement.specializer
+    #     output_name = statement.sinks[0]
+    #     arg_vals = tuple(env[source] for source in statement.sources)
+    #     env[output_name] = specializer.get_placeholder_output(arg_vals)
+    #     mergeable_info = specializer.get_mergeable_info(arg_vals)
+    #     proj, entry_point, entry_type, kernels = mergeable_info.proj, \
+    #         mergeable_info.entry_point, mergeable_info.entry_type, \
+    #         mergeable_info.kernels
+    #     files.extend(proj.files)
+    #     for p in statement.sources:
+    #         if p[:2] == '_t':
+    #             print(p)
+    #     uniquifier = UniqueNamer()
+    #     proj = uniquifier.visit(proj)
+    #     merged_kernels.extend(kernels)
+    #     entry_point = find_entry_point(uniquifier.seen[entry_point], proj)
+    #     param_map[output_name] = entry_point.params[-1].name
+    #     entry_points.append(entry_point)
+    #     entry_type = remove_seen_symbols(statement.sources, param_map,
+    #                                      entry_point, entry_type)
+    #     merged_entry_type.extend(entry_type[1:])
+    #     if output_name in target_ids:
+    #         retval_indexes.append(len(output_indexes))
+    #     output_indexes.append(len(merged_entry_type) - 1)
+    #     fusable_node = mergeable_info.fusable_node
+    #     if fusable_node is not None:
+    #         sources = [source for source in statement.sources]
+    #         sinks = [sink for sink in statement.sinks]
+    #         fusable_node.sources = sources
+    #         fusable_node.sinks = sinks
+    #         if curr_fusable is not None:
+    #             fuse_nodes(curr_fusable, fusable_node)
+    #         curr_fusable = fusable_node
+    #
+    # merged_entry_type.insert(0, None)
+    # merged_entry = perform_merge(entry_points)
+    #
+    # if len(target_ids) > 1:
+    #     targets = [ast.Tuple([ast.Name(id, ast.Store())
+    #                          for id in target_ids], ast.Store())]
+    # else:
+    #     targets = [ast.Name(target_ids[0], ast.Store())]
+    # merged_name = get_unique_func_name(env)
+    # print(files[0])
+    # print(files[-1])
+    # env[merged_name] = MergedSpecializedFunction(
+    #     Project(files), merged_entry.name.name, merged_entry_type,
+    #     merged_kernels, output_indexes, retval_indexes
+    # )
+    # value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)
+    # return ast.Assign(targets, value)
 
 
 class MergeableInfo(object):

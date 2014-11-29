@@ -1,4 +1,5 @@
-from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray, for_range
+from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray, \
+    for_range, Loop
 from .map import MapOclTransform, ElementReference, \
     StoreOutput
 
@@ -58,8 +59,10 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
 
 
 class ZipWithFrontendTransformer(PyBasicConversions):
-    def __init__(self, params):
+    def __init__(self, symbols, params):
+        self.symbols = symbols
         self.params = params
+        self.seen = {}
         super(ZipWithFrontendTransformer, self).__init__()
 
     def visit_FunctionDef(self, node):
@@ -74,7 +77,15 @@ class ZipWithFrontendTransformer(PyBasicConversions):
         for index, target in enumerate(self.targets):
             if target == node.id:
                 return ElementReference(self.params[index].name)
-        return PyBasicConversions.visit_Name(self, node)
+        node = PyBasicConversions.visit_Name(self, node)
+        if node.name in self.symbols:
+            # Handled by backend
+            # FIXME: do this in frontend or something
+            return node
+        if node.name not in self.seen:
+            self.seen[node.name] = SymbolRef.unique().name
+        node.name = self.seen[node.name]
+        return node
 
     def visit_Return(self, node):
         return StoreOutput(self.params[-1].name,
@@ -138,7 +149,7 @@ class ZipWith(LazySpecializedFunction):
 
         arg_types, params, kernel_params = self.process_arg_types(arg_cfg)
 
-        tree = ZipWithFrontendTransformer(
+        tree = ZipWithFrontendTransformer(symbols,
             params).visit(tree).files[0].body[0].body
 
         func = FunctionDecl(
@@ -185,32 +196,32 @@ class ZipWith(LazySpecializedFunction):
     def get_placeholder_output(self, args):
         return hmarray(np.zeros_like(args[0]))
 
-    def get_mergeable_info(self, args):
+    def get_ir_nodes(self, args):
         arg_cfg = self.args_to_subconfig(args)
-        tune_cfg = self.get_tuning_driver()
-        program_cfg = (arg_cfg, tune_cfg)
-        tree = copy.deepcopy(self.original_tree)
-        entry_point, proj, entry_type = self.transform(tree, program_cfg)
-        control = proj.find(CFile).find(FunctionDecl)
-        num_args = len(args) + 1
-        arg_setters = control.defn[:num_args]
-        global_size, local_size = control.defn[num_args:num_args + 2]
-        enqueue_call = control.defn[-2]
-        kernel_decl = proj.find(OclFile).find(FunctionDecl)
-        global_loads = []
-        global_stores = []
-        kernel = proj.find(OclFile)
-        return MergeableInfo(
-            proj=proj,
-            entry_point=entry_point,
-            entry_type=entry_type,
-            # TODO: This should use a namedtuple or object to be more explicit
-            kernels=[kernel],
-            fusable_node=FusableKernel(
-                (16, 16), tuple(value for value in global_size.body),
-                arg_setters, enqueue_call, kernel_decl, global_loads,
-                global_stores, [])
-        )
+        tree = self.original_tree
+        if hasattr(tree, '_hm_symbols'):
+            symbols = tree._hm_symbols
+        else:
+            symbols = {}
+        tree = get_ast(tree)
+
+        types = ()
+        params = []
+        type_table = {}
+        for cfg in arg_cfg:
+            types += (np.ctypeslib.ndpointer(cfg.dtype, cfg.ndim,
+                                             cfg.shape),)
+            params.append(SymbolRef.unique(sym_type=types[-1]()))
+
+            type_table[params[-1].name] = types[-1]
+
+        tree = ZipWithFrontendTransformer(symbols,
+            params).visit(tree).files[0].body[0].body
+
+        backend = MapOclTransform(symbols, type_table)
+        loop_body = list(map(backend.visit, tree))
+        shape = arg_cfg[0].shape[::-1]
+        return [Loop(shape, params[:-1], [params[-1]], types, loop_body)]
 
 
 zip_with = ZipWith
