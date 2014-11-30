@@ -8,8 +8,8 @@ from ctree.nodes import Project, CtreeNode
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
-from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray, \
-    py_to_ctypes
+from hindemith.types.hmarray import NdArrCfg, hmarray, py_to_ctypes
+from hindemith.nodes import kernel_range
 import ast
 import sys
 

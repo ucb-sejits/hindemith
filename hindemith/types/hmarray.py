@@ -15,7 +15,8 @@ from collections import namedtuple
 import ctypes as ct
 from functools import reduce
 
-from hindemith.meta.merge import MergeableInfo, FusableKernel, kernel_range
+from hindemith.nodes import kernel_range
+# from hindemith.meta.merge import MergeableInfo, FusableKernel, kernel_range
 # , LoopDependence
 
 import copy
