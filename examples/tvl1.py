@@ -119,6 +119,10 @@ def divergence(v1, v2, output):
 
 
 def forward_gradient(m):
+    """
+
+    :rtype : hmarray
+    """
     return dx(m), dy(m)
 
 
@@ -164,17 +168,17 @@ def py_flow(I0, I1, u1, u2):
     p12 = np.zeros(I1.shape, dtype=np.float32)
     p21 = np.zeros(I1.shape, dtype=np.float32)
     p22 = np.zeros(I1.shape, dtype=np.float32)
-    I1y, I1x = centered_gradient(I1)
-    I1x = I1x.astype(np.float32)
-    I1y = I1y.astype(np.float32)
-    idxs = np.indices(u1.shape).astype(np.float32)
+    i1y, i1x = centered_gradient(I1)
+    i1x = i1x.astype(np.float32)
+    i1y = i1y.astype(np.float32)
+    indices = np.indices(u1.shape).astype(np.float32)
     for w in range(num_warps):
-        _f1, _f2 = build_flow_map(idxs, u1, u2)
-        I1w = warp(I1, _f1, _f2)
-        I1wx = warp(I1x, _f1, _f2)
-        I1wy = warp(I1y, _f1, _f2)
-        grad = np.square(I1wx) + np.square(I1wy)
-        rho_c = I1w - I1wx * u1 - I1wy * u2 - I0
+        _f1, _f2 = build_flow_map(indices, u1, u2)
+        i1w = warp(I1, _f1, _f2)
+        i1wx = warp(i1x, _f1, _f2)
+        i1wy = warp(i1y, _f1, _f2)
+        grad = np.square(i1wx) + np.square(i1wy)
+        rho_c = i1w - i1wx * u1 - i1wy * u2 - I0
         n0 = 0
         error = sys.maxint
         while n0 < n_outer and error > epsilon * epsilon * I0.size:
@@ -182,7 +186,7 @@ def py_flow(I0, I1, u1, u2):
             # u2 = cv2.medianBlur(u2, median_filtering)
             n1 = 0
             while n1 < n_inner and error > epsilon * epsilon * I0.size:
-                v1, v2 = py_threshold(u1, u2, rho_c, grad, I1wx, I1wy)
+                v1, v2 = py_threshold(u1, u2, rho_c, grad, i1wx, i1wy)
                 div_p1 = py_divergence(p11, p12)
                 div_p2 = py_divergence(p21, p22)
                 u1_old = u1
@@ -205,35 +209,35 @@ def py_flow(I0, I1, u1, u2):
     return u1, u2
 
 
-def compute_flow(I0, I1, u1, u2):
-    p11 = hmarray(np.zeros(I1.shape, dtype=np.float32))
-    p12 = hmarray(np.zeros(I1.shape, dtype=np.float32))
-    p21 = hmarray(np.zeros(I1.shape, dtype=np.float32))
-    p22 = hmarray(np.zeros(I1.shape, dtype=np.float32))
-    I1y, I1x = centered_gradient(I1)
-    I1x = I1x.astype(np.float32)
-    I1y = I1y.astype(np.float32)
+def compute_flow(i0, i1, u1, u2):
+    p11 = hmarray(np.zeros(i1.shape, dtype=np.float32))
+    p12 = hmarray(np.zeros(i1.shape, dtype=np.float32))
+    p21 = hmarray(np.zeros(i1.shape, dtype=np.float32))
+    p22 = hmarray(np.zeros(i1.shape, dtype=np.float32))
+    i1y, i1x = centered_gradient(i1)
+    i1x = i1x.astype(np.float32)
+    i1y = i1y.astype(np.float32)
     u1, u2 = hmarray(u1), hmarray(u2)
-    I0 = hmarray(I0)
-    idxs = np.indices(u1.shape).astype(np.float32)
+    i0 = hmarray(i0)
+    indices = np.indices(u1.shape).astype(np.float32)
     for w in range(num_warps):
-        _f1, _f2 = build_flow_map(idxs, u1, u2)
-        I1w = warp(I1, _f1, _f2)
-        I1wx = warp(I1x, _f1, _f2)
-        I1wy = warp(I1y, _f1, _f2)
-        I1wx = hmarray(I1wx)
-        I1wy = hmarray(I1wy)
-        I1w = hmarray(I1w)
-        grad = square(I1wx) + square(I1wy)
-        rho_c = I1w - I1wx * u1 - I1wy * u2 - I0
+        _f1, _f2 = build_flow_map(indices, u1, u2)
+        i1w = warp(i1, _f1, _f2)
+        i1wx = warp(i1x, _f1, _f2)
+        i1wy = warp(i1y, _f1, _f2)
+        i1wx = hmarray(i1wx)
+        i1wy = hmarray(i1wy)
+        i1w = hmarray(i1w)
+        grad = square(i1wx) + square(i1wy)
+        rho_c = i1w - i1wx * u1 - i1wy * u2 - i0
         n0 = 0
         error = sys.maxint
-        while n0 < n_outer and error > epsilon * epsilon * I0.size:
+        while n0 < n_outer and error > epsilon * epsilon * i0.size:
             # u1 = cv2.medianBlur(u1, median_filtering)
             # u2 = cv2.medianBlur(u2, median_filtering)
             n1 = 0
-            while n1 < n_inner and error > epsilon * epsilon * I0.size:
-                v1, v2 = threshold(u1, u2, rho_c, grad, I1wx, I1wy)
+            while n1 < n_inner and error > epsilon * epsilon * i0.size:
+                v1, v2 = threshold(u1, u2, rho_c, grad, i1wx, i1wy)
                 div_p1 = divergence(p11, p12)
                 div_p2 = divergence(p21, p22)
                 u1_old = u1
@@ -304,9 +308,9 @@ im1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
 # cProfile.run('tvl1(im0, im1)')
 # exit()
 py_u1, py_u2 = py_tvl1(im0, im1)
-u1, u2 = tvl1(im0, im1)
-np.testing.assert_allclose(py_u1, np.copy(u1), 1e-7, 1)
-np.testing.assert_allclose(py_u2, np.copy(u2), 1e-7, 1)
+u = tvl1(im0, im1)
+np.testing.assert_allclose(py_u1, np.copy(u[0]), 1e-7, 1)
+np.testing.assert_allclose(py_u2, np.copy(u[1]), 1e-7, 1)
 print("PASSED")
 from ctree.util import Timer
 # with Timer() as t:

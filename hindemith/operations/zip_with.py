@@ -1,5 +1,6 @@
-from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray, \
+from hindemith.types.hmarray import NdArrCfg, hmarray, \
     for_range, Loop
+from hindemith.nodes import kernel_range
 from .map import MapOclTransform, ElementReference, \
     StoreOutput
 

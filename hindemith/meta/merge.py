@@ -5,221 +5,75 @@ from ctree.ocl import get_context_and_queue_from_devices
 from ctree.ocl.macros import get_local_id, get_local_size, get_group_id
 from ctree.c.nodes import SymbolRef, Constant, Op, Assign, Add, For, \
     AddAssign, Lt, Mul, Sub, FunctionDecl, FunctionCall, ArrayDef, If, \
-    And
+    And, CFile
 from ctree.ocl.nodes import OclFile
+from ctree.nodes import Project
 import pycl as cl
 import ctypes as ct
 import numpy as np
-from .util import get_unique_func_name, UniqueNamer, find_entry_point, \
-    SymbolReplacer
+from .util import get_unique_func_name, SymbolReplacer
+from ..nodes import kernel_range, ocl_header
+from hindemith.types.hmarray import hmarray
 
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from functools import reduce
-from ctree.ocl.macros import clSetKernelArg, NULL, get_global_id
-
-
-def gen_ocl_loop_index(shape):
-    base = get_global_id(0)
-    for index in range(1, len(shape)):
-        curr = Mul(get_global_id(index),
-                   Constant(reduce(lambda x, y: x * y, shape[:index], 1)))
-        base = Add(curr, base)
-    return Assign(SymbolRef('loop_idx', ct.c_int()), base)
-
-
-def gen_kernel_cond(global_size, shape, offset):
-    conds = ()
-    for index, g, s in zip(range(len(global_size)), global_size, shape):
-        if s < g:
-            conds += (Lt(get_global_id(index),
-                         Constant(s + offset[index])), )
-    if len(conds) == 0:
-        return None
-    cond = conds[0]
-    for c in conds[1:]:
-        cond = And(c, cond)
-    return cond
-
-
-def process_arg_types(params, kernel):
-    control = []
-    for index, param in enumerate(params):
-        control.append(
-            clSetKernelArg(kernel, index, ct.sizeof(cl.cl_mem), param.name))
-    return control
-
-
-def get_local_size(shape):
-    """
-    Generate local size from shape.  If the size is less than 32, set it to
-    that else, set it to 32.
-
-    TODO: This should be dynamic with respect to the maximum amount of compute
-    units
-
-    :param tuple shape: The shape of the array being iterated over
-    """
-    local_size = ()
-    if len(shape) == 2:
-        for dim in shape:
-            if dim > 32:
-                local_size += (32, )
-            else:
-                local_size += (dim,)
-    else:
-        local_size = (32, )
-    return local_size
-
-
-unique_kernel_num = -1
-
-
-def unique_kernel_name():
-    global unique_kernel_num
-    unique_kernel_num += 1
-    return "_kernel{}".format(unique_kernel_num)
-
-
-def kernel_range(shape, kernel_range, params, body, offset=None):
-    """
-    Factory method for generating an OpenCL kernel corresponding
-    to a set of nested for loops.  Returns the control logic for
-    setting the arguments and launching the kernel as well as the
-    kernel itself.
-
-    TODO: Make local size computation dynamic
-    """
-    unique_name = unique_kernel_name()
-    control = process_arg_types(params, unique_name)
-
-    global_size = ()
-    for d in kernel_range:
-        if d % 32 != 0 and d > 32:
-            global_size += ((d + 31) & (~31),)
-        else:
-            global_size += (d,)
-
-    if offset is None:
-        offset = [0 for _ in global_size]
-
-    local_size = get_local_size(global_size)
-
-    global_size_decl = 'global_size{}'.format(unique_name)
-    local_size_decl = 'local_size{}'.format(unique_name)
-    offset_decl = 'offset{}'.format(unique_name)
-    control.extend([
-        ArrayDef(SymbolRef(global_size_decl, ct.c_size_t()),
-                 Constant(len(shape)), global_size),
-        ArrayDef(SymbolRef(local_size_decl, ct.c_size_t()),
-                 Constant(len(shape)), local_size),
-        ArrayDef(SymbolRef(offset_decl, ct.c_size_t()),
-                 Constant(len(offset)), offset),
-        FunctionCall(
-            SymbolRef('clEnqueueNDRangeKernel'), [
-                SymbolRef('queue'), SymbolRef(unique_name),
-                Constant(len(shape)), SymbolRef(offset_decl),
-                SymbolRef(global_size_decl), SymbolRef(local_size_decl),
-                Constant(0), NULL(), NULL()
-            ]
-        ),
-        FunctionCall(SymbolRef('clFinish'), [SymbolRef('queue')])
-    ])
-    body.insert(0, gen_ocl_loop_index(shape))
-    cond = gen_kernel_cond(global_size, kernel_range, offset)
-    if cond:
-        body = If(cond, body)
-    kernel = FunctionDecl(
-        None,
-        SymbolRef(unique_name),
-        params,
-        body
-    )
-    for index, param in enumerate(params):
-        if isinstance(param.type, np.ctypeslib._ndptr):
-            kernel.params[index].set_global()
-            if index < len(params) - 1:
-                kernel.params[index].set_const()
-    kernel.set_kernel()
-    return control, OclFile(unique_name, [kernel])
 
 
 class ConcreteMerged(ConcreteSpecializedFunction):
-    def __init__(self):
+    def __init__(self, entry_name, proj, entry_type, output_idxs):
         devices = cl.clGetDeviceIDs()
         # Default to last device for now
         # TODO: Allow settable devices via params or env variables
         self.context, self.queue = get_context_and_queue_from_devices(
             [devices[-1]])
+        self._c_function = self._compile(entry_name, proj, entry_type)
+        self.output_idxs = output_idxs
 
-    def finalize(self, proj, entry_name, entry_type, kernels, outputs,
-                 retvals):
-        self.__entry_type = entry_type
-        self._c_function = self._compile(entry_name, proj,
-                                         ct.CFUNCTYPE(*entry_type))
-        self.__kernels = kernels
-        self.__outputs = outputs
-        self.__retvals = retvals
+    def finalize(self, kernel):
+        self.kernel = kernel
         return self
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
+        output = None
         processed = []
-        events = []
-        kernel_index = 0
-        arg_index = 0
         outputs = []
-        for index, argtype in enumerate(self.__entry_type[1:]):
-            if argtype is cl.cl_command_queue:
-                processed.append(self.queue)
-            elif argtype is cl.cl_kernel:
-                kernel = self.__kernels[kernel_index]
-                program = cl.clCreateProgramWithSource(
-                    self.context, kernel.codegen()).build()
-                processed.append(program[kernel.body[0].name.name])
-                kernel_index += 1
-            elif index in self.__outputs:
-                buf, evt = cl.buffer_from_ndarray(self.queue,
-                                                  np.zeros_like(args[0]),
-                                                  blocking=False)
-                processed.append(buf)
-                outputs.append(buf)
-                events.append(evt)
-            elif isinstance(args[arg_index], np.ndarray) and \
-                    argtype is cl.cl_mem:
-                buf, evt = cl.buffer_from_ndarray(self.queue, args[arg_index],
-                                                  blocking=False)
-                processed.append(buf)
-                events.append(evt)
-                arg_index += 1
-        cl.clWaitForEvents(*events)
-        self._c_function(*processed)
+        out_idxs = self.output_idxs[:]
+        for index, arg in enumerate(args):
+            if isinstance(arg, hmarray):
+                processed.append(arg.ocl_buf)
+            else:
+                processed.append(arg)
+            if index == out_idxs[0]:
+                out_idxs.pop(0)
+                output = hmarray(np.zeros_like(arg))
+                processed.append(output.ocl_buf)
+                outputs.append(output)
 
-        retvals = ()
-        for index in self.__retvals:
-            buf, evt = cl.buffer_to_ndarray(self.queue, outputs[index],
-                                            like=args[0], blocking=True)
-            evt.wait()
-            retvals += (buf, )
-        if len(retvals) > 1:
-            return retvals
-        return retvals[0]
+        for idx in out_idxs:
+            output = hmarray(np.zeros_like(arg))
+            processed.append(output.ocl_buf)
+            outputs.append(output)
+            
+
+        self._c_function(*([self.queue, self.kernel] + processed))
+        if len(outputs) == 1:
+            return outputs[0]
+        return outputs
 
 
 class MergedSpecializedFunction(LazySpecializedFunction):
-    def __init__(self, tree, entry_name, entry_type, kernels, output_indexes,
-                 retval_indexes):
+    def __init__(self, tree, entry_type, output_idxs):
         super(MergedSpecializedFunction, self).__init__(None)
-        self.__original_tree = tree
-        self.__entry_name = entry_name
-        self.__entry_type = entry_type
-        self.__kernels = kernels
-        self.__output_indexes = output_indexes
-        self.__retval_indexes = retval_indexes
+        self.tree = tree
+        self.entry_type = entry_type
+        self.output_idxs = output_idxs
 
     def transform(self, tree, program_config):
-        fn = ConcreteMerged()
-        return fn.finalize(self.__original_tree, self.__entry_name,
-                           self.__entry_type, self.__kernels,
-                           self.__output_indexes, self.__retval_indexes)
+        tree = self.tree
+        fn = ConcreteMerged('control', tree, self.entry_type, self.output_idxs)
+        kernel = tree.find(OclFile)
+        program = cl.clCreateProgramWithSource(
+            fn.context, kernel.codegen()).build()
+        return fn.finalize(program[kernel.body[0].name.name])
 
 
 def replace_symbol_in_tree(tree, old, new):
@@ -411,12 +265,14 @@ class PromoteToRegister(ast.NodeTransformer):
         return super(PromoteToRegister, self).generic_visit(node)
 
 
-def fuse(sources, sinks, nodes, to_promote):
+def fuse(sources, sinks, nodes, to_promote, env):
     seen = {}
     fused_body = []
     kernel_params = []
-    param_types = []
-    params = []
+    param_types = [None, cl.cl_command_queue, cl.cl_kernel]
+    params = [SymbolRef('queue', cl.cl_command_queue())]
+    args = []
+    output_idxs = []
     for loop in nodes:
         body = loop.body
         for param, _type in zip(loop.sources, loop.types):
@@ -432,6 +288,7 @@ def fuse(sources, sinks, nodes, to_promote):
                 param_types.append(cl.cl_mem)
                 params.append(SymbolRef(param.name, cl.cl_mem()))
                 kernel_params.append(SymbolRef(param.name, _type()))
+                args.append(ast.Name(source, ast.Load()))
 
         # FIXME: Assuming fusability
         # FIXME: Assuming one sink per node
@@ -450,12 +307,22 @@ def fuse(sources, sinks, nodes, to_promote):
             kernel_params.append(SymbolRef(output.name, loop.types[-1]()))
             params.append(SymbolRef(output.name, cl.cl_mem()))
             param_types.append(cl.cl_mem)
+            # args.append(ast.Name(sink, ast.Load()))
+            if len(output_idxs) > 0 and output_idxs[-1] >= len(args) - 1:
+                output_idxs.append(output_idxs[-1] + 1)
+            else:
+                output_idxs.append(len(args) - 1)
         fused_body.extend(body)
     control = FunctionDecl(None, SymbolRef('control'), params, [])
     control_body, kernel = kernel_range(nodes[0].shape, nodes[0].shape,
                                         kernel_params, fused_body)
+    print(kernel)
+    print(control)
+        
+    params.insert(1, SymbolRef(kernel.body[0].name.name, cl.cl_kernel()))
     control.defn = control_body
-    return control, kernel
+    proj = Project([CFile('control', [ocl_header, control]), kernel])
+    return proj, ct.CFUNCTYPE(*param_types), args, output_idxs
 
 
 def merge_entry_points(composable_block, env):
@@ -466,27 +333,34 @@ def merge_entry_points(composable_block, env):
     fused_nodes = []
     for statement in composable_block.statements:
         arg_vals = tuple(env[source] for source in statement.sources)
-        dependencies = set(fused_sinks_set).intersection(statement.sources)
+        # dependencies = set(fused_sinks_set).intersection(statement.sources)
         specializer = statement.specializer
         output_name = statement.sinks[0]
         env[output_name] = specializer.get_placeholder_output(arg_vals)
         # fused_sources_set |= set(statement.sources)
-        for source in statement.sources:
-            if source not in fused_sources_set:
-                fused_sources_set.append(source)
+        fused_sources_set.extend(
+            filter(lambda s: s not in fused_sources_set, statement.sources))
         fused_sources_list.extend(statement.sources)
         fused_sinks_list.extend(statement.sinks)
         # fused_sinks_set |= set(statement.sinks)
-        for sink in statement.sinks:
-            if sink not in fused_sinks_set:
-                fused_sinks_set.append(sink)
+        fused_sinks_set.extend(
+            filter(lambda s: s not in fused_sinks_set, statement.sinks))
         fused_nodes.extend(specializer.get_ir_nodes(arg_vals))
     to_promote = []
-    for src in fused_sources_set:
-        if src not in composable_block.live_ins:
-            to_promote.append(src)
-    fused = fuse(fused_sources_list, fused_sinks_list, fused_nodes, to_promote)
+    to_promote = list(filter(lambda s: s not in composable_block.live_ins,
+                             fused_sources_set))
+    proj, entry_type, args, output_idxs = fuse(
+        fused_sources_list, fused_sinks_list, fused_nodes, to_promote, env)
     target_ids = composable_block.live_outs.intersection(composable_block.kill)
+    if len(target_ids) > 1:
+        targets = [ast.Tuple([ast.Name(id, ast.Store())
+                             for id in target_ids], ast.Store())]
+    else:
+        targets = [ast.Name(target_ids[0], ast.Store())]
+    merged_name = get_unique_func_name(env)
+    env[merged_name] = MergedSpecializedFunction(proj, entry_type, output_idxs)
+    value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)
+    return ast.Assign(targets, value)
     raise NotImplementedError()
     # args = get_merged_arguments(composable_block)
     # merged_entry_type = []
