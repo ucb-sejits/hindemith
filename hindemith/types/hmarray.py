@@ -382,18 +382,30 @@ spec_mul = EltWiseArrayOp('*')
 spec_div = EltWiseArrayOp('/')
 
 
+def composable(specializer):
+    def wrapper(fn):
+        fn.composable = True
+        fn.specializer = specializer
+        return fn
+    return wrapper
+
+
+@composable(spec_add)
 def add(a, b):
     return spec_add(a, b)
 
 
+@composable(spec_sub)
 def sub(a, b):
     return spec_sub(a, b)
 
 
+@composable(spec_mul)
 def mul(a, b):
     return spec_mul(a, b)
 
 
+@composable(spec_div)
 def div(a, b):
     return spec_div(a, b)
 

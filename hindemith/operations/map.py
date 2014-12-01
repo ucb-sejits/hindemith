@@ -88,6 +88,7 @@ class MapOclTransform(ast.NodeTransformer):
                 return self.infer_type(node.args[0])
             elif node.func.name == 'float':
                 return ct.c_float
+            print(node)
             raise Exception(
                 "Could not infer type of call to function {}".format(
                     node.func.name))

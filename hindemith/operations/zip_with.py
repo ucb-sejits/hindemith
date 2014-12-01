@@ -74,6 +74,12 @@ class ZipWithFrontendTransformer(PyBasicConversions):
         node.body = list(map(self.visit, node.body))
         return node
 
+    def visit_Call(self, node):
+        orig_name = node.func.id
+        node = super(ZipWithFrontendTransformer, self).visit_Call(node)
+        node.func.name = orig_name
+        return node
+
     def visit_Name(self, node):
         for index, target in enumerate(self.targets):
             if target == node.id:
