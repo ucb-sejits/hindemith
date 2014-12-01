@@ -33,7 +33,6 @@ class ConcreteMerged(ConcreteSpecializedFunction):
         return self
 
     def __call__(self, *args):
-        output = None
         processed = []
         outputs = []
         out_idxs = self.output_idxs[:]
@@ -52,7 +51,7 @@ class ConcreteMerged(ConcreteSpecializedFunction):
             output = hmarray(np.zeros_like(arg))
             processed.append(output.ocl_buf)
             outputs.append(output)
-            
+
 
         self._c_function(*([self.queue, self.kernel] + processed))
         if len(outputs) == 1:
@@ -335,8 +334,6 @@ def merge_entry_points(composable_block, env):
         arg_vals = tuple(env[source] for source in statement.sources)
         # dependencies = set(fused_sinks_set).intersection(statement.sources)
         specializer = statement.specializer
-        output_name = statement.sinks[0]
-        env[output_name] = specializer.get_placeholder_output(arg_vals)
         # fused_sources_set |= set(statement.sources)
         fused_sources_set.extend(
             filter(lambda s: s not in fused_sources_set, statement.sources))
@@ -361,71 +358,6 @@ def merge_entry_points(composable_block, env):
     env[merged_name] = MergedSpecializedFunction(proj, entry_type, output_idxs)
     value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)
     return ast.Assign(targets, value)
-    raise NotImplementedError()
-    # args = get_merged_arguments(composable_block)
-    # merged_entry_type = []
-    # entry_points = []
-    # param_map = {}
-    # files = []
-    # merged_kernels = []
-    # output_indexes = []
-    # curr_fusable = None
-    # retval_indexes = []
-    # target_ids = composable_block.live_outs.intersection(composable_block.kill)
-    # print(composable_block.live_outs)
-    # print(composable_block.live_ins)
-    # for statement in composable_block.statements:
-    #     specializer = statement.specializer
-    #     output_name = statement.sinks[0]
-    #     arg_vals = tuple(env[source] for source in statement.sources)
-    #     env[output_name] = specializer.get_placeholder_output(arg_vals)
-    #     mergeable_info = specializer.get_mergeable_info(arg_vals)
-    #     proj, entry_point, entry_type, kernels = mergeable_info.proj, \
-    #         mergeable_info.entry_point, mergeable_info.entry_type, \
-    #         mergeable_info.kernels
-    #     files.extend(proj.files)
-    #     for p in statement.sources:
-    #         if p[:2] == '_t':
-    #             print(p)
-    #     uniquifier = UniqueNamer()
-    #     proj = uniquifier.visit(proj)
-    #     merged_kernels.extend(kernels)
-    #     entry_point = find_entry_point(uniquifier.seen[entry_point], proj)
-    #     param_map[output_name] = entry_point.params[-1].name
-    #     entry_points.append(entry_point)
-    #     entry_type = remove_seen_symbols(statement.sources, param_map,
-    #                                      entry_point, entry_type)
-    #     merged_entry_type.extend(entry_type[1:])
-    #     if output_name in target_ids:
-    #         retval_indexes.append(len(output_indexes))
-    #     output_indexes.append(len(merged_entry_type) - 1)
-    #     fusable_node = mergeable_info.fusable_node
-    #     if fusable_node is not None:
-    #         sources = [source for source in statement.sources]
-    #         sinks = [sink for sink in statement.sinks]
-    #         fusable_node.sources = sources
-    #         fusable_node.sinks = sinks
-    #         if curr_fusable is not None:
-    #             fuse_nodes(curr_fusable, fusable_node)
-    #         curr_fusable = fusable_node
-    #
-    # merged_entry_type.insert(0, None)
-    # merged_entry = perform_merge(entry_points)
-    #
-    # if len(target_ids) > 1:
-    #     targets = [ast.Tuple([ast.Name(id, ast.Store())
-    #                          for id in target_ids], ast.Store())]
-    # else:
-    #     targets = [ast.Name(target_ids[0], ast.Store())]
-    # merged_name = get_unique_func_name(env)
-    # print(files[0])
-    # print(files[-1])
-    # env[merged_name] = MergedSpecializedFunction(
-    #     Project(files), merged_entry.name.name, merged_entry_type,
-    #     merged_kernels, output_indexes, retval_indexes
-    # )
-    # value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)
-    # return ast.Assign(targets, value)
 
 
 class MergeableInfo(object):

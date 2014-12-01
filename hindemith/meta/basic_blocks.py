@@ -58,6 +58,8 @@ class Statement(object):
         # Infer sources and sinks for statement for now
         self.sinks = [node.targets[0].id]
         self.sources = [arg.id for arg in node.value.args]
+        if isinstance(node.value.func, ast.Attribute):
+            self.sources.insert(0, node.value.func.value.id)
 
 
 class BasicBlock(object):
@@ -94,11 +96,18 @@ BasicBlock
            body="\n    ".join(map(lambda x: str_dump(x, 4), self.body)))
 
 
-def is_composable(statement, env):
-    return isinstance(statement, ast.Assign) and \
-        isinstance(statement.value, ast.Call) and \
-        isinstance(eval_in_env(env, statement.value.func),
-                   LazySpecializedFunction)
+def get_if_composable(statement, env):
+    if isinstance(statement, ast.Assign) and \
+       isinstance(statement.value, ast.Call):
+        if isinstance(statement.value.func, ast.Attribute):
+            value = eval_in_env(env, statement.value.func.value)
+            func = getattr(value, statement.value.func.attr)
+        else:
+            func = eval_in_env(env, statement.value.func)
+        if isinstance(func, LazySpecializedFunction):
+            return func
+        elif hasattr(func, 'composable'):
+            return func.specializer
 
 
 def separate_composable_blocks(basic_block, env):
@@ -106,8 +115,12 @@ def separate_composable_blocks(basic_block, env):
     # reduction across the block
     statements = []
     for statement in basic_block.body:
-        if is_composable(statement, env):
-            statement = Statement(statement, env[statement.value.func.id])
+        func = get_if_composable(statement, env)
+        if func is not None:
+            statement = Statement(statement, func)
+            print(statement.sources)
+            arg_vals = tuple(env[id] for id in statement.sources)
+            env[statement.sinks[0]] = func.get_placeholder_output(arg_vals)
             if len(statements) > 0 and \
                     isinstance(statements[-1], ComposableBlock):
                 statements[-1].add_statement(statement)

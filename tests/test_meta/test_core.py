@@ -24,18 +24,12 @@ class TestFusion(unittest.TestCase):
     def test_simple(self):
         ZipWith.backend = 'ocl'
         EltWiseArrayOp.backend = 'ocl'
-        a = np.random.rand(480, 640).astype(np.float32) * 255
-        b = np.random.rand(480, 640).astype(np.float32) * 255
-        c = np.random.rand(480, 640).astype(np.float32) * 255
-        d = np.random.rand(480, 640).astype(np.float32) * 255
-        e = np.random.rand(480, 640).astype(np.float32) * 255
-        f = np.random.rand(480, 640).astype(np.float32) * 255
-        a = hmarray(a)
-        b = hmarray(b)
-        c = hmarray(c)
-        d = hmarray(d)
-        e = hmarray(e)
-        f = hmarray(f)
+        a = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
+        b = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
+        c = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
+        d = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
+        e = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
+        f = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
 
         theta = .3
         l = .15
@@ -62,8 +56,7 @@ class TestFusion(unittest.TestCase):
 
         @meta
         def fused(u1, u2, rho_c, gradient, I1wx, I1wy):
-            rho = spec_add(rho_c, spec_add(spec_mul(I1wx, u1),
-                                           spec_mul(I1wy, u2)))
+            rho = rho_c + I1wx * u1 + I1wy * u2
             v1 = threshold(rho, gradient, I1wx, u1)
             v2 = threshold(rho, gradient, I1wy, u2)
             return v1, v2

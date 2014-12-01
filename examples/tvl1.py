@@ -7,6 +7,7 @@ from hindemith.operations.map import sqrt, SpecializedMap
 from hindemith.utils import symbols
 from hindemith.operations.structured_grid import structured_grid
 from hindemith.operations.reduce import sum
+from hindemith.meta.core import meta
 # import logging
 # logging.basicConfig(level=20)
 
@@ -89,6 +90,7 @@ def ocl_th(rho_elt, gradient_elt, delta_elt, u_elt):
 spec_th = zip_with(th)
 
 
+@meta
 def threshold(u1, u2, rho_c, gradient, I1wx, I1wy):
     rho = rho_c + I1wx * u1 + I1wy * u2
     v1 = spec_th(rho, gradient, I1wx, u1)
@@ -328,7 +330,7 @@ exit()
 # np.testing.assert_array_almost_equal(u2, u2_expected)
 # print("PASSED")
 # exit()
-mag, ang = cv2.cartToPolar(u1, u2)
+mag, ang = cv2.cartToPolar(u[0], u[1])
 hsv = np.zeros_like(frame0)
 hsv[..., 1] = 255
 hsv[..., 0] = ang*180/np.pi/2
