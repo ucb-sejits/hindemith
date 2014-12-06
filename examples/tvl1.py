@@ -99,7 +99,10 @@ def update_u(u1, u2, rho_c, gradient, I1wx, I1wy, div_p1, div_p2):
     v2 = spec_th(rho, gradient, I1wy, u2)
     u1_new = v1 + div_p1 * theta
     u2_new = v2 + div_p2 * theta
-    return u1_new, u2_new
+    u1_err = u1_new - u1
+    u2_err = u2_new - u2
+    err = u1_err * u1_err + u2_err * u2_err
+    return u1_new, u2_new, err
 
 
 def centered_gradient(m):
@@ -279,13 +282,6 @@ def calc_grad_rho_c(i1wx, i1wy, i1w, u1, u2, i0):
     return grad, rho_c
 
 
-@meta
-def compute_err(u1, u2, u1_old, u2_old):
-    u1_err = u1 - u1_old
-    u2_err = u2 - u2_old
-    return u1_err * u1_err + u2_err * u2_err
-
-
 def compute_flow(i0, i1, u1, u2):
     scaled_epsilon = epsilon * epsilon * i0.size
     p11 = hmarray(np.empty(i1.shape, dtype=np.float32))
@@ -315,10 +311,9 @@ def compute_flow(i0, i1, u1, u2):
             n1 = 0
             while n1 < n_inner and error > scaled_epsilon:
                 div_p1, div_p2 = divergence(p11, p12), divergence(p21, p22)
-                u1_old, u2_old = u1, u2
-                u1, u2 = update_u(u1, u2, rho_c, grad, i1wx, i1wy, div_p1,
-                                  div_p2)
-                error = sum(compute_err(u1, u2, u1_old, u2_old))
+                u1, u2, err = update_u(u1, u2, rho_c, grad, i1wx, i1wy, div_p1,
+                                       div_p2)
+                error = sum(err)
                 u1x, u1y = forward_gradient(u1)
                 u2x, u2y = forward_gradient(u2)
                 p11, p12, p21, p22 = update_dual_variables(

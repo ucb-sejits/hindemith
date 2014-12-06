@@ -349,8 +349,10 @@ def merge_entry_points(composable_block, env):
             filter(lambda s: s not in fused_sinks_set, statement.sinks))
         fused_nodes.extend(specializer.get_ir_nodes(arg_vals))
     to_promote = []
-    to_promote = list(filter(lambda s: s not in composable_block.live_ins,
-                             fused_sources_set))
+    to_promote = list(
+        filter(lambda s: s not in
+               composable_block.live_ins.union(composable_block.live_outs),
+               fused_sources_set))
     proj, entry_type, args, output_idxs = fuse(
         fused_sources_list, fused_sinks_list, fused_nodes, to_promote, env)
     target_ids = composable_block.live_outs.intersection(composable_block.kill)
