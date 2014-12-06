@@ -22,13 +22,7 @@ class OclConcreteReduce(ConcreteSpecializedFunction):
         return self
 
     def __call__(self, arg):
-        output = hmarray(np.zeros_like(arg))
-        out_buf, evt = cl.buffer_from_ndarray(self.queue, output,
-                                              blocking=True)
-        output._ocl_buf = out_buf
-        output._ocl_dirty = False
-        output._host_dirty = True
-        evt.wait()
+        out_buf = cl.clCreateBuffer(self.context, arg.nbytes)
         return self._c_function(self.queue, self.kernel, arg.ocl_buf, out_buf)
 
 

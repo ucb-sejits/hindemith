@@ -8,7 +8,7 @@ from ctree.nodes import Project, CtreeNode
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
-from hindemith.types.hmarray import NdArrCfg, hmarray, py_to_ctypes
+from hindemith.types.hmarray import NdArrCfg, hmarray, py_to_ctypes, Loop
 from hindemith.nodes import kernel_range
 import ast
 import sys
@@ -205,11 +205,28 @@ class SpecializedMap(LazySpecializedFunction):
                 SymbolRef(kernel.body[0].name.name, cl.cl_kernel())
             ))
             fn = OclConcreteMap('map', proj, entry_type)
-            print(kernel)
-            print(func)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
             return fn.finalize(program[kernel.body[0].name.name])
+
+    def get_placeholder_output(self, args):
+        return hmarray(np.empty_like(args[0]))
+
+    def get_ir_nodes(self, args):
+        import copy
+        tree = copy.deepcopy(self.original_tree)
+        arg_cfg = self.args_to_subconfig(args)
+
+        types = [np.ctypeslib.ndpointer(arg_cfg.dtype, arg_cfg.ndim,
+                                        arg_cfg.shape) for _ in range(2)]
+        params = [SymbolRef.unique(sym_type=types[0]()),
+                  SymbolRef.unique(sym_type=types[1]())]
+
+        tree = MapFrontendTransformer(params).visit(tree).files[0].body[0].body
+        backend = MapOclTransform()
+        loop_body = list(map(backend.visit, tree))
+        shape = arg_cfg.shape[::-1]
+        return [Loop(shape, params[:-1], [params[-1]], types, loop_body)]
 
 
 def hmmap(fn):

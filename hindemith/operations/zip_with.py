@@ -29,7 +29,7 @@ class CConcreteZipWith(ConcreteSpecializedFunction):
         self._c_function = self._compile(entry_name, proj, entry_type)
 
     def __call__(self, *args):
-        output = hmarray(np.zeros_like(args[0]))
+        output = hmarray(np.empty_like(args[0]))
         self._c_function(*(args + (output, )))
         return output
 
@@ -46,10 +46,8 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
         return self
 
     def __call__(self, *args):
-        output = hmarray(np.zeros_like(args[0]))
-        out_buf, evt = cl.buffer_from_ndarray(self.queue, output,
-                                              blocking=True)
-        evt.wait()
+        output = hmarray(np.empty_like(args[0]))
+        out_buf = cl.clCreateBuffer(self.context, output.nbytes)
         output._ocl_buf = out_buf
         output._ocl_dirty = False
         output._host_dirty = True
@@ -201,11 +199,11 @@ class ZipWith(LazySpecializedFunction):
             return fn.finalize(program[kernel.body[0].name.name])
 
     def get_placeholder_output(self, args):
-        return hmarray(np.zeros_like(args[0]))
+        return hmarray(np.empty_like(args[0]))
 
     def get_ir_nodes(self, args):
         arg_cfg = self.args_to_subconfig(args)
-        tree = self.original_tree
+        tree = copy.deepcopy(self.original_tree)
         if hasattr(tree, '_hm_symbols'):
             symbols = tree._hm_symbols
         else:
@@ -222,8 +220,8 @@ class ZipWith(LazySpecializedFunction):
 
             type_table[params[-1].name] = types[-1]
 
-        tree = ZipWithFrontendTransformer(symbols,
-            params).visit(tree).files[0].body[0].body
+        tree = ZipWithFrontendTransformer(
+            symbols, params).visit(tree).files[0].body[0].body
 
         backend = MapOclTransform(symbols, type_table)
         loop_body = list(map(backend.visit, tree))

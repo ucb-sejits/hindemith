@@ -7,9 +7,11 @@ from hindemith.operations.map import sqrt, SpecializedMap
 from hindemith.utils import symbols
 from hindemith.operations.structured_grid import structured_grid
 from hindemith.operations.reduce import sum
+from hindemith.operations.interp import interp_linear
 from hindemith.meta.core import meta
 # import logging
 # logging.basicConfig(level=20)
+from ctree.util import Timer
 
 
 EltWiseArrayOp.backend = 'ocl'
@@ -17,16 +19,16 @@ ZipWith.backend = 'ocl'
 SpecializedMap.backend = 'ocl'
 
 
-num_warps = 1
-n_scales = 1
-n_inner = 30
+num_warps = 2
+n_scales = 2
+n_inner = 10
 n_outer = 10
 median_filtering = 5
 theta = .3
 tau = .25
 l = .15  # lambda
 epsilon = 0.01
-n = .8
+n = .5
 
 symbol_table = {
     'num_warps': num_warps,
@@ -87,15 +89,17 @@ def ocl_th(rho_elt, gradient_elt, delta_elt, u_elt):
         return float(0)
 
 
-spec_th = zip_with(th)
+spec_th = zip_with(ocl_th)
 
 
 @meta
-def threshold(u1, u2, rho_c, gradient, I1wx, I1wy):
+def update_u(u1, u2, rho_c, gradient, I1wx, I1wy, div_p1, div_p2):
     rho = rho_c + I1wx * u1 + I1wy * u2
     v1 = spec_th(rho, gradient, I1wx, u1)
     v2 = spec_th(rho, gradient, I1wy, u2)
-    return v1, v2
+    u1_new = v1 + div_p1 * theta
+    u2_new = v2 + div_p2 * theta
+    return u1_new, u2_new
 
 
 def centered_gradient(m):
@@ -120,12 +124,11 @@ def divergence(v1, v2, output):
         output[y, x] = v1[y, x] + v2[y, x] - v1[y, x - 1] - v2[y - 1, x]
 
 
+@meta
 def forward_gradient(m):
-    """
-
-    :rtype : hmarray
-    """
-    return dx(m), dy(m)
+    _dx = dx(m)
+    _dy = dy(m)
+    return _dx, _dy
 
 
 def py_forward_gradient(m):
@@ -161,8 +164,51 @@ def build_flow_map(idxs, u1, u2):
     return _x, _y
 
 
+def cl_build_flow_map(xs, ys, u1, u2):
+    _x = xs + u1
+    _y = ys + u2
+    return _x, _y
+
+
+def convolve(row, t):
+    return row[2] * (t + 4 * t**2 - 3 * t**3) + \
+        row[0] * (-t + t * t**2 - t**3) + \
+        row[3] * (-t**2 + t**3) + row[1] * (2 - 5 * t**2 + 3 * t**3)
+
+
+def remap(im, f1, f2):
+    output = np.zeros_like(f1)
+    for i in range(f1.shape[0]):
+        for j in range(f2.shape[1]):
+            x = f1[i, j]
+            y = f2[i, j]
+            xx = int(x)
+            yy = int(y)
+            tx = x - xx
+            ty = y - yy
+            if xx > f1.shape[1] - 2 or yy > f1.shape[0] - 2:
+                output[i, j] = 0
+            else:
+                output[i, j] = im[yy, xx] * (1 - tx) * (1 - ty) + \
+                    im[yy, xx + 1] * tx * (1 - ty) + \
+                    im[yy + 1, xx] * (1 - tx) * ty + \
+                    im[yy + 1, xx + 1] * tx * ty
+    return output
+
+# im = np.random.rand(64, 48).astype(np.float32) * 255
+# u1 = np.random.rand(64, 48).astype(np.float32) * 4
+# u2 = np.random.rand(64, 48).astype(np.float32) * 4
+# indices = np.indices(u1.shape).astype(np.float32)
+# _f1, _f2 = build_flow_map(indices, u1, u2)
+# actual = remap(im, _f1, _f2)
+# expected = cv2.remap(im, _f1, _f2, cv2.INTER_LINEAR)
+# np.testing.assert_allclose(actual, expected)
+
+# exit(1)
+
+
 def warp(im, f1, f2):
-    return cv2.remap(im, f1, f2, cv2.INTER_CUBIC)
+    return cv2.remap(im, f1, f2, cv2.INTER_LINEAR)
 
 
 def py_flow(I0, I1, u1, u2):
@@ -210,57 +256,77 @@ def py_flow(I0, I1, u1, u2):
             n0 += 1
     return u1, u2
 
+taut = tau / theta
+one = 1.0
+# FIXME: Resolve these naming issues
+
+
+@meta
+def update_dual_variables(p11, p12, p21, p22, u1x, u1y, u2x, u2y):
+    ng1 = sqrt(u1x * u1x + u1y * u1y) * taut + one
+    ng2 = sqrt(u2x * u2x + u2y * u2y) * taut + one
+    p11 = (p11 + u1x * taut) / ng1
+    p12 = (p12 + u1y * taut) / ng1
+    p21 = (p21 + u2x * taut) / ng2
+    p22 = (p22 + u2y * taut) / ng2
+    return p11, p12, p21, p22
+
+
+@meta
+def calc_grad_rho_c(i1wx, i1wy, i1w, u1, u2, i0):
+    grad = i1wx * i1wx + i1wy * i1wy
+    rho_c = i1w - i1wx * u1 - i1wy * u2 - i0
+    return grad, rho_c
+
+
+@meta
+def compute_err(u1, u2, u1_old, u2_old):
+    u1_err = u1 - u1_old
+    u2_err = u2 - u2_old
+    return u1_err * u1_err + u2_err * u2_err
+
 
 def compute_flow(i0, i1, u1, u2):
-    p11 = hmarray(np.zeros(i1.shape, dtype=np.float32))
-    p12 = hmarray(np.zeros(i1.shape, dtype=np.float32))
-    p21 = hmarray(np.zeros(i1.shape, dtype=np.float32))
-    p22 = hmarray(np.zeros(i1.shape, dtype=np.float32))
+    scaled_epsilon = epsilon * epsilon * i0.size
+    p11 = hmarray(np.empty(i1.shape, dtype=np.float32))
+    p12 = hmarray(np.empty(i1.shape, dtype=np.float32))
+    p21 = hmarray(np.empty(i1.shape, dtype=np.float32))
+    p22 = hmarray(np.empty(i1.shape, dtype=np.float32))
     i1y, i1x = centered_gradient(i1)
-    i1x = i1x.astype(np.float32)
-    i1y = i1y.astype(np.float32)
+    i1 = hmarray(i1)
+    i1x = hmarray(i1x.astype(np.float32))
+    i1y = hmarray(i1y.astype(np.float32))
     u1, u2 = hmarray(u1), hmarray(u2)
     i0 = hmarray(i0)
     indices = np.indices(u1.shape).astype(np.float32)
+    xs = hmarray(indices[1])
+    ys = hmarray(indices[0])
     for w in range(num_warps):
-        _f1, _f2 = build_flow_map(indices, u1, u2)
-        i1w = warp(i1, _f1, _f2)
-        i1wx = warp(i1x, _f1, _f2)
-        i1wy = warp(i1y, _f1, _f2)
-        i1wx = hmarray(i1wx)
-        i1wy = hmarray(i1wy)
-        i1w = hmarray(i1w)
-        grad = square(i1wx) + square(i1wy)
-        rho_c = i1w - i1wx * u1 - i1wy * u2 - i0
+        _f1, _f2 = cl_build_flow_map(xs, ys, u1, u2)
+        i1w = interp_linear(i1, _f1, _f2)
+        i1wx = interp_linear(i1x, _f1, _f2)
+        i1wy = interp_linear(i1y, _f1, _f2)
+        grad, rho_c = calc_grad_rho_c(i1wx, i1wy, i1w, u1, u2, i0)
         n0 = 0
         error = sys.maxint
-        while n0 < n_outer and error > epsilon * epsilon * i0.size:
+        while n0 < n_outer and error > scaled_epsilon:
             # u1 = cv2.medianBlur(u1, median_filtering)
             # u2 = cv2.medianBlur(u2, median_filtering)
             n1 = 0
-            while n1 < n_inner and error > epsilon * epsilon * i0.size:
-                v1, v2 = threshold(u1, u2, rho_c, grad, i1wx, i1wy)
-                div_p1 = divergence(p11, p12)
-                div_p2 = divergence(p21, p22)
-                u1_old = u1
-                u2_old = u2
-                u1 = v1 + div_p1 * theta
-                u2 = v2 + div_p2 * theta
-                error = sum(square(u1 - u1_old) + square(u2 - u2_old))
+            while n1 < n_inner and error > scaled_epsilon:
+                div_p1, div_p2 = divergence(p11, p12), divergence(p21, p22)
+                u1_old, u2_old = u1, u2
+                u1, u2 = update_u(u1, u2, rho_c, grad, i1wx, i1wy, div_p1,
+                                  div_p2)
+                error = sum(compute_err(u1, u2, u1_old, u2_old))
                 u1x, u1y = forward_gradient(u1)
                 u2x, u2y = forward_gradient(u2)
-                ng1 = 1.0 + tau / theta * sqrt(square(u1x) +
-                                               square(u1y))
-                ng2 = 1.0 + tau / theta * sqrt(square(u2x) +
-                                               square(u2y))
-                p11 = (p11 + tau / theta * u1x) / ng1
-                p12 = (p12 + tau / theta * u1y) / ng1
-                p21 = (p21 + tau / theta * u2x) / ng2
-                p22 = (p22 + tau / theta * u2y) / ng2
+                p11, p12, p21, p22 = update_dual_variables(
+                    p11, p12, p21, p22, u1x, u1y, u2x, u2y)
                 n1 += 1
             n0 += 1
-        u1.copy_to_host_if_dirty()
-        u2.copy_to_host_if_dirty()
+    u1.copy_to_host_if_dirty()
+    u2.copy_to_host_if_dirty()
     u1, u2 = np.copy(u1), np.copy(u2)
     return u1, u2
 
@@ -299,29 +365,29 @@ def tvl1(im0, im1):
     return u1, u2
 
 import os
-file_path = os.path.dirname(os.path.realpath(__file__))
+file_path = "/Users/leonardtruong/dev/aspire/hindemith/examples"
 
 frame0 = cv2.imread(file_path + '/frame0.png')
 frame1 = cv2.imread(file_path + '/frame1.png')
 im0 = cv2.cvtColor(frame0, cv2.COLOR_BGR2GRAY)
 im1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-# tvl1(im0, im1)
+u = tvl1(im0, im1)
 # import cProfile
 # cProfile.run('tvl1(im0, im1)')
 # exit()
-py_u1, py_u2 = py_tvl1(im0, im1)
-u = tvl1(im0, im1)
-np.testing.assert_allclose(py_u1, np.copy(u[0]), 1e-7, 1)
-np.testing.assert_allclose(py_u2, np.copy(u[1]), 1e-7, 1)
-print("PASSED")
-from ctree.util import Timer
+# py_u1, py_u2 = py_tvl1(im0, im1)
+# u = tvl1(im0, im1)
+# np.testing.assert_allclose(py_u1, np.copy(u[0]), 1e-7, 2)
+# np.testing.assert_allclose(py_u2, np.copy(u[1]), 1e-7, 2)
+# print("PASSED")
+# exit()
+# from ctree.util import Timer
 # with Timer() as t:
 #     py_tvl1(im0, im1)
 # print("Python time: {}".format(t.interval))
 with Timer() as t:
     tvl1(im0, im1)
 print("Specialized time: {}".format(t.interval))
-exit()
 # np.save("u1-cached", u1)
 # np.save("u2-cached", u2)
 # u1_expected = np.load(file_path + "/u1-cached.npy")

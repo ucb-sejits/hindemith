@@ -39,17 +39,19 @@ class ConcreteMerged(ConcreteSpecializedFunction):
         for index, arg in enumerate(args):
             if isinstance(arg, hmarray):
                 processed.append(arg.ocl_buf)
-            else:
-                processed.append(arg)
             if index == out_idxs[0]:
                 out_idxs.pop(0)
-                output = hmarray(np.zeros_like(arg))
+                output = hmarray(np.empty_like(arg))
+                output._host_dirty = True
+                output._ocl_dirty = False
+                output._ocl_buf = cl.clCreateBuffer(self.context, output.nbytes)
                 processed.append(output.ocl_buf)
                 outputs.append(output)
 
         for idx in out_idxs:
-            output = hmarray(np.zeros_like(arg))
+            output = hmarray(np.empty_like(arg))
             processed.append(output.ocl_buf)
+            output._host_dirty = True
             outputs.append(output)
 
 
@@ -276,6 +278,10 @@ def fuse(sources, sinks, nodes, to_promote, env):
         body = loop.body
         for param, _type in zip(loop.sources, loop.types):
             source = sources.pop(0)
+            # skip constants
+            # FIXME: More elegant way to handle this case
+            while type(env[source]) in {int, float}:
+                source = sources.pop(0)
             if source in seen:
                 visitor = SymbolReplacer(param.name, seen[source])
                 body = [visitor.visit(s) for s in body]
@@ -315,11 +321,10 @@ def fuse(sources, sinks, nodes, to_promote, env):
     control = FunctionDecl(None, SymbolRef('control'), params, [])
     control_body, kernel = kernel_range(nodes[0].shape, nodes[0].shape,
                                         kernel_params, fused_body)
-    print(kernel)
-    print(control)
-        
     params.insert(1, SymbolRef(kernel.body[0].name.name, cl.cl_kernel()))
     control.defn = control_body
+    # print(kernel)
+    # print(control)
     proj = Project([CFile('control', [ocl_header, control]), kernel])
     return proj, ct.CFUNCTYPE(*param_types), args, output_idxs
 
@@ -353,7 +358,7 @@ def merge_entry_points(composable_block, env):
         targets = [ast.Tuple([ast.Name(id, ast.Store())
                              for id in target_ids], ast.Store())]
     else:
-        targets = [ast.Name(target_ids[0], ast.Store())]
+        targets = [ast.Name(list(target_ids)[0], ast.Store())]
     merged_name = get_unique_func_name(env)
     env[merged_name] = MergedSpecializedFunction(proj, entry_type, output_idxs)
     value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)

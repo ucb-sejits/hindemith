@@ -22,11 +22,13 @@ def meta(func):
     """
     original_ast = get_ast(func)
     orig_basic_block = get_basic_block(original_ast)
+    func._hm_cache = {}
 
     def meta_specialized(*args, **kwargs):
-        if hasattr(func, '_hm_callable'):
-            print("Cache hit")
-            return func._hm_callable(*args, **kwargs)
+        if hasattr(func, '_hm_cache'):
+            # print("Cache hit")
+            if args[0].shape in func._hm_cache:
+                return func._hm_cache[args[0].shape](*args, **kwargs)
         # TODO: This should be done lazily as symbols are needed
         # could be problematic/slow with a large stack
         symbol_table = SymbolTable(dict(func.__globals__, **kwargs),
@@ -40,10 +42,10 @@ def meta(func):
         basic_block = separate_composable_blocks(orig_basic_block,
                                                  symbol_table)
         basic_block = perform_liveness_analysis(basic_block)
-        print(basic_block)
         basic_block = process_composable_blocks(basic_block, symbol_table)
+        # print(basic_block)
         fn = get_callable(basic_block, symbol_table)
-        func._hm_callable = fn
+        func._hm_cache[args[0].shape] = fn
         return fn(*args, **kwargs)
 
     return meta_specialized
