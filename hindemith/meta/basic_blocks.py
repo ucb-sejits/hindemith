@@ -118,7 +118,6 @@ def separate_composable_blocks(basic_block, env):
         func = get_if_composable(statement, env)
         if func is not None:
             statement = Statement(statement, func)
-            print(statement.sources)
             arg_vals = tuple(env[id] for id in statement.sources)
             env[statement.sinks[0]] = func.get_placeholder_output(arg_vals)
             if len(statements) > 0 and \
@@ -164,13 +163,14 @@ class NonComposableBlock(SubBlock):
     pass
 
 
+def gen_tmp():
+    gen_tmp.tmp += 1
+    return "_t{}".format(gen_tmp.tmp)
+
+gen_tmp.tmp = -1
+
+
 def decompose(expr):
-    def gen_tmp():
-        gen_tmp.tmp += 1
-        return "_t{}".format(gen_tmp.tmp)
-
-    gen_tmp.tmp = -1
-
     def visit(expr, curr_target=None):
         if isinstance(expr, ast.Return):
             if isinstance(expr.value, (ast.Name, ast.Tuple)):

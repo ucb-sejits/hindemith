@@ -154,7 +154,6 @@ op_map = {
 
 class CConcreteEltOp(ConcreteSpecializedFunction):
     def __init__(self, entry_name, proj, entry_type):
-        print(proj.files[0])
         self._c_function = self._compile(entry_name, proj, entry_type)
 
     def __call__(self, *args):
@@ -188,13 +187,11 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
         for arg in args:
             if isinstance(arg, hmarray):
                 if output is None:
-                    output = hmarray(np.zeros_like(arg))
-                    out_buf, evt = cl.buffer_from_ndarray(self.queue, output,
-                                                          blocking=True)
+                    output = hmarray(np.empty_like(arg))
+                    out_buf = cl.clCreateBuffer(self.context, output.nbytes)
                     output._ocl_buf = out_buf
                     output._ocl_dirty = False
                     output._host_dirty = True
-                evt.wait()
                 processed.append(arg.ocl_buf)
             # else:
             #     processed.append(arg)
@@ -308,7 +305,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
             return fn.finalize(program[kernel.body[0].name.name])
 
     def get_placeholder_output(self, args):
-        return hmarray(np.zeros_like(args[0]))
+        return hmarray(np.empty_like(args[0]))
 
     def get_mergeable_info(self, args):
         arg_cfg = self.args_to_subconfig(args)

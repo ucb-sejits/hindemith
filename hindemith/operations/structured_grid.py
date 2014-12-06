@@ -1,6 +1,6 @@
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.frontend import get_ast
-from hindemith.types.hmarray import hmarray, NdArrCfg, kernel_range
+from hindemith.types.hmarray import hmarray, NdArrCfg, kernel_range, Loop
 from ctree.transformations import PyBasicConversions
 from ctree.nodes import CtreeNode
 from ctree.c.nodes import SymbolRef, BinaryOp, Mul, Constant, ArrayRef, Op
@@ -126,11 +126,9 @@ class StructuredGridBackend(ast.NodeTransformer):
         ))
         node.defn = self.visit(node.defn[0])
         for index, kernel in enumerate(self.kernels):
-            print(kernel)
             node.params.append(SymbolRef(kernel.name,
                                          cl.cl_kernel()))
             node.name = 'control'
-        print(node)
         return node
 
     def visit_IterByIndex(self, node):
@@ -157,9 +155,11 @@ class StructuredGridBackend(ast.NodeTransformer):
                     control, kernel = kernel_range(shape, b_size,
                                                    self.kernel_params,
                                                    body, os)
+                    # remove clfinish
+                    control.pop()
                     controls.append(control)
                     kernels.append(kernel)
-                    self.kernels.append(kernel)
+                    # self.kernels.append(kernel)
             if len(pos) > 0:
                 top_border = min(pos)
                 g_size[1 - index] -= top_border
@@ -175,17 +175,20 @@ class StructuredGridBackend(ast.NodeTransformer):
                     control, kernel = kernel_range(shape, b_size,
                                                    self.kernel_params,
                                                    body, os)
+                    # remove clfinish
+                    control.pop()
                     controls.append(control)
                     kernels.append(kernel)
-                    self.kernels.append(kernel)
+                    # self.kernels.append(kernel)
         body = [self.visit(s) for s in node.body]
-        self.project.files.extend(kernels)
+        # self.project.files.extend(kernels)
+        self.body = body[:]
 
         control, kernel = kernel_range(shape, g_size,
                                        self.kernel_params, body, offset)
         self.kernels.append(kernel)
-        for launch in controls:
-            control.extend(launch)
+        # for launch in controls:
+        #     control.extend(launch)
 
         self.project.files.append(kernel)
         self.cfile.body.insert(0, StringTemplate("""
@@ -236,13 +239,11 @@ class OclConcreteStructuredGrid(ConcreteSpecializedFunction):
         processed = []
         for arg in args:
             if output is None:
-                output = hmarray(np.zeros_like(arg))
-                out_buf, evt = cl.buffer_from_ndarray(self.queue, output,
-                                                      blocking=True)
+                output = hmarray(np.empty_like(arg))
+                out_buf = cl.clCreateBuffer(self.context, output.nbytes)
                 output._ocl_buf = out_buf
-                output._ocl_dirty = False
                 output._host_dirty = True
-            evt.wait()
+                output._ocl_dirty = False
             processed.append(arg.ocl_buf)
         self._c_function(*(processed + [out_buf, self.queue] + self.kernels))
         return output
@@ -301,17 +302,45 @@ class StructuredGrid(LazySpecializedFunction):
         entry_type = ct.CFUNCTYPE(*((None, ) + arg_types))
         fn = OclConcreteStructuredGrid('control', tree, entry_type)
         kernels = []
-        for kernel in backend.kernels:
+        for kernel in backend.kernels[:1]:
             program = cl.clCreateProgramWithSource(fn.context,
                                                    kernel.codegen()).build()
             kernels.append(program[kernel.body[0].name.name])
         return fn.finalize(kernels)
+
+    def get_placeholder_output(self, args):
+        return hmarray(np.empty_like(args[0]))
+
+    def get_ir_nodes(self, args):
+        arg_cfg = self.args_to_subconfig(args)
+        tree = deepcopy(self.original_tree)
+        arg_types = ()
+        params = []
+        for index, cfg in enumerate(arg_cfg):
+            arg_types += (np.ctypeslib.ndpointer(
+                cfg.dtype, cfg.ndim, cfg.shape), )
+            params.append(
+                SymbolRef.unique(sym_type=arg_types[-1]())
+            )
+        tree = StructuredGridFrontend().visit(tree)
+        backend = StructuredGridBackend(arg_cfg, arg_types,
+                                        params, params,
+                                        self.border_type, self.cval)
+        tree = backend.visit(tree)
+
+        shape = arg_cfg[0].shape[::-1]
+        shape = [s - 1 for s in shape]
+        return [Loop(shape, params[:-1], [params[-1]], arg_types, backend.body)]
+
+
+from hindemith.types.hmarray import composable
 
 
 def structured_grid(border='zero', cval=0):
     def wrapper(fn):
         spec_fn = StructuredGrid(get_ast(fn), border, cval)
 
+        @composable(spec_fn)
         def wrapped(*args):
             return spec_fn(*args)
         return wrapped
