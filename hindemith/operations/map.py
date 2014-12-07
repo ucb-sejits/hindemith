@@ -237,4 +237,14 @@ def base_sqrt(elt):
     return sqrt(elt)
 
 
+def base_copy(elt):
+    return elt
+
+
+def base_square(elt):
+    return elt * elt
+
+
 sqrt = hmmap(base_sqrt)
+copy = hmmap(base_copy)
+square = hmmap(base_square)
