@@ -13,7 +13,7 @@ from hindemith.types.hmarray import hmarray, spec_add, spec_mul, EltWiseArrayOp
 class TestFusion(unittest.TestCase):
     def _check_arrays_equal(self, actual, expected):
         try:
-            np.testing.assert_array_almost_equal(actual, expected, decimal=4)
+            np.testing.assert_allclose(actual, expected)
         except AssertionError as e:
             self.fail(e)
 
