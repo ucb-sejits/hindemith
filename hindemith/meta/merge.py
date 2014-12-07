@@ -19,7 +19,8 @@ from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 
 
 class ConcreteMerged(ConcreteSpecializedFunction):
-    def __init__(self, entry_name, proj, entry_type, output_idxs):
+    def __init__(self, entry_name, proj, entry_type, output_idxs,
+                 retval_idxs):
         devices = cl.clGetDeviceIDs()
         # Default to last device for now
         # TODO: Allow settable devices via params or env variables
@@ -27,6 +28,7 @@ class ConcreteMerged(ConcreteSpecializedFunction):
             [devices[-1]])
         self._c_function = self._compile(entry_name, proj, entry_type)
         self.output_idxs = output_idxs
+        self.retval_idxs = retval_idxs
 
     def finalize(self, kernel):
         self.kernel = kernel
@@ -39,7 +41,9 @@ class ConcreteMerged(ConcreteSpecializedFunction):
         for index, arg in enumerate(args):
             if isinstance(arg, hmarray):
                 processed.append(arg.ocl_buf)
-            if index == out_idxs[0]:
+            if index in self.retval_idxs:
+                outputs.append(arg)
+            if len(out_idxs) > 0 and index == out_idxs[0]:
                 out_idxs.pop(0)
                 output = hmarray(np.empty_like(arg))
                 output._host_dirty = True
@@ -62,15 +66,17 @@ class ConcreteMerged(ConcreteSpecializedFunction):
 
 
 class MergedSpecializedFunction(LazySpecializedFunction):
-    def __init__(self, tree, entry_type, output_idxs):
+    def __init__(self, tree, entry_type, output_idxs, retval_idxs):
         super(MergedSpecializedFunction, self).__init__(None)
         self.tree = tree
         self.entry_type = entry_type
         self.output_idxs = output_idxs
+        self.retval_idxs = retval_idxs
 
     def transform(self, tree, program_config):
         tree = self.tree
-        fn = ConcreteMerged('control', tree, self.entry_type, self.output_idxs)
+        fn = ConcreteMerged('control', tree, self.entry_type, self.output_idxs,
+                            self.retval_idxs)
         kernel = tree.find(OclFile)
         program = cl.clCreateProgramWithSource(
             fn.context, kernel.codegen()).build()
@@ -274,6 +280,7 @@ def fuse(sources, sinks, nodes, to_promote, env):
     params = [SymbolRef('queue', cl.cl_command_queue())]
     args = []
     output_idxs = []
+    retval_idxs = []
     for loop in nodes:
         body = loop.body
         for param, _type in zip(loop.sources, loop.types):
@@ -306,6 +313,12 @@ def fuse(sources, sinks, nodes, to_promote, env):
             body = [visitor.visit(s) for s in body]
             visitor = PromoteToRegister(loop.sinks[0].name)
             body = [visitor.visit(s) for s in body]
+        elif sink in seen:
+            visitor = SymbolReplacer(loop.sinks[0].name, seen[sink])
+            body = [visitor.visit(s) for s in body]
+            for index, param in enumerate(params):
+                if param.name == seen[sink]:
+                    retval_idxs.append(index - 1)
         else:
             output = loop.sinks[0]
             seen[sink] = output.name
@@ -321,12 +334,11 @@ def fuse(sources, sinks, nodes, to_promote, env):
     control = FunctionDecl(None, SymbolRef('control'), params, [])
     control_body, kernel = kernel_range(nodes[0].shape, nodes[0].shape,
                                         kernel_params, fused_body)
+    # print(kernel)
     params.insert(1, SymbolRef(kernel.body[0].name.name, cl.cl_kernel()))
     control.defn = control_body
-    # print(kernel)
-    # print(control)
     proj = Project([CFile('control', [ocl_header, control]), kernel])
-    return proj, ct.CFUNCTYPE(*param_types), args, output_idxs
+    return proj, ct.CFUNCTYPE(*param_types), args, output_idxs, retval_idxs
 
 
 def merge_entry_points(composable_block, env):
@@ -353,7 +365,7 @@ def merge_entry_points(composable_block, env):
         filter(lambda s: s not in
                composable_block.live_ins.union(composable_block.live_outs),
                fused_sources_set))
-    proj, entry_type, args, output_idxs = fuse(
+    proj, entry_type, args, output_idxs, retval_idxs = fuse(
         fused_sources_list, fused_sinks_list, fused_nodes, to_promote, env)
     target_ids = composable_block.live_outs.intersection(composable_block.kill)
     if len(target_ids) > 1:
@@ -362,7 +374,8 @@ def merge_entry_points(composable_block, env):
     else:
         targets = [ast.Name(list(target_ids)[0], ast.Store())]
     merged_name = get_unique_func_name(env)
-    env[merged_name] = MergedSpecializedFunction(proj, entry_type, output_idxs)
+    env[merged_name] = MergedSpecializedFunction(proj, entry_type,
+                                                 output_idxs, retval_idxs)
     value = ast.Call(ast.Name(merged_name, ast.Load()), args, [], None, None)
     return ast.Assign(targets, value)
 

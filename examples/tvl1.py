@@ -3,7 +3,7 @@ import sys
 import cv2
 from hindemith.operations.zip_with import zip_with, ZipWith
 from hindemith.types.hmarray import hmarray, square, EltWiseArrayOp
-from hindemith.operations.map import sqrt, SpecializedMap
+from hindemith.operations.map import sqrt, SpecializedMap, copy, square
 from hindemith.utils import symbols
 from hindemith.operations.structured_grid import structured_grid
 from hindemith.operations.reduce import sum
@@ -76,20 +76,7 @@ def py_threshold(u1, u2, rho_c, gradient, I1wx, I1wy):
     return v1, v2
 
 
-@symbols(symbol_table)
-def ocl_th(rho_elt, gradient_elt, delta_elt, u_elt):
-    thresh = float(l * theta) * gradient_elt
-    if rho_elt < -thresh:
-        return float(l * theta) * delta_elt + u_elt
-    elif rho_elt > thresh:
-        return float(-l * theta) * delta_elt + u_elt
-    elif gradient_elt > 1e-10:
-        return -rho_elt / gradient_elt * delta_elt + u_elt
-    else:
-        return float(0)
-
-
-spec_th = zip_with(ocl_th)
+spec_th = zip_with(th)
 
 
 @meta
@@ -99,9 +86,7 @@ def update_u(u1, u2, rho_c, gradient, I1wx, I1wy, div_p1, div_p2):
     v2 = spec_th(rho, gradient, I1wy, u2)
     u1_new = v1 + div_p1 * theta
     u2_new = v2 + div_p2 * theta
-    u1_err = u1_new - u1
-    u2_err = u2_new - u2
-    err = u1_err * u1_err + u2_err * u2_err
+    err = square(u1_new - u1) + square(u2_new - u2)
     return u1_new, u2_new, err
 
 
@@ -173,43 +158,6 @@ def cl_build_flow_map(xs, ys, u1, u2):
     return _x, _y
 
 
-def convolve(row, t):
-    return row[2] * (t + 4 * t**2 - 3 * t**3) + \
-        row[0] * (-t + t * t**2 - t**3) + \
-        row[3] * (-t**2 + t**3) + row[1] * (2 - 5 * t**2 + 3 * t**3)
-
-
-def remap(im, f1, f2):
-    output = np.zeros_like(f1)
-    for i in range(f1.shape[0]):
-        for j in range(f2.shape[1]):
-            x = f1[i, j]
-            y = f2[i, j]
-            xx = int(x)
-            yy = int(y)
-            tx = x - xx
-            ty = y - yy
-            if xx > f1.shape[1] - 2 or yy > f1.shape[0] - 2:
-                output[i, j] = 0
-            else:
-                output[i, j] = im[yy, xx] * (1 - tx) * (1 - ty) + \
-                    im[yy, xx + 1] * tx * (1 - ty) + \
-                    im[yy + 1, xx] * (1 - tx) * ty + \
-                    im[yy + 1, xx + 1] * tx * ty
-    return output
-
-# im = np.random.rand(64, 48).astype(np.float32) * 255
-# u1 = np.random.rand(64, 48).astype(np.float32) * 4
-# u2 = np.random.rand(64, 48).astype(np.float32) * 4
-# indices = np.indices(u1.shape).astype(np.float32)
-# _f1, _f2 = build_flow_map(indices, u1, u2)
-# actual = remap(im, _f1, _f2)
-# expected = cv2.remap(im, _f1, _f2, cv2.INTER_LINEAR)
-# np.testing.assert_allclose(actual, expected)
-
-# exit(1)
-
-
 def warp(im, f1, f2):
     return cv2.remap(im, f1, f2, cv2.INTER_LINEAR)
 
@@ -266,8 +214,8 @@ one = 1.0
 
 @meta
 def update_dual_variables(p11, p12, p21, p22, u1x, u1y, u2x, u2y):
-    ng1 = sqrt(u1x * u1x + u1y * u1y) * taut + one
-    ng2 = sqrt(u2x * u2x + u2y * u2y) * taut + one
+    ng1 = sqrt(square(u1x) + square(u1y)) * taut + one
+    ng2 = sqrt(square(u2x) + square(u2y)) * taut + one
     p11 = (p11 + u1x * taut) / ng1
     p12 = (p12 + u1y * taut) / ng1
     p21 = (p21 + u2x * taut) / ng2

@@ -42,9 +42,7 @@ def meta(func):
         basic_block = separate_composable_blocks(orig_basic_block,
                                                  symbol_table)
         basic_block = perform_liveness_analysis(basic_block)
-        print(basic_block)
         basic_block = process_composable_blocks(basic_block, symbol_table)
-        print(basic_block)
         fn = get_callable(basic_block, symbol_table)
         func._hm_cache[args[0].shape] = fn
         return fn(*args, **kwargs)
