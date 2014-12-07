@@ -308,13 +308,13 @@ def tvl1(im0, im1):
     return u1, u2
 
 import os
-file_path = "/Users/leonardtruong/dev/aspire/hindemith/examples"
+file_path = "/scratch/lennytruong/hindemith/examples"
 
 frame0 = cv2.imread(file_path + '/frame0.png')
 frame1 = cv2.imread(file_path + '/frame1.png')
 im0 = cv2.cvtColor(frame0, cv2.COLOR_BGR2GRAY)
 im1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-u = tvl1(im0, im1)
+# u = tvl1(im0, im1)
 # import cProfile
 # cProfile.run('tvl1(im0, im1)')
 # exit()
@@ -331,6 +331,7 @@ u = tvl1(im0, im1)
 with Timer() as t:
     tvl1(im0, im1)
 print("Specialized time: {}".format(t.interval))
+exit()
 # np.save("u1-cached", u1)
 # np.save("u2-cached", u2)
 # u1_expected = np.load(file_path + "/u1-cached.npy")
