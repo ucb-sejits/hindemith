@@ -70,56 +70,6 @@ class TestFusion(unittest.TestCase):
         self._check_arrays_equal(actual[0], expected[0])
         self._check_arrays_equal(actual[1], expected[1])
 
-    def test_add_after(self):
-        ZipWith.backend = 'ocl'
-        EltWiseArrayOp.backend = 'ocl'
-        a = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
-        b = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
-        c = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
-        d = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
-        e = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
-        f = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
-        g = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
-
-        theta = .3
-        l = .15
-
-        @symbols({'l': l, 'theta': theta})
-        def ocl_th(rho_elt, gradient_elt, delta_elt, u_elt):
-            threshold = (l * theta * gradient_elt)
-            if rho_elt < -threshold:
-                return l * theta * delta_elt + u_elt
-            elif rho_elt > threshold:
-                return -l * theta * delta_elt + u_elt
-            elif gradient_elt > 1e-10:
-                return -rho_elt / gradient_elt * delta_elt + u_elt
-            else:
-                return 0
-
-        threshold = zip_with(ocl_th)
-
-        def unfused(u1, u2, rho_c, gradient, I1wx, I1wy, g):
-            rho = rho_c + I1wx * u1 + I1wy * u2
-            v1 = threshold(rho, gradient, I1wx, u1) + g
-            v2 = threshold(rho, gradient, I1wy, u2) + g
-            return v1, v2
-
-        @meta
-        def fused(u1, u2, rho_c, gradient, I1wx, I1wy, g):
-            rho = rho_c + I1wx * u1 + I1wy * u2
-            v1 = threshold(rho, gradient, I1wx, u1) + g
-            v2 = threshold(rho, gradient, I1wy, u2) + g
-            return v1, v2
-
-        actual = fused(a, b, c, d, e, f, g)
-        expected = unfused(a, b, c, d, e, f, g)
-        actual[0].copy_to_host_if_dirty()
-        actual[1].copy_to_host_if_dirty()
-        expected[0].copy_to_host_if_dirty()
-        expected[1].copy_to_host_if_dirty()
-        self._check_arrays_equal(actual[0], expected[0])
-        self._check_arrays_equal(actual[1], expected[1])
-
 
 # @unittest.skip("deprecated")
 # class TestMetaDecorator(unittest.TestCase):
