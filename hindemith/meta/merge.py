@@ -13,7 +13,7 @@ import ctypes as ct
 import numpy as np
 from .util import get_unique_func_name, SymbolReplacer
 from ..nodes import kernel_range, ocl_header
-from hindemith.types.hmarray import hmarray
+from hindemith.types.hmarray import hmarray, empty
 
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 
@@ -45,15 +45,13 @@ class ConcreteMerged(ConcreteSpecializedFunction):
                 outputs.append(arg)
             if len(out_idxs) > 0 and index == out_idxs[0]:
                 out_idxs.pop(0)
-                output = hmarray(np.empty_like(arg))
+                output = empty(arg.shape, arg.dtype)
                 output._host_dirty = True
-                output._ocl_dirty = False
-                output._ocl_buf = cl.clCreateBuffer(self.context, output.nbytes)
                 processed.append(output.ocl_buf)
                 outputs.append(output)
 
         for idx in out_idxs:
-            output = hmarray(np.empty_like(arg))
+            output = empty(arg.shape, arg.dtype)
             processed.append(output.ocl_buf)
             output._host_dirty = True
             outputs.append(output)
