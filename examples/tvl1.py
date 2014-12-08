@@ -28,7 +28,7 @@ theta = .3
 tau = .25
 l = .15  # lambda
 epsilon = 0.01
-n = .5
+n = .8
 
 symbol_table = {
     'num_warps': num_warps,
@@ -138,7 +138,7 @@ def py_divergence(v1, v2):
 def pyr_down(m, n_scales, n):
     pyr = [hmarray(m)]
     for _ in range(n_scales - 1):
-        scaled = tuple(s / n for s in m.shape)
+        scaled = tuple(s * n for s in m.shape)
         y, x = np.indices(scaled).astype(np.float32)
         curr = pyr[-1]
         y = y * (curr.shape[0] / scaled[0])
@@ -245,7 +245,6 @@ def compute_flow(i0, i1, u1, u2):
     p21 = hmarray(np.empty(i1.shape, dtype=np.float32))
     p22 = hmarray(np.empty(i1.shape, dtype=np.float32))
     i1x, i1y = forward_gradient(i1)
-    u1, u2 = hmarray(u1), hmarray(u2)
     indices = np.indices(u1.shape).astype(np.float32)
     xs = hmarray(indices[1])
     ys = hmarray(indices[0])
@@ -257,20 +256,15 @@ def compute_flow(i0, i1, u1, u2):
         grad, rho_c = calc_grad_rho_c(i1wx, i1wy, i1w, u1, u2, i0)
         n0 = 0
         error = sys.maxint
-        while n0 < n_outer and error > scaled_epsilon:
-            # u1 = cv2.medianBlur(u1, median_filtering)
-            # u2 = cv2.medianBlur(u2, median_filtering)
-            n1 = 0
-            while n1 < n_inner and error > scaled_epsilon:
-                div_p1, div_p2 = divergence(p11, p12), divergence(p21, p22)
-                u1, u2, err = update_u(u1, u2, rho_c, grad, i1wx, i1wy, div_p1,
-                                       div_p2)
-                error = sum(err)
-                u1x, u1y = forward_gradient(u1)
-                u2x, u2y = forward_gradient(u2)
-                p11, p12, p21, p22 = update_dual_variables(
-                    p11, p12, p21, p22, u1x, u1y, u2x, u2y)
-                n1 += 1
+        while n0 < n_outer * n_inner and error > scaled_epsilon:
+            div_p1, div_p2 = divergence(p11, p12), divergence(p21, p22)
+            u1, u2, err = update_u(u1, u2, rho_c, grad, i1wx, i1wy, div_p1,
+                                   div_p2)
+            error = sum(err)
+            u1x, u1y = forward_gradient(u1)
+            u2x, u2y = forward_gradient(u2)
+            p11, p12, p21, p22 = update_dual_variables(
+                p11, p12, p21, p22, u1x, u1y, u2x, u2y)
             n0 += 1
     return u1, u2
 
@@ -295,12 +289,10 @@ def py_tvl1(im0, im1):
 def tvl1(im0, im1):
     im0 = im0.astype(np.float32)
     im1 = im1.astype(np.float32)
-    # im0 = (cv2.GaussianBlur(im0))
-    # im1 = (cv2.GaussianBlur(im1))
     im0_pyr = pyr_down(im0, n_scales, n)
     im1_pyr = pyr_down(im1, n_scales, n)
-    u1 = np.zeros(im0_pyr[-1].shape, dtype=np.float32)
-    u2 = np.zeros(im0_pyr[-1].shape, dtype=np.float32)
+    u1 = hmarray(np.zeros(im0_pyr[-1].shape, dtype=np.float32))
+    u2 = hmarray(np.zeros(im0_pyr[-1].shape, dtype=np.float32))
     for s in reversed(range(n_scales)):
         u1, u2 = compute_flow(im0_pyr[s], im1_pyr[s], u1, u2)
         if s > 0:
@@ -361,11 +353,11 @@ start = 0
 columns = []
 for index, val in enumerate(horiz_hist):
     if not active:
-        if val > 1000:
+        if val > 480 * 5:
             active = True
             start = index
     else:
-        if val < 1000:
+        if val < 480 * 5:
             active = False
             columns.append((start, index))
 
@@ -379,18 +371,17 @@ for col in columns:
         vert_hist.append(amt)
     for index, val in enumerate(vert_hist):
         if not active:
-            if val > 500:
+            if val > (col[1] - col[0]) * 10:
                 active = True
                 start = index
         else:
-            if val < 500:
+            if val < (col[1] - col[0]) * 10:
                 active = False
-                rects.append(((col[0], start), (col[1], index)))
+                rects.append(((col[0] - 10, start - 10), (col[1] + 10, index + 10)))
 
 
-print(rects)
-# for rect in rects:
-#     cv2.rectangle(rgb, rect[0], rect[1], (0, 255, 0), 1)
+for rect in rects:
+    cv2.rectangle(rgb, rect[0], rect[1], (0, 255, 0), 1)
 
 
 cv2.imshow('frame1', rgb)
