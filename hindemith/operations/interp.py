@@ -113,8 +113,6 @@ class LinearInterp(LazySpecializedFunction):
         func.params.insert(1, SymbolRef(kernel.body[0].name.name,
                                         cl.cl_kernel()))
         func.defn = control
-        print(func)
-        print(kernel)
         proj.files.append(kernel)
         entry_type = (None,) + arg_types
         fn = OclConcreteLerp('lerp', proj, ct.CFUNCTYPE(*entry_type))
