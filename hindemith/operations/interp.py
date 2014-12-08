@@ -9,13 +9,21 @@ int xx = (int) x;
 int yy = (int) y;
 float tx = x - xx;
 float ty = y - yy;
-if (xx > $x_dim - 2 || yy > $y_dim - 2) {
+if (xx > $x_dim - 5 || yy > $y_dim - 5 || xx < 1 || yy < 1) {
   $output[loop_idx] = 0;
 } else {
-  $output[loop_idx] = $input[yy * $x_dim + xx] * (1 - tx) * (1 - ty) + \
-                     $input[yy * $x_dim + xx + 1] * tx * (1 - ty) + \
-                     $input[(yy + 1) * $x_dim + xx] * (1 - tx) * ty + \
-                     $input[(yy + 1) * $x_dim + xx + 1] * tx * ty;
+    int indx1 = (yy - 1) * $x_dim + xx - 1;
+    float val1 = $input[indx1 + 1] + 0.5 * ty*($input[indx1 + 2] - $input[indx1] + ty*(2.0*$input[indx1] - 5.0*$input[indx1 + 1] + 4.0*$input[indx1 + 2] - $input[indx1 + 3] + ty*(3.0*($input[indx1 + 1] - $input[indx1 + 2]) + $input[indx1 + 3] - $input[indx1])));
+
+    int indx2 = yy * $x_dim + xx - 1;
+    float val2 = $input[indx2 + 1] + 0.5 * ty*($input[indx2 + 2] - $input[indx2] + ty*(2.0*$input[indx2] - 5.0*$input[indx2 + 1] + 4.0*$input[indx2 + 2] - $input[indx2 + 3] + ty*(3.0*($input[indx2 + 1] - $input[indx2 + 2]) + $input[indx2 + 3] - $input[indx2])));
+
+    int indx3 = (yy + 1) * $x_dim + xx - 1;
+    float val3 = $input[indx3 + 1] + 0.5 * ty*($input[indx3 + 2] - $input[indx3] + ty*(2.0*$input[indx3] - 5.0*$input[indx3 + 1] + 4.0*$input[indx3 + 2] - $input[indx3 + 3] + ty*(3.0*($input[indx3 + 1] - $input[indx3 + 2]) + $input[indx3 + 3] - $input[indx3])));
+
+    int indx4 = (yy + 2) * $x_dim + xx - 1;
+    float val4 = $input[indx4 + 1] + 0.5 * ty*($input[indx4 + 2] - $input[indx4] + ty*(2.0*$input[indx4] - 5.0*$input[indx4 + 1] + 4.0*$input[indx4 + 2] - $input[indx4 + 3] + ty*(3.0*($input[indx4 + 1] - $input[indx4 + 2]) + $input[indx4 + 3] - $input[indx4])));
+    $output[loop_idx] = val2 + 0.5 * tx*(val3 - val1 + tx*(2.0*val1 - 5.0*val2 + 4.0*val3 - val4 + tx*(3.0*(val2 - val3) + val4 - val1)));
 }
 """
 
@@ -50,7 +58,7 @@ class OclConcreteLerp(ConcreteSpecializedFunction):
         return self
 
     def __call__(self, *args):
-        output = hmarray(np.empty_like(args[0]))
+        output = hmarray(np.empty_like(args[1]))
         output._ocl_buf = cl.clCreateBuffer(self.context, output.nbytes)
         output._ocl_dirty = False
         output._host_dirty = True
@@ -91,15 +99,15 @@ class LinearInterp(LazySpecializedFunction):
         proj = Project([CFile('lerp', [func])])
         proj.files[0].body.insert(0, ocl_header)
         arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
-        shape = arg_cfg[0].shape[::-1]
+        shape = arg_cfg[1].shape[::-1]
         control, kernel = kernel_range(shape, shape,
                                        kernel_params, [StringTemplate(lerp_kern_body, {
                                            "input": SymbolRef(kernel_params[0].name),
                                            "x_map": SymbolRef(kernel_params[1].name),
                                            "y_map": SymbolRef(kernel_params[2].name),
                                            "output": SymbolRef(kernel_params[3].name),
-                                           "x_dim": Constant(shape[0]),
-                                           "y_dim": Constant(shape[1])
+                                           "x_dim": Constant(arg_cfg[0].shape[1]),
+                                           "y_dim": Constant(arg_cfg[0].shape[0])
                                        })])
         func.params.insert(0, SymbolRef('queue', cl.cl_command_queue()))
         func.params.insert(1, SymbolRef(kernel.body[0].name.name,

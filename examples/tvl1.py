@@ -136,14 +136,22 @@ def py_divergence(v1, v2):
 
 
 def pyr_down(m, n_scales, n):
-    pyr = [m]
+    pyr = [hmarray(m)]
     for _ in range(n_scales - 1):
-        pyr.append(cv2.resize(pyr[-1], None, fx=n, fy=n))
+        scaled = tuple(s / n for s in m.shape)
+        y, x = np.indices(scaled).astype(np.float32)
+        curr = pyr[-1]
+        y = y * (curr.shape[0] / scaled[0])
+        x = x * (curr.shape[1] / scaled[1])
+        pyr.append(interp_linear(curr, hmarray(x), hmarray(y)))
     return pyr
 
 
 def pyr_up(m, shape):
-    return cv2.resize(m, shape)
+    y, x = np.indices(shape).astype(np.float32)
+    y = y * (m.shape[0] / shape[0])
+    x = x * (m.shape[1] / shape[1])
+    return interp_linear(m, hmarray(x), hmarray(y))
 
 
 def build_flow_map(idxs, u1, u2):
@@ -236,12 +244,8 @@ def compute_flow(i0, i1, u1, u2):
     p12 = hmarray(np.empty(i1.shape, dtype=np.float32))
     p21 = hmarray(np.empty(i1.shape, dtype=np.float32))
     p22 = hmarray(np.empty(i1.shape, dtype=np.float32))
-    i1y, i1x = centered_gradient(i1)
-    i1 = hmarray(i1)
-    i1x = hmarray(i1x.astype(np.float32))
-    i1y = hmarray(i1y.astype(np.float32))
+    i1x, i1y = forward_gradient(i1)
     u1, u2 = hmarray(u1), hmarray(u2)
-    i0 = hmarray(i0)
     indices = np.indices(u1.shape).astype(np.float32)
     xs = hmarray(indices[1])
     ys = hmarray(indices[0])
@@ -268,9 +272,6 @@ def compute_flow(i0, i1, u1, u2):
                     p11, p12, p21, p22, u1x, u1y, u2x, u2y)
                 n1 += 1
             n0 += 1
-    u1.copy_to_host_if_dirty()
-    u2.copy_to_host_if_dirty()
-    u1, u2 = np.copy(u1), np.copy(u2)
     return u1, u2
 
 
@@ -301,14 +302,16 @@ def tvl1(im0, im1):
     u1 = np.zeros(im0_pyr[-1].shape, dtype=np.float32)
     u2 = np.zeros(im0_pyr[-1].shape, dtype=np.float32)
     for s in reversed(range(n_scales)):
-        u1, u2, = compute_flow(im0_pyr[s], im1_pyr[s], u1, u2)
+        u1, u2 = compute_flow(im0_pyr[s], im1_pyr[s], u1, u2)
         if s > 0:
-            u1 = pyr_up(u1, im0_pyr[s - 1].shape[::-1]) * (1.0 / n)
-            u2 = pyr_up(u2, im0_pyr[s - 1].shape[::-1]) * (1.0 / n)
+            u1 = pyr_up(u1, im0_pyr[s - 1].shape) * (1.0 / n)
+            u2 = pyr_up(u2, im0_pyr[s - 1].shape) * (1.0 / n)
+    u1.copy_to_host_if_dirty()
+    u2.copy_to_host_if_dirty()
     return u1, u2
 
 import os
-file_path = "/scratch/lennytruong/hindemith/examples"
+file_path = os.path.dirname(os.path.realpath(__file__))
 
 frame0 = cv2.imread(file_path + '/frame0.png')
 frame1 = cv2.imread(file_path + '/frame1.png')
@@ -319,7 +322,7 @@ im1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
 # cProfile.run('tvl1(im0, im1)')
 # exit()
 # py_u1, py_u2 = py_tvl1(im0, im1)
-# u = tvl1(im0, im1)
+u = tvl1(im0, im1)
 # np.testing.assert_allclose(py_u1, np.copy(u[0]), 1e-7, 2)
 # np.testing.assert_allclose(py_u2, np.copy(u[1]), 1e-7, 2)
 # print("PASSED")
@@ -331,7 +334,6 @@ im1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
 with Timer() as t:
     tvl1(im0, im1)
 print("Specialized time: {}".format(t.interval))
-exit()
 # np.save("u1-cached", u1)
 # np.save("u2-cached", u2)
 # u1_expected = np.load(file_path + "/u1-cached.npy")
@@ -346,7 +348,53 @@ hsv[..., 1] = 255
 hsv[..., 0] = ang*180/np.pi/2
 hsv[..., 2] = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
 rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+horiz_hist = []
+
+for x in range(hsv.shape[1]):
+    amt = 0
+    for y in range(hsv.shape[0]):
+        amt += hsv[y, x, 2]
+    horiz_hist.append(amt)
+
+active = False
+start = 0
+columns = []
+for index, val in enumerate(horiz_hist):
+    if not active:
+        if val > 1000:
+            active = True
+            start = index
+    else:
+        if val < 1000:
+            active = False
+            columns.append((start, index))
+
+rects = []
+for col in columns:
+    vert_hist = []
+    for y in range(hsv.shape[0]):
+        amt = 0
+        for x in range(col[0], col[1]):
+            amt += hsv[y, x, 2]
+        vert_hist.append(amt)
+    for index, val in enumerate(vert_hist):
+        if not active:
+            if val > 500:
+                active = True
+                start = index
+        else:
+            if val < 500:
+                active = False
+                rects.append(((col[0], start), (col[1], index)))
+
+
+print(rects)
+# for rect in rects:
+#     cv2.rectangle(rgb, rect[0], rect[1], (0, 255, 0), 1)
+
+
 cv2.imshow('frame1', rgb)
+k = cv2.waitKey() & 0xff
 
 # Baseline
 # hsv2 = np.zeros_like(frame0)
@@ -357,4 +405,4 @@ cv2.imshow('frame1', rgb)
 # hsv2[..., 2] = cv2.normalize(mag2, None, 0, 255, cv2.NORM_MINMAX)
 # rgb2 = cv2.cvtColor(hsv2, cv2.COLOR_HSV2BGR)
 # cv2.imshow('frame2', rgb2)
-k = cv2.waitKey() & 0xff
+# k = cv2.waitKey() & 0xff
