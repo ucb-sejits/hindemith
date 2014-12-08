@@ -69,8 +69,7 @@ class hmarray(np.ndarray):
     def ocl_buf(self):
         if self._ocl_dirty is True:
             buf, evt = cl.buffer_from_ndarray(self.queue, self,
-                                              blocking=True)
-            evt.wait()
+                                              blocking=False)
             self._ocl_buf = buf
             self._ocl_dirty = False
         return self._ocl_buf
@@ -78,14 +77,14 @@ class hmarray(np.ndarray):
     def copy_to_host_if_dirty(self):
         if self._host_dirty:
             _, evt = cl.buffer_to_ndarray(self.queue, self._ocl_buf,
-                                          self, blocking=True)
+                                          self, blocking=False)
             evt.wait()
             self._host_dirty = False
 
     def __getitem__(self, item):
         if self._host_dirty:
             _, evt = cl.buffer_to_ndarray(self.queue, self._ocl_buf, self,
-                                          blocking=True)
+                                          blocking=False)
             evt.wait()
             self._host_dirty = False
 
