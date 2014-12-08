@@ -91,6 +91,16 @@ class hmarray(np.ndarray):
         return np.ndarray.__getitem__(self, item)
 
 
+def empty(shape, _type):
+    arr = hmarray(shape, _type)
+    arr._ocl_buf = cl.clCreateBuffer(arr.context, arr.nbytes)
+    arr._ocl_dirty = False
+    return arr
+
+
+def empty_like(arr):
+    return empty(arr.shape, arr.dtype)
+
 NdArrCfg = namedtuple('NdArrCfg', ['dtype', 'ndim', 'shape'])
 ScalarCfg = namedtuple('ScalarCfg', ['value'])
 

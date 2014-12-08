@@ -1,6 +1,6 @@
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.frontend import get_ast
-from hindemith.types.hmarray import hmarray, NdArrCfg, kernel_range, Loop
+from hindemith.types.hmarray import hmarray, NdArrCfg, kernel_range, Loop, empty_like
 from ctree.transformations import PyBasicConversions
 from ctree.nodes import CtreeNode
 from ctree.c.nodes import SymbolRef, BinaryOp, Mul, Constant, ArrayRef, Op
@@ -235,17 +235,13 @@ class OclConcreteStructuredGrid(ConcreteSpecializedFunction):
 
     def __call__(self, *args):
         output = None
-        out_buf = None
         processed = []
         for arg in args:
             if output is None:
-                output = hmarray(np.empty_like(arg))
-                out_buf = cl.clCreateBuffer(self.context, output.nbytes)
-                output._ocl_buf = out_buf
+                output = empty_like(arg)
                 output._host_dirty = True
-                output._ocl_dirty = False
             processed.append(arg.ocl_buf)
-        self._c_function(*(processed + [out_buf, self.queue] + self.kernels))
+        self._c_function(*(processed + [output.ocl_buf, self.queue] + self.kernels))
         return output
 
 

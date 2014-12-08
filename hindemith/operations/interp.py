@@ -1,6 +1,6 @@
 from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray
+from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray, empty_like
 
 lerp_kern_body = """
 float x = $x_map[loop_idx];
@@ -58,9 +58,7 @@ class OclConcreteLerp(ConcreteSpecializedFunction):
         return self
 
     def __call__(self, *args):
-        output = hmarray(np.empty_like(args[1]))
-        output._ocl_buf = cl.clCreateBuffer(self.context, output.nbytes)
-        output._ocl_dirty = False
+        output = empty_like(args[1])
         output._host_dirty = True
         processed = [arg.ocl_buf for arg in args]
         processed = [self.queue, self.kernel] + processed + [output._ocl_buf]
