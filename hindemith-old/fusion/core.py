@@ -14,10 +14,11 @@ import copy
 from ctree.frontend import get_ast
 from ctree.jit import ConcreteSpecializedFunction, LazySpecializedFunction
 from ctree.c.nodes import CFile, FunctionDecl, Op, FunctionCall, Constant, \
-    Add, Assign, AddAssign
+    Add, Assign, AugAssign
 from ctree.ocl.macros import barrier, CLK_LOCAL_MEM_FENCE
 from ctree.ocl.nodes import OclFile
 from ctree.ocl import get_context_and_queue_from_devices
+# from ctree.util import Timer
 
 from hindemith.utils import unique_kernel_name, unique_name
 
@@ -93,6 +94,8 @@ def fuse(func):
         # Remove Decorator
         tree.body[0].decorator_list = []
         tree = ast.fix_missing_locations(tree)
+        # import ctree
+        # ctree.browser_show_ast(tree, 'tmp.png')
         my_exec(compile(tree, '', 'exec'), symbol_table)
         func.hm_fused = symbol_table[func.__name__]
         return symbol_table[func.__name__](*args, **kwargs)
@@ -302,22 +305,9 @@ class Fuser(object):
         def finalize(project, program_cfg):
             fn = FusedFn(outputs, is_return)
             ocl_file = project.find(OclFile)
-            # print(ocl_file)
             kernel_ptrs = get_kernel_ptrs(ocl_file, fn)
 
-            argtypes = [None]
-
-            for arg in project.files[0].body[-1].params:
-                if isinstance(arg.type, ct.c_float):
-                    argtypes.append(ct.c_float)
-                elif isinstance(arg.type, cl.cl_mem):
-                    argtypes.append(cl.cl_mem)
-                elif isinstance(arg.type, cl.cl_command_queue):
-                    argtypes.append(cl.cl_command_queue)
-                elif isinstance(arg.type, cl.cl_kernel):
-                    argtypes.append(cl.cl_kernel)
-                else:
-                    raise Exception("Unsupported argtype")
+            argtypes = process_argtypes(project.files[0].body[-1].params)
             entry_pt = project.files[0].find(FunctionDecl)
             return fn.finalize(
                 entry_pt.name, project, ct.CFUNCTYPE(*argtypes), kernel_ptrs,
@@ -373,7 +363,7 @@ class Fuser(object):
 
             outputs.append(output)
             tree, entry_type, entry_point = specializer.transform(
-                specializer.original_tree,
+                copy.deepcopy(specializer.original_tree),
                 program_cfg
             )
             kernel_names.extend(kernel_names)
@@ -388,6 +378,13 @@ class Fuser(object):
 
 class LazyFused(LazySpecializedFunction):
     pass
+    # def args_to_subconfig(self, args):
+    #     """
+    #     """
+    #     return tuple(
+    #         (len(arg), arg.dtype, arg.ndim, arg.shape)
+    #         for arg in args
+    #     )
 
 
 def fuse_at_project_level(projects, entry_points):
@@ -490,17 +487,18 @@ def fuse_fusables(nodes):
 
 
 def update_block_sizes(nodes):
-    i = 1
-    next_node = nodes[i]
-    while next_node._load_shared_memory_block is not None \
-            and i < len(nodes):
-        next_node = nodes[i]
-        for node in nodes[:i]:
-            node._ghost_depth += next_node._ghost_depth
+    for i, curr_node in enumerate(nodes[1:]):
+        if curr_node._load_shared_memory_block is None:
+            break
+        for node in nodes[:i + 1]:
+            node._ghost_depth = tuple(
+                item + curr_node._ghost_depth[i]
+                for i, item in enumerate(node._ghost_depth)
+            )
             local_size = reduce(
                 operator.mul,
-                (item.value + node._ghost_depth * 2
-                    for item in node._local_size_decl.body),
+                (item.value + node._ghost_depth[index] * 2
+                    for index, item in enumerate(node._local_size_decl.body)),
                 ct.sizeof(cl.cl_float())
             )
             node._setargs[-1].args[2].value = local_size
@@ -509,29 +507,27 @@ def update_block_sizes(nodes):
             block_size_changer.visit(node._load_shared_memory_block[-1])
             block_size_changer.visit(node._macro_defns[0])
 
-        i += 1
-
 
 def incr_ids_and_move_ops(nodes):
-    i = 1
-    next_node = nodes[i]
-    while next_node._load_shared_memory_block is not None \
-            and i < len(nodes):
-        next_node = nodes[i]
+    for i, curr_node in enumerate(nodes[1:]):
+        if curr_node._load_shared_memory_block is None:
+            break
         idx_map = increment_local_ids(
-            next_node._load_shared_memory_block[-1].body,
-            # next_node._ghost_depth)
+            curr_node._load_shared_memory_block[-1].body,
+            # nodes[i]._ghost_depth[0])
             1)  # Assume ghost_depth 1 for now
         new_ops = move_stencil_op(
-            nodes[i - 1]._stencil_op,
-            next_node._load_shared_memory_block[-1].body[-1].left,
+            nodes[i]._stencil_op,
+            curr_node._load_shared_memory_block[-1].body[-1].left,
             idx_map
         )
         for index, op in enumerate(new_ops[1:]):
-            new_ops[index + 1] = AddAssign(op.target, op.value)
-        next_node._load_shared_memory_block[-1].body.pop()
-        next_node._load_shared_memory_block[-1].body.extend(new_ops)
-        i += 1
+            if isinstance(op, AugAssign):
+                new_ops[index + 1] = AugAssign(op.target, op.op, op.value)
+            else:
+                new_ops[index + 1] = op
+        curr_node._load_shared_memory_block[-1].body.pop()
+        curr_node._load_shared_memory_block[-1].body.extend(new_ops)
 
 
 def move_stencil_op(stencil_op, new_target, idx_map):
@@ -574,8 +570,7 @@ def increment_local_ids(body, incr):
     idx_map = {}
     for i in range(0, len(body) - 1, 2):
         body[i].right = Add(body[i].right, Constant(incr))
-        n = len(body) // 2
-        idx_map[(n - i // 2) - 1] = body[i].left.name
+        idx_map[(i // 2)] = body[i].left.name
     return idx_map
 
 
@@ -588,7 +583,8 @@ class BlockSizeChanger(ast.NodeTransformer):
         if isinstance(node.op, Op.Add) and \
             isinstance(node.left, FunctionCall) and \
                 node.left.func.name is 'get_local_size':
-            return Add(node.left, Constant(self._amt * 2))
+            return Add(node.left,
+                       Constant(self._amt[node.left.args[0].value] * 2))
         else:
             node.left = self.visit(node.left)
             node.right = self.visit(node.right)
@@ -596,7 +592,7 @@ class BlockSizeChanger(ast.NodeTransformer):
 
     def visit_FunctionCall(self, node):
         if node.func.name == 'clamp':
-            node.args[0].value.right.value = self._amt
+            node.args[0].value.right.value = self._amt[0]
         else:
             node.args = list(map(self.visit, node.args))
         return node
@@ -709,7 +705,7 @@ class FusedFn(ConcreteSpecializedFunction):
                     processed += (self.arg_buf_map[arg.ctypes.data],)
                 else:
                     buf, evt = cl.buffer_from_ndarray(self.queue, arg,
-                                                      blocking=True)
+                                                      blocking=False)
                     evt.wait()
                     processed += (buf,)
                     self.arg_buf_map[arg.ctypes.data] = buf
@@ -718,7 +714,9 @@ class FusedFn(ConcreteSpecializedFunction):
         return processed
 
     def __call__(self, *args):
+        # with Timer() as t:
         processed = self._process_args(args)
+        # print("Copy input time: %.2fms" % (t.interval * 1000))
         args = []
         offset = 0
         for index, num in enumerate(self.num_args):
@@ -730,8 +728,14 @@ class FusedFn(ConcreteSpecializedFunction):
             args.extend(processed[offset:offset + num])
             offset += num
         # args.extend(processed)
-        self._c_function(*args)
-        return self._process_outputs()
+        from ctree.util import Timer
+        with Timer() as t:
+            self._c_function(*args)
+        print("Call time: %.2fms" % (t.interval * 1000))
+        # with Timer() as t:
+        outputs = self._process_outputs()
+        # print("Copy Output Time: %.2fms" % (t.interval * 1000))
+        return outputs
 
     def _process_outputs(self):
         """
@@ -742,18 +746,20 @@ class FusedFn(ConcreteSpecializedFunction):
             # FIXME: Assuming only one output is returned
             output = self.outputs[-1]
             buf = self.arg_buf_map[output.ctypes.data]
-            out, evt = cl.buffer_to_ndarray(self.queue, buf, output)
+            out, evt = cl.buffer_to_ndarray(self.queue, buf, like=output, blocking=True)
             evt.wait()
+            self.arg_buf_map = {}
             return out
         for output in self.outputs:
             try:
                 buf = self.arg_buf_map[output.ctypes.data]
-                out, evt = cl.buffer_to_ndarray(self.queue, buf, output)
+                out, evt = cl.buffer_to_ndarray(self.queue, buf, like=output, blocking=True)
                 evt.wait()
                 retvals += (out,)
             except KeyError:
                 # TODO: Make this a better exception
                 raise Exception("Could not find corresponding buffer")
+        self.arg_buf_map = {}
         return retvals
 
 
@@ -795,3 +801,20 @@ class KernelCall(object):
         self._stencil_op = stencil_op
         self._macro_defns = macro_defns
         self._ghost_depth = ghost_depth
+
+
+def process_argtypes(args):
+    argtypes = [None]
+
+    for arg in args:
+        if isinstance(arg.type, ct.c_float):
+            argtypes.append(ct.c_float)
+        elif isinstance(arg.type, cl.cl_mem):
+            argtypes.append(cl.cl_mem)
+        elif isinstance(arg.type, cl.cl_command_queue):
+            argtypes.append(cl.cl_command_queue)
+        elif isinstance(arg.type, cl.cl_kernel):
+            argtypes.append(cl.cl_kernel)
+        else:
+            raise Exception("Unsupported argtype")
+    return argtypes

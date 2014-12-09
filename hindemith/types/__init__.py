@@ -1,1 +1,1 @@
-__author__ = 'leonardtruong'
+from .hmarray import hmarray

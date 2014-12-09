@@ -36,7 +36,7 @@ results = [[] for _ in range(3)]
 speedup = [[] for _ in range(4)]
 
 
-for width in range(2**8, 2**13, 256):
+for width in range(2**8, 2**12 + 1, 256):
     print("Running width: %d" % width)
 # for width in (2**x for x in range(8, 11)):
     total0, total1, total2 = 0, 0, 0
