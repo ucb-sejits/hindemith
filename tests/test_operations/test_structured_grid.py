@@ -62,16 +62,14 @@ class TestStructuredGrid(HMBaseTest):
             self.fail(e)
 
     def test_gradient(self):
-        a = self.a[:4, :4]
+        a = self.a
         hm_a = hmarray(a)
         actual = dx(hm_a)
         expected = py_dx(a)
         try:
             actual.copy_to_host_if_dirty()
             actual = np.copy(actual)
-            np.testing.assert_array_almost_equal(actual[:-1, :-1],
-                                                 expected[:-1, :-1],
-                                                 decimal=3)
+            np.testing.assert_allclose(actual[:-1, :-1], expected[:-1, :-1])
         except AssertionError as e:
             self.fail(e)
 
@@ -80,8 +78,6 @@ class TestStructuredGrid(HMBaseTest):
         try:
             actual.copy_to_host_if_dirty()
             actual = np.copy(actual)
-            np.testing.assert_array_almost_equal(actual[:-1, :-1],
-                                                 expected[:-1, :-1],
-                                                 decimal=3)
+            np.testing.assert_allclose(actual[:-1, :-1], expected[:-1, :-1])
         except AssertionError as e:
             self.fail(e)

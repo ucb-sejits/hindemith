@@ -121,7 +121,8 @@ def kernel_range(shape, kernel_range, params, body, offset=None):
                 SymbolRef(global_size_decl), SymbolRef(local_size_decl),
                 Constant(0), NULL(), NULL()
             ]
-        )
+        ),
+        FunctionCall(SymbolRef('clFinish'), [SymbolRef('queue')])
     ])
     body.insert(0, gen_ocl_loop_index(shape))
     cond = gen_kernel_cond(global_size, kernel_range, offset)

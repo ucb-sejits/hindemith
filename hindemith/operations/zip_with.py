@@ -38,6 +38,8 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
     def __init__(self, entry_name, proj, entry_type):
         self._c_function = self._compile(entry_name, proj, entry_type)
         devices = cl.clGetDeviceIDs()
+        print(proj.files[0])
+        print(proj.files[1])
         self.context, self.queue = get_context_and_queue_from_devices(
             [devices[-1]])
 
@@ -46,7 +48,7 @@ class OclConcreteZipWith(ConcreteSpecializedFunction):
         return self
 
     def __call__(self, *args):
-        output = hmarray(np.empty_like(args[0]))
+        output = hmarray(np.zeros_like(args[0]))
         out_buf = cl.clCreateBuffer(self.context, output.nbytes)
         output._ocl_buf = out_buf
         output._ocl_dirty = False

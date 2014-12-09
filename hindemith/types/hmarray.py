@@ -72,6 +72,7 @@ class hmarray(np.ndarray):
                                               blocking=False)
             self._ocl_buf = buf
             self._ocl_dirty = False
+            evt.wait()
         return self._ocl_buf
 
     def copy_to_host_if_dirty(self):
@@ -81,14 +82,6 @@ class hmarray(np.ndarray):
             evt.wait()
             self._host_dirty = False
 
-    def __getitem__(self, item):
-        if self._host_dirty:
-            _, evt = cl.buffer_to_ndarray(self.queue, self._ocl_buf, self,
-                                          blocking=False)
-            evt.wait()
-            self._host_dirty = False
-
-        return np.ndarray.__getitem__(self, item)
 
 
 def empty(shape, _type):
@@ -196,7 +189,7 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
         for arg in args:
             if isinstance(arg, hmarray):
                 if output is None:
-                    output = hmarray(np.empty_like(arg))
+                    output = hmarray(np.zeros_like(arg))
                     out_buf = cl.clCreateBuffer(self.context, output.nbytes)
                     output._ocl_buf = out_buf
                     output._ocl_dirty = False
