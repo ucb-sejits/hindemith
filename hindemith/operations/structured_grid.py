@@ -186,6 +186,9 @@ class StructuredGridBackend(ast.NodeTransformer):
 
         control, kernel = kernel_range(shape, g_size,
                                        self.kernel_params, body, offset)
+        print(kernel)
+        for s in control:
+            print(s)
         self.kernels.append(kernel)
         # for launch in controls:
         #     control.extend(launch)

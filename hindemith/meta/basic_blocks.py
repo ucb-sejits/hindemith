@@ -211,7 +211,11 @@ def decompose(expr):
                                     ast.Call(op, operands, [], None, None)), )
         elif isinstance(expr, ast.Assign):
             target = expr.targets[0]
-            body = visit(expr.value, target)
+            if isinstance(target, ast.Tuple):
+                body = reduce(lambda x, y: x + y,
+                              map(visit, expr.value.elts, target.elts), ())
+            else:
+                body = visit(expr.value, target)
         elif isinstance(expr, ast.Call):
             body = ()
             args = []

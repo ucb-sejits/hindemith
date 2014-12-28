@@ -23,6 +23,8 @@ import copy
 
 
 class hmarray(np.ndarray):
+    buffer_cache = {}
+
     def __new__(subtype, shape, dtype=float, buffer=None, offset=0,
                 strides=None, order=None, info=None):
         """
@@ -68,9 +70,15 @@ class hmarray(np.ndarray):
     @property
     def ocl_buf(self):
         if self._ocl_dirty is True:
-            buf, evt = cl.buffer_from_ndarray(self.queue, self,
-                                              blocking=False)
-            self._ocl_buf = buf
+            if self._ocl_buf is None:
+                # try:
+                #     self._ocl_buf = self.buffer_cache[self.nbytes].pop()
+                # except (KeyError, IndexError):
+                self._ocl_buf = cl.clCreateBuffer(self.context,
+                                                  self.nbytes)
+
+            _, evt = cl.buffer_from_ndarray(self.queue, self,
+                                            self._ocl_buf, blocking=False)
             self._ocl_dirty = False
             evt.wait()
         return self._ocl_buf
@@ -82,6 +90,13 @@ class hmarray(np.ndarray):
             evt.wait()
             self._host_dirty = False
 
+    def __del__(self):
+        pass
+        # if self._ocl_buf is not None:
+        #     try:
+        #         self.buffer_cache[self.nbytes].append(self._ocl_buf)
+        #     except KeyError:
+        #         self.buffer_cache[self.nbytes] = [self._ocl_buf]
 
 
 def empty(shape, _type):
@@ -93,6 +108,10 @@ def empty(shape, _type):
 
 def empty_like(arr):
     return empty(arr.shape, arr.dtype)
+
+
+def zeros(size, dtype):
+    return hmarray(np.zeros(size, dtype))
 
 NdArrCfg = namedtuple('NdArrCfg', ['dtype', 'ndim', 'shape'])
 ScalarCfg = namedtuple('ScalarCfg', ['value'])
