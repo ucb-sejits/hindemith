@@ -78,9 +78,10 @@ class MapOclTransform(ast.NodeTransformer):
         if isinstance(node, BinaryOp):
             if isinstance(node.op, Op.ArrayRef):
                 return self.infer_type(node.left)._dtype_.type
-            left = self.infer_type(node.left)
-            # right = self.infer_type(node.right)
-            return left
+            try: 
+                return self.infer_type(node.left)
+            except:
+                return self.infer_type(node.right)
         elif isinstance(node, FunctionCall):
             if node.func.name == 'fabs':
                 return self.infer_type(node.args[0])

@@ -93,16 +93,20 @@ def kernel_range(shape, kernel_range, params, body, offset=None):
     control = process_arg_types(params, unique_name)
 
     global_size = ()
-    for d in kernel_range:
-        if d % 32 != 0 and d > 32:
-            global_size += ((d + 31) & (~31),)
-        else:
-            global_size += (d,)
+    # for d in kernel_range:
+    d = kernel_range[0]
+    if d % 32 != 0 and d > 32:
+        global_size += ((d + 31) & (~31),)
+    else:
+        global_size += (d,)
+    global_size += tuple(kernel_range[1:])
 
     if offset is None:
         offset = [0 for _ in global_size]
 
     local_size = get_local_size(global_size)
+    # print(global_size)
+    # print(local_size)
 
     global_size_decl = 'global_size{}'.format(unique_name)
     local_size_decl = 'local_size{}'.format(unique_name)
@@ -111,14 +115,14 @@ def kernel_range(shape, kernel_range, params, body, offset=None):
         ArrayDef(SymbolRef(global_size_decl, ct.c_size_t()),
                  Constant(len(shape)), global_size),
         ArrayDef(SymbolRef(local_size_decl, ct.c_size_t()),
-                 Constant(len(shape)), local_size),
+                 Constant(len(shape)), ),
         ArrayDef(SymbolRef(offset_decl, ct.c_size_t()),
                  Constant(len(offset)), offset),
         FunctionCall(
             SymbolRef('clEnqueueNDRangeKernel'), [
                 SymbolRef('queue'), SymbolRef(unique_name),
                 Constant(len(shape)), SymbolRef(offset_decl),
-                SymbolRef(global_size_decl), SymbolRef(local_size_decl),
+                SymbolRef(global_size_decl), NULL(),
                 Constant(0), NULL(), NULL()
             ]
         ),

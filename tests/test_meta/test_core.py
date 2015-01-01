@@ -20,8 +20,31 @@ class TestFusion(unittest.TestCase):
     def setUp(self):
         self.a = np.random.rand(480, 640).astype(np.float32) * 255
         self.b = np.random.rand(480, 640).astype(np.float32) * 255
+        self.c = np.random.rand(480, 640).astype(np.float32) * 255
 
     def test_simple(self):
+        a, b, c = hmarray(self.a), hmarray(self.b), hmarray(self.c)
+
+        def fused(a, b, c):
+            d = a + b
+            e = c + b
+            return d + e
+
+        @meta
+        def unfused(a, b, c):
+            d = a + b
+            e = c + b
+            return d + e
+
+        for _ in range(10):
+            actual = fused(a, b, c)
+            expected = unfused(a, b, c)
+            actual.copy_to_host_if_dirty()
+            expected.copy_to_host_if_dirty()
+            self._check_arrays_equal(actual, expected)
+
+    @unittest.skip("")
+    def test_threshold(self):
         ZipWith.backend = 'ocl'
         EltWiseArrayOp.backend = 'ocl'
         a = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)

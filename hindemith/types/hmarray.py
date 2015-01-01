@@ -80,7 +80,6 @@ class hmarray(np.ndarray):
             _, evt = cl.buffer_from_ndarray(self.queue, self,
                                             self._ocl_buf, blocking=False)
             self._ocl_dirty = False
-            evt.wait()
         return self._ocl_buf
 
     def copy_to_host_if_dirty(self):
@@ -89,9 +88,13 @@ class hmarray(np.ndarray):
                                           self, blocking=False)
             evt.wait()
             self._host_dirty = False
+        return self
 
-    def __del__(self):
-        pass
+    # def __del__(self):
+    #     if self.shape not in self.buffer_cache:
+    #         self.buffer_cache[self.shape] = [self]
+    #     else:
+    #         self.buffer_cache[self.shape].append(self)
         # if self._ocl_buf is not None:
         #     try:
         #         self.buffer_cache[self.nbytes].append(self._ocl_buf)
@@ -100,6 +103,13 @@ class hmarray(np.ndarray):
 
 
 def empty(shape, _type):
+    # if shape in hmarray.buffer_cache:
+    #     bucket = hmarray.buffer_cache[shape]
+    #     if len(bucket) > 0:
+    #         arr = bucket.pop()
+    #         arr._ocl_dirty = False
+    #         arr._host_dirty = False
+    #         return arr
     arr = hmarray(shape, _type)
     arr._ocl_buf = cl.clCreateBuffer(arr.context, arr.nbytes)
     arr._ocl_dirty = False
@@ -112,6 +122,17 @@ def empty_like(arr):
 
 def zeros(size, dtype):
     return hmarray(np.zeros(size, dtype))
+
+
+indices_cache = {}
+
+
+def indices(size):
+    if size not in indices_cache:
+        y, x = np.indices(size).astype(np.float32)
+        indices_cache[size] = (hmarray(y), hmarray(x))
+    return indices_cache[size]
+
 
 NdArrCfg = namedtuple('NdArrCfg', ['dtype', 'ndim', 'shape'])
 ScalarCfg = namedtuple('ScalarCfg', ['value'])

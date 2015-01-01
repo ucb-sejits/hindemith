@@ -56,7 +56,7 @@ class ConcreteMerged(ConcreteSpecializedFunction):
             output._host_dirty = True
             outputs.append(output)
 
-
+        cl.clFinish(self.queue)
         self._c_function(*([self.queue, self.kernel] + processed))
         if len(outputs) == 1:
             return outputs[0]

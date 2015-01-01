@@ -143,7 +143,7 @@ class StructuredGridBackend(ast.NodeTransformer):
                 bottom_border = min(negs)
                 g_size[index] += bottom_border
                 offset[index] = abs(bottom_border)
-                if self.border_type == 'constant':
+                if self.border_type in {'constant', 'zero'}:
                     b_size = list(shape[:])
                     os = [0 for _ in b_size]
                     os[index] = abs(bottom_border)
@@ -159,11 +159,11 @@ class StructuredGridBackend(ast.NodeTransformer):
                     control.pop()
                     controls.append(control)
                     kernels.append(kernel)
-                    # self.kernels.append(kernel)
+                    self.kernels.append(kernel)
             if len(pos) > 0:
                 top_border = min(pos)
                 g_size[1 - index] -= top_border
-                if self.border_type == 'constant':
+                if self.border_type in {'constant', 'zero'}:
                     b_size = list(shape[:])
                     os = [0 for _ in b_size]
                     os[index] = g_size[index] - top_border
@@ -179,19 +179,16 @@ class StructuredGridBackend(ast.NodeTransformer):
                     control.pop()
                     controls.append(control)
                     kernels.append(kernel)
-                    # self.kernels.append(kernel)
+                    self.kernels.append(kernel)
         body = [self.visit(s) for s in node.body]
-        # self.project.files.extend(kernels)
+        self.project.files.extend(kernels)
         self.body = body[:]
 
         control, kernel = kernel_range(shape, g_size,
                                        self.kernel_params, body, offset)
-        print(kernel)
-        for s in control:
-            print(s)
         self.kernels.append(kernel)
-        # for launch in controls:
-        #     control.extend(launch)
+        for launch in controls:
+            control.extend(launch)
 
         self.project.files.append(kernel)
         self.cfile.body.insert(0, StringTemplate("""
@@ -203,6 +200,15 @@ class StructuredGridBackend(ast.NodeTransformer):
             """))
         return control
 
+    def visit_BinaryOp(self, node):
+        node.left = self.visit(node.left)
+        if isinstance(node.op, Op.Assign):
+            if self.curr_offset is not None and self.border_type == 'zero':
+                node.right = Constant(0)
+                return node
+        node.right = self.visit(node.right)
+        return node
+
     def visit_ArrayReference(self, node):
         shape = self.arg_table[node.array.name].shape
         elts = node.index.elts
@@ -210,7 +216,7 @@ class StructuredGridBackend(ast.NodeTransformer):
         for index, elt in enumerate(elts):
             if isinstance(elt, BinaryOp):
                 if self.curr_offset is not None and index == self.curr_offset:
-                    return Constant(self.cval)
+                        return Constant(self.cval)
                 step = np.prod(shape[index + 1:])
                 elt.left = idx
                 if step > 1:
@@ -244,6 +250,7 @@ class OclConcreteStructuredGrid(ConcreteSpecializedFunction):
                 output = empty_like(arg)
                 output._host_dirty = True
             processed.append(arg.ocl_buf)
+        cl.clFinish(self.queue)
         self._c_function(*(processed + [output.ocl_buf, self.queue] + self.kernels))
         return output
 
@@ -301,7 +308,7 @@ class StructuredGrid(LazySpecializedFunction):
         entry_type = ct.CFUNCTYPE(*((None, ) + arg_types))
         fn = OclConcreteStructuredGrid('control', tree, entry_type)
         kernels = []
-        for kernel in backend.kernels[:1]:
+        for kernel in backend.kernels:
             program = cl.clCreateProgramWithSource(fn.context,
                                                    kernel.codegen()).build()
             kernels.append(program[kernel.body[0].name.name])
