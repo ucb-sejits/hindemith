@@ -7,7 +7,7 @@ from .map import MapOclTransform, ElementReference, \
 from hindemith.meta.merge import MergeableInfo, FusableKernel
 
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from ctree.c.nodes import SymbolRef, FunctionDecl, CFile
+from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, FunctionCall
 from ctree.nodes import Project
 from ctree.ocl import get_context_and_queue_from_devices
 from ctree.ocl.nodes import OclFile
@@ -72,6 +72,13 @@ class ZipWithFrontendTransformer(PyBasicConversions):
         else:
             self.targets = [arg.arg for arg in node.args.args]
         node.body = list(map(self.visit, node.body))
+        return node
+
+    def visit_Call(self, node):
+        orig_name = node.func.id
+        node = super(ZipWithFrontendTransformer, self).visit_Call(node)
+        if isinstance(node, FunctionCall):
+            node.func.name = orig_name
         return node
 
     def visit_Name(self, node):
