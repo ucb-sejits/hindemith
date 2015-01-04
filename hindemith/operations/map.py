@@ -2,7 +2,7 @@ __author__ = 'leonardtruong'
 
 from ctree.frontend import get_ast
 from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, Assign, ArrayRef, \
-    Constant, BinaryOp, Op, FunctionCall
+    Constant, BinaryOp, Op, FunctionCall, Cast
 from ctree.ocl import get_context_and_queue_from_devices
 from ctree.nodes import Project, CtreeNode
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
@@ -95,6 +95,8 @@ class MapOclTransform(ast.NodeTransformer):
                     node.func.name))
         elif isinstance(node, Constant):
             return py_to_ctypes[type(node.value)]
+        elif isinstance(node, Cast):
+            return node.type.__class__
         raise Exception(
             "Could not infer type of variable {}".format(node.name))
 
