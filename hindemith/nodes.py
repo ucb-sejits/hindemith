@@ -115,7 +115,7 @@ def kernel_range(shape, kernel_range, params, body, offset=None):
         ArrayDef(SymbolRef(global_size_decl, ct.c_size_t()),
                  Constant(len(shape)), global_size),
         ArrayDef(SymbolRef(local_size_decl, ct.c_size_t()),
-                 Constant(len(shape)), ),
+                 Constant(len(shape)), local_size),
         ArrayDef(SymbolRef(offset_decl, ct.c_size_t()),
                  Constant(len(offset)), offset),
         FunctionCall(

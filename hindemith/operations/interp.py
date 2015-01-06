@@ -34,7 +34,7 @@ int xx = (int) x;
 int yy = (int) y;
 float tx = x - xx;
 float ty = y - yy;
-if (xx > $x_dim - 2 || yy > $y_dim - 2) {
+if (xx > $x_dim - 2 || yy > $y_dim - 2 || xx < 0 || yy < 0) {
   $output[loop_idx] = 0;
 } else {
   int idx = xx + yy * $x_dim;
