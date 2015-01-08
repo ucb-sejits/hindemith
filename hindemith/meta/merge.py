@@ -43,7 +43,7 @@ class ConcreteMerged(ConcreteSpecializedFunction):
                 processed.append(arg.ocl_buf)
             if index in self.retval_idxs:
                 outputs.append(arg)
-            if len(out_idxs) > 0 and index == out_idxs[0]:
+            while len(out_idxs) > 0 and index == out_idxs[0]:
                 out_idxs.pop(0)
                 output = empty(arg.shape, arg.dtype)
                 output._host_dirty = True
@@ -324,7 +324,7 @@ def fuse(sources, sinks, nodes, to_promote, env):
             params.append(SymbolRef(output.name, cl.cl_mem()))
             param_types.append(cl.cl_mem)
             # args.append(ast.Name(sink, ast.Load()))
-            if len(output_idxs) > 0 and output_idxs[-1] >= len(args) - 1:
+            if len(output_idxs) > 0 and output_idxs[-1] > len(args) - 1:
                 output_idxs.append(output_idxs[-1] + 1)
             else:
                 output_idxs.append(len(args) - 1)
@@ -367,10 +367,17 @@ def merge_entry_points(composable_block, env):
         fused_sources_list, fused_sinks_list, fused_nodes, to_promote, env)
     target_ids = composable_block.live_outs.intersection(composable_block.kill)
     if len(target_ids) > 1:
-        targets = [ast.Tuple([ast.Name(id, ast.Store())
-                             for id in target_ids], ast.Store())]
+        target_list = []
+        for statement in composable_block.statements:
+            for sink in statement.sinks:
+                if sink in target_ids:
+                    target_ids.discard(sink)
+                    target_list.append(ast.Name(sink, ast.Store()))
+        targets = [ast.Tuple(target_list, ast.Store())]
     else:
         targets = [ast.Name(list(target_ids)[0], ast.Store())]
+    print(output_idxs)
+    print(retval_idxs)
     merged_name = get_unique_func_name(env)
     env[merged_name] = MergedSpecializedFunction(proj, entry_type,
                                                  output_idxs, retval_idxs)
