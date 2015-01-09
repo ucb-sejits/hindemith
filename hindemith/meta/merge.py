@@ -56,7 +56,7 @@ class ConcreteMerged(ConcreteSpecializedFunction):
             output._host_dirty = True
             outputs.append(output)
 
-        cl.clFinish(self.queue)
+        # cl.clFinish(self.queue)
         self._c_function(*([self.queue, self.kernel] + processed))
         if len(outputs) == 1:
             return outputs[0]
@@ -306,9 +306,9 @@ def fuse(sources, sinks, nodes, to_promote, env):
         sink = sinks.pop(0)
         if sink in to_promote:
             seen[sink] = loop.sinks[0].name
-            body.insert(0, Assign(
+            body.insert(0,
                 SymbolRef(seen[sink],
-                          loop.types[-1]._dtype_.type()), Constant(0.0)))
+                          loop.types[-1]._dtype_.type()))
             visitor = SymbolReplacer(loop.sinks[0].name, seen[sink])
             body = [visitor.visit(s) for s in body]
             visitor = PromoteToRegister(loop.sinks[0].name)
