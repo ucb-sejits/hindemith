@@ -11,10 +11,10 @@ from ctree.templates.nodes import StringTemplate
 
 
 def gen_ocl_loop_index(shape):
-    base = get_global_id(0)
-    for index in range(1, len(shape)):
+    base = get_global_id(len(shape) - 1)
+    for index in reversed(range(len(shape) - 1)):
         curr = Mul(get_global_id(index),
-                   Constant(reduce(lambda x, y: x * y, shape[:index], 1)))
+                   Constant(reduce(lambda x, y: x * y, shape[index + 1:], 1)))
         base = Add(curr, base)
     return Assign(SymbolRef('loop_idx', ct.c_int()), base)
 
@@ -33,11 +33,16 @@ def gen_kernel_cond(global_size, shape, offset):
     return cond
 
 
-def process_arg_types(params, kernel):
+def process_arg_types(params, local_mem, kernel):
     control = []
     for index, param in enumerate(params):
         control.append(
             clSetKernelArg(kernel, index, ct.sizeof(cl.cl_mem), param.name))
+    if local_mem is not None:
+        for i, param in enumerate(local_mem):
+            control.append(
+                clSetKernelArg(kernel, index + 1 + i, 34 * 34 * 4, NULL()))
+
     return control
 
 
@@ -80,7 +85,7 @@ ocl_header = StringTemplate("""
                 """)
 
 
-def kernel_range(shape, kernel_range, params, body, offset=None):
+def kernel_range(shape, kernel_range, params, body, offset=None, local_mem=None):
     """
     Factory method for generating an OpenCL kernel corresponding
     to a set of nested for loops.  Returns the control logic for
@@ -90,7 +95,7 @@ def kernel_range(shape, kernel_range, params, body, offset=None):
     TODO: Make local size computation dynamic
     """
     unique_name = unique_kernel_name()
-    control = process_arg_types(params, unique_name)
+    control = process_arg_types(params, local_mem, unique_name)
 
     global_size = ()
     # for d in kernel_range:
@@ -132,10 +137,13 @@ def kernel_range(shape, kernel_range, params, body, offset=None):
     cond = gen_kernel_cond(global_size, kernel_range, offset)
     if cond:
         body = If(cond, body)
+    args = params
+    if local_mem is not None:
+        args += local_mem
     kernel = FunctionDecl(
         None,
         SymbolRef(unique_name),
-        params,
+        args,
         body
     )
     for index, param in enumerate(params):

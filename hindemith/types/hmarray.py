@@ -323,7 +323,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
                 #endif
                 """))
             arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
-            shape = arg_cfg[2].shape[::-1]
+            shape = arg_cfg[2].shape
             control, kernel = kernel_range(shape, shape,
                                            kernel_params, loop_body)
             func.defn = control
@@ -398,7 +398,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
         loop_body = [
             Assign(ArrayRef(SymbolRef(params[-1].name), SymbolRef('loop_idx')),
                    op(*op_args))]
-        shape = arg_cfg[2].shape[::-1]
+        shape = arg_cfg[2].shape
         return [Loop(shape, params[:-1], [params[-1]], types, loop_body)]
 
 
@@ -407,12 +407,15 @@ class HmIRNode(object):
 
 
 class Loop(HmIRNode):
-    def __init__(self, shape, sources, sinks, types, body):
+    def __init__(self, shape, sources, sinks, types, body, local_mem=None):
         self.shape = shape
         self.sources = sources
         self.sinks = sinks
         self.types = types
         self.body = body
+        self.local_mem = local_mem
+        if local_mem is None:
+            self.local_mem = []
 
 
 spec_add = EltWiseArrayOp('+')

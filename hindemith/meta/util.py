@@ -102,3 +102,22 @@ class SymbolReplacer(ast.NodeTransformer):
         if node.name == self._old:
             node.name = self._new
         return node
+
+
+class RemoveRedcl(ast.NodeTransformer):
+    def __init__(self):
+        super(RemoveRedcl, self).__init__()
+        self._decled = set()
+
+    def visit_For(self, node):
+        return node
+
+    def visit_SymbolRef(self, node):
+        if node.type is not None:
+            if node.name in self._decled:
+                node.type = None
+            else:
+                self._decled.add(node.name)
+        return node
+
+        
