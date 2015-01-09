@@ -198,7 +198,7 @@ class SpecializedMap(LazySpecializedFunction):
                 #endif
                 """))
             arg_types += (cl.cl_command_queue, cl.cl_kernel)
-            shape = arg_cfg.shape[::-1]
+            shape = arg_cfg.shape
             control, kernel = kernel_range(shape, shape,
                                            kernel_params, loop_body)
             func.defn = control
