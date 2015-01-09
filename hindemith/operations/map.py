@@ -198,7 +198,7 @@ class SpecializedMap(LazySpecializedFunction):
                 #endif
                 """))
             arg_types += (cl.cl_command_queue, cl.cl_kernel)
-            shape = arg_cfg.shape[::-1]
+            shape = arg_cfg.shape
             control, kernel = kernel_range(shape, shape,
                                            kernel_params, loop_body)
             func.defn = control
@@ -228,7 +228,7 @@ class SpecializedMap(LazySpecializedFunction):
         tree = MapFrontendTransformer(params).visit(tree).files[0].body[0].body
         backend = MapOclTransform()
         loop_body = list(map(backend.visit, tree))
-        shape = arg_cfg.shape[::-1]
+        shape = arg_cfg.shape
         return [Loop(shape, params[:-1], [params[-1]], types, loop_body)]
 
 

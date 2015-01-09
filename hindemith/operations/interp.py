@@ -115,7 +115,7 @@ class LinearInterp(LazySpecializedFunction):
         proj = Project([CFile('lerp', [func])])
         proj.files[0].body.insert(0, ocl_header)
         arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
-        shape = arg_cfg[1].shape[::-1]
+        shape = arg_cfg[1].shape
         control, kernel = kernel_range(shape, shape,
                                        kernel_params, [StringTemplate(lerp_kern_body, {
                                            "input": SymbolRef(kernel_params[0].name),
@@ -147,7 +147,7 @@ class LinearInterp(LazySpecializedFunction):
         for cfg in arg_cfg:
             arg_types += (np.ctypeslib.ndpointer(cfg.dtype, cfg.ndim, cfg.shape), )
             params.append(SymbolRef.unique(sym_type=arg_types[-1]()))
-        shape = arg_cfg[1].shape[::-1]
+        shape = arg_cfg[1]
         return [Loop(shape, params[:-1], [params[-1]], arg_types,
                      [StringTemplate(lerp_kern_body, {
                          "input": SymbolRef(params[0].name),
