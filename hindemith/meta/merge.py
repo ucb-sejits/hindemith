@@ -1,14 +1,14 @@
 __author__ = 'leonardtruong'
 
 import ast
-from ctree.ocl import get_context_and_queue_from_devices
-from ctree.ocl.macros import get_local_id, get_local_size, get_group_id
+# from ctree.ocl import get_context_and_queue_from_devices
+# from ctree.ocl.macros import get_local_id, get_local_size, get_group_id
 from ctree.c.nodes import SymbolRef, Constant, Op, Assign, Add, For, \
     AddAssign, Lt, Mul, Sub, FunctionDecl, FunctionCall, ArrayDef, If, \
     And, CFile
-from ctree.ocl.nodes import OclFile
+# from ctree.ocl.nodes import OclFile
 from ctree.nodes import Project
-import pycl as cl
+# import pycl as cl
 import ctypes as ct
 import numpy as np
 from .util import get_unique_func_name, SymbolReplacer, RemoveRedcl

@@ -1,11 +1,11 @@
 import numpy as np
-import pycl as cl
-from ctree.ocl import get_context_and_queue_from_devices
+# import pycl as cl
+# from ctree.ocl import get_context_and_queue_from_devices
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.c.nodes import FunctionDecl, SymbolRef, For, ArrayRef, Add, Assign, \
     Constant, AddAssign, Lt, Mul, Sub, Div, CFile
 from ctree.templates.nodes import StringTemplate
-from ctree.ocl.nodes import OclFile
+# from ctree.ocl.nodes import OclFile
 from ctree.nodes import Project
 from ctree.omp.nodes import OmpParallelFor
 from ctree.omp.macros import IncludeOmpHeader
@@ -54,9 +54,9 @@ class hmarray(np.ndarray):
         obj._ocl_buf = None
         obj._host_dirty = False
         obj._ocl_dirty = True
-        devices = cl.clGetDeviceIDs()
-        obj.context, obj.queue = get_context_and_queue_from_devices(
-            [devices[-1]])
+        # devices = cl.clGetDeviceIDs()
+        # obj.context, obj.queue = get_context_and_queue_from_devices(
+        #     [devices[-1]])
         return obj
 
     def __array_finalize__(self, obj):
@@ -111,8 +111,8 @@ def empty(shape, _type):
     #         arr._host_dirty = False
     #         return arr
     arr = hmarray(shape, _type)
-    arr._ocl_buf = cl.clCreateBuffer(arr.context, arr.nbytes)
-    arr._ocl_dirty = False
+    # arr._ocl_buf = cl.clCreateBuffer(arr.context, arr.nbytes)
+    # arr._ocl_dirty = False
     return arr
 
 

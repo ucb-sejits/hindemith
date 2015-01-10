@@ -2,10 +2,10 @@ from ctree.c.nodes import SymbolRef, Constant, Assign, Add, \
     Lt, Mul, FunctionDecl, FunctionCall, ArrayDef, If, \
     And, For, AddAssign
 from functools import reduce
-from ctree.ocl.macros import clSetKernelArg, NULL, get_global_id
-import pycl as cl
+# from ctree.ocl.macros import clSetKernelArg, NULL, get_global_id
+# import pycl as cl
 import ctypes as ct
-from ctree.ocl.nodes import OclFile
+# from ctree.ocl.nodes import OclFile
 import numpy as np
 from ctree.templates.nodes import StringTemplate
 

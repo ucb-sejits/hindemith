@@ -3,7 +3,7 @@ __author__ = 'leonardtruong'
 from ctree.frontend import get_ast
 from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, Assign, ArrayRef, \
     Constant, BinaryOp, Op, FunctionCall, Cast
-from ctree.ocl import get_context_and_queue_from_devices
+# from ctree.ocl import get_context_and_queue_from_devices
 from ctree.nodes import Project, CtreeNode
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.templates.nodes import StringTemplate
@@ -14,7 +14,7 @@ import ast
 import sys
 
 import numpy as np
-import pycl as cl
+# import pycl as cl
 import ctypes as ct
 
 
