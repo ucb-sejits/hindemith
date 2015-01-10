@@ -55,7 +55,7 @@ ocl_header = StringTemplate("""
                 """)
 
 
-import pycl as cl
+# import pycl as cl
 from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, Constant
 from ctree.nodes import Project
 from ctree.ocl.nodes import OclFile
