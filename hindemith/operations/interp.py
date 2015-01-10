@@ -58,8 +58,8 @@ ocl_header = StringTemplate("""
 # import pycl as cl
 from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, Constant
 from ctree.nodes import Project
-from ctree.ocl.nodes import OclFile
-from ctree.ocl import get_context_and_queue_from_devices
+# from ctree.ocl.nodes import OclFile
+# from ctree.ocl import get_context_and_queue_from_devices
 import numpy as np
 import ctypes as ct
 
