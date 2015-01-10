@@ -242,7 +242,7 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
 
 
 class EltWiseArrayOp(LazySpecializedFunction):
-    backend = 'ocl'
+    backend = 'c'
     fusable = True
 
     def args_to_subconfig(self, args):

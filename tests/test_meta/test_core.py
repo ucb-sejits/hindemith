@@ -6,7 +6,7 @@ from hindemith.meta.core import meta
 # from .kernels import laplacian_2d, x_gradient, y_gradient
 
 from hindemith.utils import symbols
-from hindemith.operations.zip_with import zip_with, ZipWith
+# from hindemith.operations.zip_with import zip_with, ZipWith
 from hindemith.types.hmarray import hmarray, spec_add, spec_mul, EltWiseArrayOp
 
 
