@@ -18,7 +18,7 @@ from hindemith.types.hmarray import hmarray, empty
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 
 
-class ConcreteMerged(ConcreteSpecializedFunction):
+class OclConcreteMerged(ConcreteSpecializedFunction):
     def __init__(self, entry_name, proj, entry_type, output_idxs,
                  retval_idxs):
         devices = cl.clGetDeviceIDs()
@@ -73,7 +73,7 @@ class MergedSpecializedFunction(LazySpecializedFunction):
 
     def transform(self, tree, program_config):
         tree = self.tree
-        fn = ConcreteMerged('control', tree, self.entry_type, self.output_idxs,
+        fn = OclConcreteMerged('control', tree, self.entry_type, self.output_idxs,
                             self.retval_idxs)
         kernel = tree.find(OclFile)
         program = cl.clCreateProgramWithSource(
