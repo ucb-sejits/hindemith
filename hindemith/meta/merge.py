@@ -12,27 +12,27 @@ import pycl as cl
 import ctypes as ct
 import numpy as np
 from .util import get_unique_func_name, SymbolReplacer, RemoveRedcl
-from ..nodes import kernel_range, ocl_header
+from ..nodes import kernel_range, ocl_header, for_range
 from hindemith.types.hmarray import hmarray, empty
 
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 
 
-class OclConcreteMerged(ConcreteSpecializedFunction):
+class ConcreteMerged(ConcreteSpecializedFunction):
     def __init__(self, entry_name, proj, entry_type, output_idxs,
                  retval_idxs):
-        devices = cl.clGetDeviceIDs()
+        # devices = cl.clGetDeviceIDs()
         # Default to last device for now
         # TODO: Allow settable devices via params or env variables
-        self.context, self.queue = get_context_and_queue_from_devices(
-            [devices[-1]])
+        # self.context, self.queue = get_context_and_queue_from_devices(
+        #     [devices[-1]])
         self._c_function = self._compile(entry_name, proj, entry_type)
         self.output_idxs = output_idxs
         self.retval_idxs = retval_idxs
 
-    def finalize(self, kernel):
-        self.kernel = kernel
-        return self
+    # def finalize(self, kernel):
+    #     self.kernel = kernel
+    #     return self
 
     def __call__(self, *args):
         processed = []
@@ -40,24 +40,22 @@ class OclConcreteMerged(ConcreteSpecializedFunction):
         out_idxs = self.output_idxs[:]
         for index, arg in enumerate(args):
             if isinstance(arg, hmarray):
-                processed.append(arg.ocl_buf)
+                processed.append(arg)
             if index in self.retval_idxs:
                 outputs.append(arg)
             while len(out_idxs) > 0 and index == out_idxs[0]:
                 out_idxs.pop(0)
                 output = empty(arg.shape, arg.dtype)
-                output._host_dirty = True
-                processed.append(output.ocl_buf)
+                processed.append(output)
                 outputs.append(output)
 
         for idx in out_idxs:
             output = empty(arg.shape, arg.dtype)
-            processed.append(output.ocl_buf)
-            output._host_dirty = True
+            processed.append(output)
             outputs.append(output)
 
         # cl.clFinish(self.queue)
-        self._c_function(*([self.queue, self.kernel] + processed))
+        self._c_function(*processed)
         if len(outputs) == 1:
             return outputs[0]
         return outputs
@@ -73,12 +71,12 @@ class MergedSpecializedFunction(LazySpecializedFunction):
 
     def transform(self, tree, program_config):
         tree = self.tree
-        fn = OclConcreteMerged('control', tree, self.entry_type, self.output_idxs,
+        fn = ConcreteMerged('control', tree, self.entry_type, self.output_idxs,
                             self.retval_idxs)
-        kernel = tree.find(OclFile)
-        program = cl.clCreateProgramWithSource(
-            fn.context, kernel.codegen()).build()
-        return fn.finalize(program[kernel.body[0].name.name])
+        # kernel = tree.find(OclFile)
+        # program = cl.clCreateProgramWithSource(
+        #     fn.context, kernel.codegen()).build()
+        return fn
 
 
 def replace_symbol_in_tree(tree, old, new):
@@ -274,8 +272,10 @@ def fuse(sources, sinks, nodes, to_promote, env):
     seen = {}
     fused_body = []
     kernel_params = []
-    param_types = [None, cl.cl_command_queue, cl.cl_kernel]
-    params = [SymbolRef('queue', cl.cl_command_queue())]
+    # param_types = [None, cl.cl_command_queue, cl.cl_kernel]
+    param_types = [None]
+    # params = [SymbolRef('queue', cl.cl_command_queue())]
+    params = []
     args = []
     output_idxs = []
     retval_idxs = []
@@ -296,8 +296,10 @@ def fuse(sources, sinks, nodes, to_promote, env):
                     body = [visitor.visit(s) for s in body]
             else:
                 seen[source] = param.name
-                param_types.append(cl.cl_mem)
-                params.append(SymbolRef(param.name, cl.cl_mem()))
+                # param_types.append(cl.cl_mem)
+                # params.append(SymbolRef(param.name, cl.cl_mem()))
+                param_types.append(_type)
+                params.append(SymbolRef(param.name, _type()))
                 kernel_params.append(SymbolRef(param.name, _type()))
                 args.append(ast.Name(source, ast.Load()))
 
@@ -323,8 +325,10 @@ def fuse(sources, sinks, nodes, to_promote, env):
             output = loop.sinks[0]
             seen[sink] = output.name
             kernel_params.append(SymbolRef(output.name, loop.types[-1]()))
-            params.append(SymbolRef(output.name, cl.cl_mem()))
-            param_types.append(cl.cl_mem)
+            params.append(SymbolRef(output.name, loop.types[-1]()))
+            # param_types.append(cl.cl_mem)
+            # args.append(ast.Name(sink, ast.Load()))
+            param_types.append(loop.types[-1])
             # args.append(ast.Name(sink, ast.Load()))
             if len(output_idxs) > 0 and output_idxs[-1] > len(args) - 1:
                 output_idxs.append(output_idxs[-1] + 1)
@@ -332,14 +336,15 @@ def fuse(sources, sinks, nodes, to_promote, env):
                 output_idxs.append(len(args) - 1)
         local_blocks.extend(loop.local_mem)
         fused_body.extend(body)
-    control = FunctionDecl(None, SymbolRef('control'), params, [])
-    control_body, kernel = kernel_range(nodes[0].shape, nodes[0].shape,
-                                        kernel_params, fused_body, local_mem=local_blocks)
-    print(kernel)
-    params.insert(1, SymbolRef(kernel.body[0].name.name, cl.cl_kernel()))
-    control.defn = control_body
+    defn = [for_range(nodes[0].shape[::-1], 1, fused_body)]
+    control = FunctionDecl(None, SymbolRef('control'), params, defn)
+    # control_body, kernel = kernel_range(nodes[0].shape, nodes[0].shape,
+    #                                     kernel_params, fused_body, local_mem=local_blocks)
+    # print(kernel)
+    # params.insert(1, SymbolRef(kernel.body[0].name.name, cl.cl_kernel()))
+    # control.defn = control_body
     print(control)
-    proj = Project([CFile('control', [ocl_header, control]), kernel])
+    proj = Project([CFile('control', [control])])
     return proj, ct.CFUNCTYPE(*param_types), args, output_idxs, retval_idxs
 
 

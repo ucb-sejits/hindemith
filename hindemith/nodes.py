@@ -1,6 +1,6 @@
 from ctree.c.nodes import SymbolRef, Constant, Assign, Add, \
     Lt, Mul, FunctionDecl, FunctionCall, ArrayDef, If, \
-    And
+    And, For, AddAssign
 from functools import reduce
 from ctree.ocl.macros import clSetKernelArg, NULL, get_global_id
 import pycl as cl
@@ -153,3 +153,48 @@ def kernel_range(shape, kernel_range, params, body, offset=None, local_mem=None)
             #     kernel.params[index].set_const()
     kernel.set_kernel()
     return control, OclFile(unique_name, [kernel])
+
+
+
+class LoopVarGenerator():
+    def __init__(self):
+        self.curr = 0
+
+    def __call__(self):
+        self.curr += 1
+        return "x{}".format(self.curr)
+
+next_loop_var = LoopVarGenerator()
+
+
+def gen_loop_index(loop_vars, shape):
+    base = SymbolRef(loop_vars[-1])
+    for index, var in reversed(list(enumerate(loop_vars[:-1]))):
+        curr = Mul(SymbolRef(var),
+                   Constant(reduce(lambda x, y: x * y, shape[:index + 1], 1)))
+        base = Add(curr, base)
+    return Assign(SymbolRef('loop_idx', ct.c_int()), base)
+
+
+def for_range(r, step, body):
+    loop_vars = []
+    curr_body = []
+    next_loop_var = LoopVarGenerator()
+    loop_vars.append(next_loop_var())
+    node = For(Assign(SymbolRef(loop_vars[-1], ct.c_int()), Constant(0)),
+               Lt(SymbolRef(loop_vars[-1]), Constant(r[-1])),
+               AddAssign(SymbolRef(loop_vars[-1]), step),
+               curr_body)
+    for dim in r[:-1]:
+        next_body = []
+        loop_vars.append(next_loop_var())
+        curr_body.append(
+            For(Assign(SymbolRef(loop_vars[-1], ct.c_int()), Constant(0)),
+                Lt(SymbolRef(loop_vars[-1]), Constant(dim)),
+                AddAssign(SymbolRef(loop_vars[-1]), step),
+                next_body)
+        )
+        curr_body = next_body
+    curr_body.append(gen_loop_index(loop_vars, r))
+    curr_body.extend(body)
+    return node
