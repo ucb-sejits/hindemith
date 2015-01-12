@@ -66,6 +66,9 @@ class hmarray(np.ndarray):
         self._host_dirty = getattr(obj, '_host_dirty', False)
         self._ocl_dirty = getattr(obj, '_ocl_dirty', True)
         self.queue = getattr(obj, 'queue', None)
+        devices = cl.clGetDeviceIDs()
+        self.context, self.queue = get_context_and_queue_from_devices(
+            [devices[-1]])
 
     @property
     def ocl_buf(self):
@@ -90,11 +93,11 @@ class hmarray(np.ndarray):
             self._host_dirty = False
         return self
 
-    # def __del__(self):
-    #     if self.shape not in self.buffer_cache:
-    #         self.buffer_cache[self.shape] = [self]
-    #     else:
-    #         self.buffer_cache[self.shape].append(self)
+    def __del__(self):
+        if self.shape not in self.buffer_cache:
+            self.buffer_cache[self.shape] = [self]
+        else:
+            self.buffer_cache[self.shape].append(self)
         # if self._ocl_buf is not None:
         #     try:
         #         self.buffer_cache[self.nbytes].append(self._ocl_buf)
@@ -103,13 +106,15 @@ class hmarray(np.ndarray):
 
 
 def empty(shape, _type):
-    # if shape in hmarray.buffer_cache:
-    #     bucket = hmarray.buffer_cache[shape]
-    #     if len(bucket) > 0:
-    #         arr = bucket.pop()
-    #         arr._ocl_dirty = False
-    #         arr._host_dirty = False
-    #         return arr
+    if shape in hmarray.buffer_cache:
+        bucket = hmarray.buffer_cache[shape]
+        if len(bucket) > 0:
+            # print('Cached')
+            arr = bucket.pop()
+            arr._ocl_buf = cl.clCreateBuffer(arr.context, arr.nbytes)
+            arr._ocl_dirty = False
+            arr._host_dirty = False
+            return arr
     arr = hmarray(shape, _type)
     arr._ocl_buf = cl.clCreateBuffer(arr.context, arr.nbytes)
     arr._ocl_dirty = False
