@@ -4,8 +4,6 @@ from hindemith.nodes import kernel_range
 from .map import MapOclTransform, ElementReference, \
     StoreOutput
 
-from hindemith.meta.merge import MergeableInfo, FusableKernel
-
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, FunctionCall
 from ctree.nodes import Project

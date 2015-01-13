@@ -11,7 +11,6 @@ from ctree.c.nodes import FunctionCall, FunctionDecl, SymbolRef, Constant, \
 from ctree.templates.nodes import StringTemplate
 from ctree.ocl.nodes import OclFile
 from ctree.ocl.macros import clSetKernelArg, get_global_id, NULL
-from hindemith.meta.merge import MergeableInfo, FusableKernel, LoopDependence
 
 import ctree.np
 
@@ -115,35 +114,6 @@ class OclAdd(LazySpecializedFunction):
     def get_placeholder_output(self, args):
         return np.zeros_like(args[0])
 
-    def get_mergeable_info(self, args):
-        arg_cfg = self.args_to_subconfig(args)
-        tune_cfg = self.get_tuning_driver()
-        program_cfg = (arg_cfg, tune_cfg)
-        tree = deepcopy(self.original_tree)
-        proj, entry_point, entry_type = self.transform(tree, program_cfg)
-        control = proj.find(CFile).find(FunctionDecl)
-        local_size, global_size = control.defn[:2]
-        arg_setters = control.defn[2:5]
-        enqueue_call = control.defn[5]
-        kernel_decl = proj.find(OclFile).find(FunctionDecl)
-        global_loads = [kernel_decl.defn[0].right.left.left,
-                        kernel_decl.defn[0].right.right.left]
-        global_stores = [kernel_decl.defn[0]]
-        kernel = proj.find(OclFile)
-        return MergeableInfo(
-            proj=proj,
-            entry_point=entry_point,
-            entry_type=entry_type,
-            # TODO: This should use a namedtuple or object to be more explicit
-            kernels=[kernel],
-            fusable_node=FusableKernel((32,), (global_size.right.value,),
-                                       arg_setters,
-                                       enqueue_call, kernel_decl,
-                                       global_loads, global_stores,
-                                       [LoopDependence(0, (0, )),
-                                        LoopDependence(1, (0, )),
-                                        LoopDependence(2, (0, ))])
-        )
 
 
 array_add = OclAdd(None)
