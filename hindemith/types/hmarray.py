@@ -9,6 +9,7 @@ from ctree.ocl.nodes import OclFile
 from ctree.nodes import Project
 from ctree.omp.nodes import OmpParallelFor
 from ctree.omp.macros import IncludeOmpHeader
+from ctree.transformations import PyBasicConversions
 import ctree.np
 ctree.np
 from collections import namedtuple
@@ -296,12 +297,12 @@ class EltWiseArrayOp(LazySpecializedFunction):
                     op_args += (Constant(cfg.value), )
                 # if EltWiseArrayOp.backend == 'ocl':
                 #     kernel_arg_types += (py_to_ctypes[cfg.dtype], )
-        return arg_types, op_args, kernel_params, params
+        return op_args, kernel_params, params
 
     def transform(self, tree, program_cfg):
-        op = op_map[tree]
+        op = op_map[tree.value]
         arg_cfg, tune_cfg = program_cfg
-        arg_types, op_args, kernel_params, params = \
+        op_args, kernel_params, params = \
             self.process_arg_cfg(arg_cfg)
         loop_body = [
             Assign(ArrayRef(SymbolRef(params[-1].name), SymbolRef('loop_idx')),
@@ -312,22 +313,21 @@ class EltWiseArrayOp(LazySpecializedFunction):
             params,
             []
         )
-        proj = Project([CFile('op', [func])])
+        files = [CFile('op', [func])]
         if self.backend in {'c', 'omp'}:
             if self.backend == 'omp':
-                proj.files[0].body.insert(0, IncludeOmpHeader())
+                files[0].body.insert(0, IncludeOmpHeader())
                 func.defn.append(OmpParallelFor())
-                proj.files[0].config_target = 'omp'
+                files[0].config_target = 'omp'
             func.defn.append(for_range(arg_cfg[2].shape, 1, loop_body))
         elif self.backend == 'ocl':
-            proj.files[0].body.insert(0, StringTemplate("""
+            files[0].body.insert(0, StringTemplate("""
                 #ifdef __APPLE__
                 #include <OpenCL/opencl.h>
                 #else
                 #include <CL/cl.h>
                 #endif
                 """))
-            arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
             shape = arg_cfg[2].shape
             control, kernel = kernel_range(shape, shape,
                                            kernel_params, loop_body)
@@ -336,16 +336,27 @@ class EltWiseArrayOp(LazySpecializedFunction):
             func.params.insert(0, SymbolRef('queue', cl.cl_command_queue()))
             func.params.insert(1, SymbolRef(kernel.body[0].name.name,
                                             cl.cl_kernel()))
-            proj.files.append(kernel)
-        entry_type = (None,) + arg_types
-        return 'op', proj, entry_type
+            files.append(kernel)
+        return files
 
-    def finalize(self, entry_name, proj, entry_type):
-        entry_type = ct.CFUNCTYPE(*entry_type)
+    def finalize(self, files, program_cfg):
+        arg_cfg, tune_cfg = program_cfg
+        arg_types = ()
+        proj = Project(files)
+        for index, cfg in enumerate(arg_cfg):
+            if isinstance(cfg, NdArrCfg):
+                if self.backend in {'c', 'omp'}:
+                    arg_types += (np.ctypeslib.ndpointer(
+                        cfg.dtype, cfg.ndim, cfg.shape), )
+                else:
+                    arg_types += (cl.cl_mem, )
         if self.backend == 'c':
-            return CConcreteEltOp(entry_name, proj, entry_type)
+            entry_type = ct.CFUNCTYPE(*(None,) + arg_types)
+            return CConcreteEltOp('op', proj, entry_type)
         elif self.backend == 'ocl':
-            fn = OclConcreteEltOp(entry_name, proj, entry_type)
+            arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
+            entry_type = ct.CFUNCTYPE(*(None,) + arg_types)
+            fn = OclConcreteEltOp('op', proj, entry_type)
             kernel = proj.find(OclFile)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
@@ -384,7 +395,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
     def get_ir_nodes(self, args):
         tree = copy.deepcopy(self.original_tree)
         arg_cfg = self.args_to_subconfig(args)
-        op = op_map[tree]
+        op = op_map[tree.value]
         params = []
         op_args = ()
         types = []
@@ -423,10 +434,10 @@ class Loop(HmIRNode):
             self.local_mem = []
 
 
-spec_add = EltWiseArrayOp('+')
-spec_sub = EltWiseArrayOp('-')
-spec_mul = EltWiseArrayOp('*')
-spec_div = EltWiseArrayOp('/')
+spec_add = EltWiseArrayOp(Constant('+'))
+spec_sub = EltWiseArrayOp(Constant('-'))
+spec_mul = EltWiseArrayOp(Constant('*'))
+spec_div = EltWiseArrayOp(Constant('/'))
 
 
 def composable(specializer):
