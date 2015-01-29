@@ -1,111 +1,132 @@
-from solver import Solver
 import numpy as np
-import cv2
-from hindemith.types.hmarray import EltWiseArrayOp, zeros, indices
-from hindemith.operations.map import SpecializedMap
-from hindemith.operations.structured_grid import structured_grid
-from hindemith.operations.interp import interp_linear
 # import logging
 # logging.basicConfig(level=20)
-from ctree.util import Timer
+
+from hindemith.operations.reduce import sum
+from hindemith.meta.core import meta
+from hindemith.operations.map import square, copy
+from solver import Solver
+
+from stencil_code.stencil_kernel import Stencil
 
 
-EltWiseArrayOp.backend = 'ocl'
-SpecializedMap.backend = 'ocl'
+class Jacobi(Stencil):
+    neighborhoods = [[(0, -1), (0, 1), (-1, 0), (1, 0)],
+                     [(-1, -1), (-1, 1), (1, -1), (1, 1)]]
+
+    def kernel(self, in_grid, out_grid):
+        for x in self.interior_points(out_grid):
+            out_grid[x] = 0.0
+            for y in self.neighbors(x, 0):
+                out_grid[x] += .166666667 * in_grid[y]
+            for y in self.neighbors(x, 1):
+                out_grid[x] += .083333333 * in_grid[y]
 
 
-def cl_build_flow_map(xs, ys, u1, u2):
-    _x = xs + u1
-    _y = ys + u2
-    return _x, _y
+class Dx(Stencil):
+    neighborhoods = [
+        [(1, 0), (1, 1)],
+        [(0, 0), (0, 1)]]
+
+    def kernel(self, a, b, out_grid):
+        for x in self.interior_points(out_grid):
+            out_grid[x] = 0.0
+            for y in self.neighbors(x, 0):
+                out_grid[x] += .25 * (a[y] + b[y])
+            for y in self.neighbors(x, 1):
+                out_grid[x] -= .25 * (a[y] + b[y])
 
 
-@structured_grid(border='zero')
-def dx(src, output):
-    for y, x in output:
-        output[y, x] = src[y, x + 1] - src[y, x]
+class Dy(Stencil):
+    neighborhoods = [
+        [(0, 1), (1, 1)],
+        [(0, 0), (1, 0)]]
+
+    def kernel(self, a, b, out_grid):
+        for x in self.interior_points(out_grid):
+            out_grid[x] = 0.0
+            for y in self.neighbors(x, 0):
+                out_grid[x] += .25 * (a[y] + b[y])
+            for y in self.neighbors(x, 1):
+                out_grid[x] -= .25 * (a[y] + b[y])
 
 
-@structured_grid(border='zero')
-def dy(src, output):
-    for y, x in output:
-        output[y, x] = src[y + 1, x] - src[y, x]
+class Dt(Stencil):
+    neighborhoods = [
+        [(0, 0), (1, 0), (0, 1), (1, 1)]]
+
+    def kernel(self, a, b, out_grid):
+        for x in self.interior_points(out_grid):
+            for y in self.neighbors(x, 0):
+                out_grid[x] += .25 * (b[y] - a[y])
+
+dx, dy, dt = Dx(), Dy(), Dt()
+
+jacobi = Jacobi()
 
 
-@structured_grid(border='zero')
-def D(src, output):
-    for y, x in output:
-        output[y, x] = -float(.0025) * (
-            src[y - 1, x] + src[y, x - 1] +
-            src[y, x + 1] + src[y + 1, x]) + \
-            float(.01) * src[y, x]
+@meta
+def update(u, v, Ix, Iy, It, denom):
+    ubar = jacobi(u)
+    vbar = jacobi(v)
+    t = (Ix * ubar + Iy * vbar + It) / denom
+    u_new = ubar - Ix * t
+    v_new = vbar - Iy * t
+    err = square(u_new - u) + square(v_new - v)
+    return u_new, v_new, err
+
+alpha = 15.0
+alpha2 = alpha ** 2
 
 
-class HSJacobi(Solver):
-    def solve(self, i0, i1, u1, u2):
-        du = zeros(i0.shape, np.float32)
-        dv = zeros(i0.shape, np.float32)
-
-        tex_Ix = dx(i1)
-        tex_Iy = dy(i1)
-        ys, xs = indices(u1.shape)
-        _f1, _f2 = cl_build_flow_map(xs, ys, u1, u2)
-        Ix = interp_linear(tex_Ix, _f1, _f2)
-        Iy = interp_linear(tex_Iy, _f1, _f2)
-        It = i0 - interp_linear(i1, _f1, _f2)
-        Ix2 = Ix * Ix
-        IxIy = Ix * Iy
-        Iy2 = Iy * Iy
-        b0 = -1 * Ix * It
-        b1 = -1 * Iy * It
-
-        Dinv0 = 1 / (.01 + Ix2)
-        Dinv1 = 1 / (.01 + Iy2)
-        for i in range(100):
-            du_resid = b0 - (D(du) + IxIy * dv)  # b-R*x(k)
-            dv_resid = b1 - (IxIy * du + D(dv))  # b-R*x(k)
-            du = Dinv0 * du_resid
-            dv = Dinv1 * dv_resid
-        return du, dv
+@meta
+def compute_denom(Ix, Iy):
+    return square(Ix) + square(Iy) + alpha2
 
 
-import os
-file_path = os.path.dirname(os.path.realpath(__file__))
+@meta
+def gradient_and_denom(im0, im1):
+    It = im1 - im0
+    Ix = dx(im0, im1)
+    Iy = dy(im0, im1)
+    denom = square(Ix) + square(Iy) + alpha2
+    return Ix, Iy, It, denom
 
 
-def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", action='store_true', help="profile execution time")
-    args = parser.parse_args()
+class HS_Jacobi(Solver):
+    def solve(self, im0, im1, u, v):
+        Ix, Iy, It, denom = gradient_and_denom(im0, im1)
+        epsilon = (0.04 ** 2) * np.prod(u.shape)
+
+        for _ in range(100):
+            u, v, err = update(u, v, Ix, Iy, It, denom)
+            if sum(err) < epsilon:
+                break
+        return u, v
+
+if __name__ == '__main__':
+    import cv2
     frame0 = cv2.imread('images/frame0.png')
     frame1 = cv2.imread('images/frame1.png')
+    frame0 = cv2.resize(frame0, (384, 288))
+    frame1 = cv2.resize(frame1, (384, 288))
     im0 = cv2.cvtColor(frame0, cv2.COLOR_BGR2GRAY)
     im1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-    tvl1 = HSJacobi(2, .5)
-    # jit warmup
-    for _ in range(5):
-        tvl1(im0, im1)
-    if args.profile:
-        import cProfile
-        cProfile.runctx('tvl1(im0, im1)', None, locals())
-    else:
-        with Timer() as t:
-            u = tvl1(im0, im1)
-        print("Specialized time: {}s".format(t.interval))
-        mag, ang = cv2.cartToPolar(u[0], u[1])
-        mag = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
-        ang = ang*180/np.pi/2
-        hsv = np.zeros_like(frame1)
-        hsv[..., 1] = 255
-        hsv[..., 0] = ang
-        hsv[..., 2] = mag
-        flow = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-        cv2.imwrite('flow.jpg', flow)
-        # cv2.imshow('flow', flow)
-        # cv2.waitKey(0) & 0xff
-        # cv2.destroyAllWindows()
+    hs_jacobi = HS_Jacobi(1, .5)
 
+    from ctree.util import Timer
+    hs_jacobi(im0, im1)
+    with Timer() as t:
+        u = hs_jacobi(im0, im1)
+    print(t.interval)
+    mag, ang = cv2.cartToPolar(u[0], u[1])
+    mag = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
+    ang = ang*180/np.pi/2
+    hsv = np.zeros_like(frame1)
+    hsv[..., 1] = 255
+    hsv[..., 0] = ang
+    hsv[..., 2] = mag
+    flow = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
 
-if __name__ == "__main__":
-    main()
+    cv2.imshow('flow', flow)
+    cv2.waitKey()
