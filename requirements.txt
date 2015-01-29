@@ -1,4 +1,4 @@
 hindemith
 numpy>=1.8.1
 ctree>=0.95a
--e git://github.com/ucb-sejits/pycl.git#egg=pycl
+pycl>=0.1.1
