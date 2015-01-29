@@ -10,11 +10,11 @@ setup(
     description='Package containing a suite of high performance pattern specializers',
     url='https://github.com/ucb-sejits/hindemith',
 
-    packages=find_packages(),
+    packages=find_packages(exclude=['examples']),
 
     install_requires=[
         'ctree',
-        # 'pycl',
+        'pycl',
         'numpy'
     ]
 )
