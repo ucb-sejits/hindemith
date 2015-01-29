@@ -9,4 +9,11 @@ cross pattern analyzer that performs loop fusion across specializer where possib
 [![Stories in Ready](https://badge.waffle.io/ucb-sejits/hindemith.png?label=ready&title=Ready)](https://waffle.io/ucb-sejits/hindemith)
 
 # Getting started
-pip install -r requirements.txt
+## Installation
+```
+conda create hindemith numpy llvm llvmpy setuptools pip nose
+conda activate hindemith
+git clone https://github.com/ucb-sejits/hindemith.git
+cd hindemith
+python setup.py install
+```

@@ -76,7 +76,6 @@ class TestFusion(unittest.TestCase):
             expected.copy_to_host_if_dirty()
             self._check_arrays_equal(actual, expected)
 
-    @unittest.skip("")
     def test_threshold(self):
         ZipWith.backend = 'ocl'
         EltWiseArrayOp.backend = 'ocl'
@@ -93,12 +92,7 @@ class TestFusion(unittest.TestCase):
             v2 = threshold(rho, gradient, I1wy, u2)
             return v1, v2
 
-        @meta
-        def fused(u1, u2, rho_c, gradient, I1wx, I1wy):
-            rho = rho_c + I1wx * u1 + I1wy * u2
-            v1 = threshold(rho, gradient, I1wx, u1)
-            v2 = threshold(rho, gradient, I1wy, u2)
-            return v1, v2
+        fused = meta(unfused)
 
         actual = fused(a, b, c, d, e, f)
         expected = unfused(a, b, c, d, e, f)
