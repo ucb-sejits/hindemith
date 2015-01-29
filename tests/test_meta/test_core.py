@@ -7,7 +7,44 @@ from hindemith.meta.core import meta
 
 from hindemith.utils import symbols
 from hindemith.operations.zip_with import zip_with, ZipWith
-from hindemith.types.hmarray import hmarray, spec_add, spec_mul, EltWiseArrayOp
+from hidnemith.opeartions.map import square
+from hindemith.types.hmarray import hmarray, EltWiseArrayOp
+
+
+theta = .3
+l = .15
+
+
+@symbols({'l': l, 'theta': theta})
+def ocl_th(rho_elt, gradient_elt, delta_elt, u_elt):
+    threshold = float(l * theta * gradient_elt)
+    if rho_elt < -threshold:
+        return float(l * theta * delta_elt) + u_elt
+    elif rho_elt > threshold:
+        return float(-l * theta * delta_elt) + u_elt
+    elif gradient_elt > 1e-10:
+        return -rho_elt / gradient_elt * delta_elt + u_elt
+    else:
+        return float(0)
+
+
+@symbols({'l': l, 'theta': theta})
+def th(rho_elt, gradient_elt, delta_elt, u_elt):
+    threshold = l * theta * gradient_elt
+    if rho_elt < -threshold:
+        return l * theta * delta_elt + u_elt
+    elif rho_elt > threshold:
+        return -l * theta * delta_elt + u_elt
+    elif gradient_elt > 1e-10:
+        return -rho_elt / gradient_elt * delta_elt + u_elt
+    else:
+        return 0
+
+from sys import platform as _platform
+if _platform == "darwin":
+    threshold = zip_with(ocl_th)
+else:
+    threshold = zip_with(th)
 
 
 class TestFusion(unittest.TestCase):
@@ -33,7 +70,7 @@ class TestFusion(unittest.TestCase):
         @meta
         def unfused(a, b, c):
             d = a + b
-            e = c + b
+            e = square(c) + b
             return d + e
 
         for _ in range(10):
@@ -53,39 +90,6 @@ class TestFusion(unittest.TestCase):
         d = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
         e = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
         f = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
-
-        theta = .3
-        l = .15
-
-        @symbols({'l': l, 'theta': theta})
-        def ocl_th(rho_elt, gradient_elt, delta_elt, u_elt):
-            threshold = float(l * theta * gradient_elt)
-            if rho_elt < -threshold:
-                return float(l * theta * delta_elt) + u_elt
-            elif rho_elt > threshold:
-                return float(-l * theta * delta_elt) + u_elt
-            elif gradient_elt > 1e-10:
-                return -rho_elt / gradient_elt * delta_elt + u_elt
-            else:
-                return float(0)
-
-        @symbols({'l': l, 'theta': theta})
-        def th(rho_elt, gradient_elt, delta_elt, u_elt):
-            threshold = l * theta * gradient_elt
-            if rho_elt < -threshold:
-                return l * theta * delta_elt + u_elt
-            elif rho_elt > threshold:
-                return -l * theta * delta_elt + u_elt
-            elif gradient_elt > 1e-10:
-                return -rho_elt / gradient_elt * delta_elt + u_elt
-            else:
-                return 0
-
-        from sys import platform as _platform
-        if _platform == "darwin":
-            threshold = zip_with(ocl_th)
-        else:
-            threshold = zip_with(th)
 
         def unfused(u1, u2, rho_c, gradient, I1wx, I1wy):
             rho = rho_c + I1wx * u1 + I1wy * u2
