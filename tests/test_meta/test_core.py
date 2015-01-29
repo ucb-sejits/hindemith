@@ -7,7 +7,7 @@ from hindemith.meta.core import meta
 
 from hindemith.utils import symbols
 from hindemith.operations.zip_with import zip_with, ZipWith
-from hidnemith.opeartions.map import square
+from hindemith.operations.map import square
 from hindemith.types.hmarray import hmarray, EltWiseArrayOp
 
 
@@ -62,16 +62,12 @@ class TestFusion(unittest.TestCase):
     def test_simple(self):
         a, b, c = hmarray(self.a), hmarray(self.b), hmarray(self.c)
 
-        def fused(a, b, c):
-            d = a + b
-            e = c + b
-            return d + e
-
-        @meta
         def unfused(a, b, c):
             d = a + b
             e = square(c) + b
             return d + e
+
+        fused = meta(unfused)
 
         for _ in range(10):
             actual = fused(a, b, c)
