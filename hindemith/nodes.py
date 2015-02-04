@@ -85,7 +85,7 @@ ocl_header = StringTemplate("""
                 """)
 
 
-def kernel_range(shape, kernel_range, params, body, offset=None, local_mem=None):
+def kernel_range(shape, kernel_range, params, body, offset=None, local_mem=None, local_size=None):
     """
     Factory method for generating an OpenCL kernel corresponding
     to a set of nested for loops.  Returns the control logic for
@@ -109,7 +109,8 @@ def kernel_range(shape, kernel_range, params, body, offset=None, local_mem=None)
     if offset is None:
         offset = [0 for _ in global_size]
 
-    local_size = get_local_size(global_size)
+    if local_size is None:
+        local_size = get_local_size(global_size)
     # print(global_size)
     # print(local_size)
 
@@ -127,7 +128,7 @@ def kernel_range(shape, kernel_range, params, body, offset=None, local_mem=None)
             SymbolRef('clEnqueueNDRangeKernel'), [
                 SymbolRef('queue'), SymbolRef(unique_name),
                 Constant(len(shape)), SymbolRef(offset_decl),
-                SymbolRef(global_size_decl), NULL(),
+                SymbolRef(global_size_decl), SymbolRef(local_size_decl),
                 Constant(0), NULL(), NULL()
             ]
         ),

@@ -82,6 +82,7 @@ class hmarray(np.ndarray):
 
             _, evt = cl.buffer_from_ndarray(self.queue, self,
                                             self._ocl_buf, blocking=False)
+            evt.wait()
             self._ocl_dirty = False
         return self._ocl_buf
 
