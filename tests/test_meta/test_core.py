@@ -50,7 +50,7 @@ else:
 class TestFusion(unittest.TestCase):
     def _check_arrays_equal(self, actual, expected):
         try:
-            np.testing.assert_allclose(actual, expected)
+            np.testing.assert_allclose(actual, expected, atol=1e-2)
         except AssertionError as e:
             self.fail(e)
 

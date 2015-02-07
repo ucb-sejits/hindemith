@@ -88,16 +88,17 @@ class Gemm(LazySpecializedFunction):
     def transform(self, tree, program_cfg):
         arg_cfg, tune_cfg = program_cfg
         C = arg_cfg['C']
-        tile_size_m = 1
-        tile_group_m = 16
-        tile_size_n = 128
-        tile_group_n = 1
-        tile_size_k = 8
         shape = C[0]
         m = shape[0]
         n = shape[1]
+        tile_size_m = 1
+        tile_group_m = 16
+        tile_size_n = min(128, n)
+        tile_group_n = 1
+        tile_size_k = 8
         global_size = (m / tile_size_m, n / tile_size_n)
-        local_size = (tile_group_m, tile_group_n)
+        local_size = (min(global_size[0], tile_group_m),
+                      min(global_size[1], tile_group_n))
         loop_body = [StringTemplate(
             gemm_kernel,
             {'TILE_GROUP_M': Constant(tile_group_m),
@@ -105,9 +106,9 @@ class Gemm(LazySpecializedFunction):
              'TILE_SIZE_M': Constant(tile_size_m),
              'TILE_SIZE_N': Constant(tile_size_n),
              'TILE_SIZE_K': Constant(tile_size_k),
-             'ldc': Constant(n),
-             'ldb': Constant(n),
-             'lda': Constant(arg_cfg['A'][0][1]),
+             'ldc': Constant(m),
+             'ldb': Constant(arg_cfg['B'][0][0]),
+             'lda': Constant(arg_cfg['A'][0][0]),
              'k': Constant(arg_cfg['A'][0][1]),
              'T': StringTemplate('float'),
              'alpha': Constant(arg_cfg['alpha']),
