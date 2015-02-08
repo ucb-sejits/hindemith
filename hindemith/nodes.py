@@ -85,7 +85,8 @@ ocl_header = StringTemplate("""
                 """)
 
 
-def kernel_range(shape, kernel_range, params, body, offset=None, local_mem=None, local_size=None):
+def kernel_range(shape, kernel_range, params, body, offset=None,
+                 local_mem=None, local_size=None):
     """
     Factory method for generating an OpenCL kernel corresponding
     to a set of nested for loops.  Returns the control logic for
@@ -97,22 +98,25 @@ def kernel_range(shape, kernel_range, params, body, offset=None, local_mem=None,
     unique_name = unique_kernel_name()
     control = process_arg_types(params, local_mem, unique_name)
 
+
+    # print(global_size)
+    # print(local_size)
     global_size = ()
-    # for d in kernel_range:
     d = kernel_range[0]
-    if d % 32 != 0 and d > 32:
-        global_size += ((d + 31) & (~31),)
+    if local_size is None:
+        l = 32
+    else:
+        l = local_size[0]
+    if d % l != 0 and d > l:
+        global_size += ((d + (l -1)) & (~(l-1)),)
     else:
         global_size += (d,)
     global_size += tuple(kernel_range[1:])
 
     if offset is None:
         offset = [0 for _ in global_size]
-
     if local_size is None:
         local_size = get_local_size(global_size)
-    # print(global_size)
-    # print(local_size)
 
     global_size_decl = 'global_size{}'.format(unique_name)
     local_size_decl = 'local_size{}'.format(unique_name)

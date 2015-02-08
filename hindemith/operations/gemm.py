@@ -62,7 +62,7 @@ class ConcreteGemm(ConcreteSpecializedFunction):
         self._c_function = self._compile(entry_name, proj, entry_type)
         devices = cl.clGetDeviceIDs()
         self.context, self.queue = get_context_and_queue_from_devices(
-            [devices[-1]])
+            [devices[0]])
 
     def finalize(self, kernel):
         self.kernel = kernel
@@ -96,7 +96,7 @@ class Gemm(LazySpecializedFunction):
         tile_size_n = min(128, n)
         tile_group_n = 1
         tile_size_k = 8
-        global_size = (m / tile_size_m, n / tile_size_n)
+        global_size = (m // tile_size_m, n // tile_size_n)
         local_size = (min(global_size[0], tile_group_m),
                       min(global_size[1], tile_group_n))
         loop_body = [StringTemplate(
