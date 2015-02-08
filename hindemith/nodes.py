@@ -102,16 +102,15 @@ def kernel_range(shape, kernel_range, params, body, offset=None,
     # print(global_size)
     # print(local_size)
     global_size = ()
-    d = kernel_range[0]
-    if local_size is None:
-        l = 32
-    else:
-        l = local_size[0]
-    if d % l != 0 and d > l:
-        global_size += ((d + (l -1)) & (~(l-1)),)
-    else:
-        global_size += (d,)
-    global_size += tuple(kernel_range[1:])
+    for d in kernel_range:
+        if local_size is None:
+            l = 32
+        else:
+            l = local_size[0]
+        if d % l != 0 and d > l:
+            global_size += ((d + (l -1)) & (~(l-1)),)
+        else:
+            global_size += (d,)
 
     if offset is None:
         offset = [0 for _ in global_size]

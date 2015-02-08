@@ -4,7 +4,6 @@ from hindemith import hmarray
 import numpy as np
 
 
-@unittest.skip("Broken")
 class TestGemm(unittest.TestCase):
     def test_simple(self):
         a = (np.random.rand(256, 256) * 100).astype(np.int32).astype(np.float32)
@@ -29,10 +28,10 @@ class TestGemm(unittest.TestCase):
         gemm(hmarray(a), hmarray(b), actual, 2.4, .3)
         actual.copy_to_host_if_dirty()
         actual = np.copy(actual)
-        np.testing.assert_allclose(actual, expected)
+        np.testing.assert_allclose(actual, expected, rtol=1e-06)
 
     def test_non_multiple(self):
-        a = (np.random.rand(300, 100) * 100).astype(np.int32).astype(np.float32)
+        a = (np.random.rand(500, 300) * 100).astype(np.int32).astype(np.float32)
         b = (np.random.rand(300, 100) * 100).astype(np.int32).astype(np.float32)
         c = np.random.rand(500, 100).astype(np.float32) * 100
         # a = np.ones((256, 256), np.float32)
@@ -42,4 +41,4 @@ class TestGemm(unittest.TestCase):
         gemm(hmarray(a), hmarray(b), actual, 2.4, .3)
         actual.copy_to_host_if_dirty()
         actual = np.copy(actual)
-        np.testing.assert_array(actual, expected)
+        np.testing.assert_allclose(actual, expected, rtol=1e-06)
