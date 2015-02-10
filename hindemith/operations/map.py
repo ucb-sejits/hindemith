@@ -8,7 +8,8 @@ from ctree.nodes import Project, CtreeNode
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
-from hindemith.types.hmarray import NdArrCfg, hmarray, py_to_ctypes, Loop
+from hindemith.types.hmarray import NdArrCfg, hmarray, py_to_ctypes, Loop, \
+    empty_like
 from hindemith.nodes import kernel_range
 import ast
 import sys
@@ -138,15 +139,13 @@ class OclConcreteMap(ConcreteSpecializedFunction):
         self.kernel = kernel
         return self
 
-    def __call__(self, arg):
-        output = hmarray(np.zeros_like(arg))
-        out_buf, evt = cl.buffer_from_ndarray(self.queue, output,
-                                              blocking=True)
-        output._ocl_buf = out_buf
-        output._ocl_dirty = False
-        output._host_dirty = True
-        evt.wait()
-        self._c_function(arg.ocl_buf, out_buf, self.queue, self.kernel)
+    def __call__(self, arg, output=None):
+        if output is None:
+            output = empty_like(arg)
+            output._host_dirty = True
+        else:
+            output._host_dirty = True
+        self._c_function(arg.ocl_buf, output.ocl_buf, self.queue, self.kernel)
         return output
 
 
