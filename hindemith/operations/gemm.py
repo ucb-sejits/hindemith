@@ -26,7 +26,7 @@ class ConcreteGemm(ConcreteSpecializedFunction):
         self._c_function = self._compile(entry_name, proj, entry_type)
         devices = cl.clGetDeviceIDs()
         self.context, self.queue = get_context_and_queue_from_devices(
-            [devices[0]])
+            [devices[-1]])
 
     def finalize(self, kernel):
         self.kernel = kernel
