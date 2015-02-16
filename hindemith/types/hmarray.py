@@ -20,6 +20,7 @@ from hindemith.nodes import kernel_range
 # , LoopDependence
 
 import copy
+import ast
 
 
 class hmarray(np.ndarray):
@@ -193,10 +194,10 @@ py_to_ctypes = {
 }
 
 op_map = {
-    '+': Add,
-    '-': Sub,
-    '*': Mul,
-    '/': Div
+    ast.Add: Add,
+    ast.Sub: Sub,
+    ast.Mult: Mul,
+    ast.Div: Div
 }
 
 
@@ -300,7 +301,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
         return arg_types, op_args, kernel_params, params
 
     def transform(self, tree, program_cfg):
-        op = op_map[tree]
+        op = op_map[tree.__class__]
         arg_cfg, tune_cfg = program_cfg
         arg_types, op_args, kernel_params, params = \
             self.process_arg_cfg(arg_cfg)
@@ -313,22 +314,22 @@ class EltWiseArrayOp(LazySpecializedFunction):
             params,
             []
         )
-        proj = Project([CFile('op', [func])])
+        cfile = CFile('op', [func])
         if self.backend in {'c', 'omp'}:
             if self.backend == 'omp':
-                proj.files[0].body.insert(0, IncludeOmpHeader())
+                cfile.body.insert(0, IncludeOmpHeader())
                 func.defn.append(OmpParallelFor())
-                proj.files[0].config_target = 'omp'
+                cfile.config_target = 'omp'
             func.defn.append(for_range(arg_cfg[2].shape, 1, loop_body))
+            return [cfile]
         elif self.backend == 'ocl':
-            proj.files[0].body.insert(0, StringTemplate("""
+            cfile.body.insert(0, StringTemplate("""
                 #ifdef __APPLE__
                 #include <OpenCL/opencl.h>
                 #else
                 #include <CL/cl.h>
                 #endif
                 """))
-            arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
             shape = arg_cfg[2].shape
             control, kernel = kernel_range(shape, shape,
                                            kernel_params, loop_body)
@@ -337,20 +338,25 @@ class EltWiseArrayOp(LazySpecializedFunction):
             func.params.insert(0, SymbolRef('queue', cl.cl_command_queue()))
             func.params.insert(1, SymbolRef(kernel.body[0].name.name,
                                             cl.cl_kernel()))
-            proj.files.append(kernel)
-        entry_type = (None,) + arg_types
-        return 'op', proj, entry_type
+            return [cfile, kernel]
 
-    def finalize(self, entry_name, proj, entry_type):
-        entry_type = ct.CFUNCTYPE(*entry_type)
+    def finalize(self, files, program_cfg):
+        arg_cfg, tune_cfg = program_cfg
+        proj = Project(files)
+        arg_types, op_args, kernel_params, params = \
+            self.process_arg_cfg(arg_cfg)
+        entry_name = 'op'
         if self.backend == 'c':
+            entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
             return CConcreteEltOp(entry_name, proj, entry_type)
         elif self.backend == 'ocl':
+            arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
+            entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
             fn = OclConcreteEltOp(entry_name, proj, entry_type)
             kernel = proj.find(OclFile)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
-            return fn.finalize(program[kernel.body[0].name.name])
+            return fn.finalize(program[kernel.name])
 
     def get_placeholder_output(self, args):
         return hmarray(np.empty_like(args[0]))
@@ -397,10 +403,10 @@ class Loop(HmIRNode):
             self.local_mem = []
 
 
-spec_add = EltWiseArrayOp('+')
-spec_sub = EltWiseArrayOp('-')
-spec_mul = EltWiseArrayOp('*')
-spec_div = EltWiseArrayOp('/')
+spec_add = EltWiseArrayOp(ast.Add())
+spec_sub = EltWiseArrayOp(ast.Sub())
+spec_mul = EltWiseArrayOp(ast.Mult())
+spec_div = EltWiseArrayOp(ast.Div())
 
 
 def composable(specializer):

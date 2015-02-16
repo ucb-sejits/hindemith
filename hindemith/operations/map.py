@@ -3,14 +3,14 @@ __author__ = 'leonardtruong'
 from ctree.frontend import get_ast
 from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, Assign, ArrayRef, \
     Constant, BinaryOp, Op, FunctionCall, Cast
-from ctree.ocl import get_context_and_queue_from_devices
 from ctree.nodes import Project, CtreeNode
-from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
+from ctree.jit import LazySpecializedFunction
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
 from hindemith.types.hmarray import NdArrCfg, hmarray, py_to_ctypes, Loop, \
     empty_like
 from hindemith.nodes import kernel_range
+from hindemith.operations.common import OclConcreteSpecializedFunction
 import ast
 import sys
 
@@ -128,24 +128,14 @@ class MapOclTransform(ast.NodeTransformer):
         return node
 
 
-class OclConcreteMap(ConcreteSpecializedFunction):
-    def __init__(self, entry_name, proj, entry_type):
-        self._c_function = self._compile(entry_name, proj, entry_type)
-        devices = cl.clGetDeviceIDs()
-        self.context, self.queue = get_context_and_queue_from_devices(
-            [devices[-1]])
-
-    def finalize(self, kernel):
-        self.kernel = kernel
-        return self
-
+class OclConcreteMap(OclConcreteSpecializedFunction):
     def __call__(self, arg, output=None):
         if output is None:
             output = empty_like(arg)
             output._host_dirty = True
         else:
             output._host_dirty = True
-        self._c_function(arg.ocl_buf, output.ocl_buf, self.queue, self.kernel)
+        self._c_function(self.queue, self.kernel, arg.ocl_buf, output.ocl_buf)
         return output
 
 
@@ -196,16 +186,16 @@ class SpecializedMap(LazySpecializedFunction):
                 #include <CL/cl.h>
                 #endif
                 """))
-            arg_types += (cl.cl_command_queue, cl.cl_kernel)
+            arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
             shape = arg_cfg.shape
             control, kernel = kernel_range(shape, shape,
                                            kernel_params, loop_body)
             func.defn = control
             entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
-            func.params.extend((
+            func.params = [
                 SymbolRef('queue', cl.cl_command_queue()),
                 SymbolRef(kernel.body[0].name.name, cl.cl_kernel())
-            ))
+            ] + func.params
             fn = OclConcreteMap('map', proj, entry_type)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
