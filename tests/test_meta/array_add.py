@@ -116,4 +116,5 @@ class OclAdd(LazySpecializedFunction):
 
 
 
-array_add = OclAdd(None)
+import ast
+array_add = OclAdd(ast.Module())

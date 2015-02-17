@@ -65,7 +65,7 @@ class OclConcreteMerged(ConcreteSpecializedFunction):
 
 class MergedSpecializedFunction(LazySpecializedFunction):
     def __init__(self, tree, entry_type, output_idxs, retval_idxs):
-        super(MergedSpecializedFunction, self).__init__(None)
+        super(MergedSpecializedFunction, self).__init__(ast.Module())
         self.tree = tree
         self.entry_type = entry_type
         self.output_idxs = output_idxs
@@ -73,12 +73,16 @@ class MergedSpecializedFunction(LazySpecializedFunction):
 
     def transform(self, tree, program_config):
         tree = self.tree
+        return tree.files
+
+    def finalize(self, files, arg_cfg):
+        tree = self.tree
         fn = OclConcreteMerged('control', tree, self.entry_type, self.output_idxs,
                             self.retval_idxs)
         kernel = tree.find(OclFile)
         program = cl.clCreateProgramWithSource(
             fn.context, kernel.codegen()).build()
-        return fn.finalize(program[kernel.body[0].name.name])
+        return fn.finalize(program[kernel.name])
 
 
 class PromoteToRegister(ast.NodeTransformer):
@@ -162,7 +166,8 @@ def fuse(sources, sinks, nodes, to_promote, env):
     params.insert(1, SymbolRef(kernel.body[0].name.name, cl.cl_kernel()))
     control.defn = control_body
     print(control)
-    proj = Project([CFile('control', [ocl_header, control]), kernel])
+    proj = Project([CFile('control', [ocl_header, control],
+        config_target='opencl'), kernel])
     return proj, ct.CFUNCTYPE(*param_types), args, output_idxs, retval_idxs
 
 

@@ -5,7 +5,7 @@ from .map import MapOclTransform, ElementReference, \
     StoreOutput
 
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
-from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, FunctionCall
+from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, FunctionCall, Assign
 from ctree.nodes import Project
 from ctree.ocl import get_context_and_queue_from_devices
 from ctree.ocl.nodes import OclFile
@@ -97,6 +97,14 @@ class ZipWithFrontendTransformer(PyBasicConversions):
         return StoreOutput(self.params[-1].name,
                            self.visit(node.value))
 
+    def visit_Assign(self, node):
+        if len(node.targets) > 1:
+            # Raise exception?
+            return node
+        target = self.visit(node.targets[0])
+        value = self.visit(node.value)
+        return Assign(target, value)
+
 
 ocl_header = StringTemplate("""
                 #ifdef __APPLE__
@@ -110,11 +118,16 @@ ocl_header = StringTemplate("""
 class ZipWith(LazySpecializedFunction):
     backend = 'ocl'
 
+    def __init__(self, symbols, tree):
+        super(ZipWith, self).__init__(tree)
+        self.symbols = symbols
+
+
     def args_to_subconfig(self, args):
         """TODO: Type check"""
-        arg_cfgs = (args[0], )
+        arg_cfgs = ()
         out_cfg = None
-        for arg in args[1:]:
+        for arg in args:
             arg_cfgs += (NdArrCfg(arg.dtype, arg.ndim, arg.shape), )
             out_cfg = (NdArrCfg(arg.dtype, arg.ndim, arg.shape), )
         return arg_cfgs + out_cfg
@@ -147,15 +160,10 @@ class ZipWith(LazySpecializedFunction):
 
     def transform(self, tree, program_config):
         arg_cfg, tune_cfg = program_config
-        if hasattr(tree, '_hm_symbols'):
-            symbols = tree._hm_symbols
-        else:
-            symbols = {}
-        tree = get_ast(tree)
 
         arg_types, params, kernel_params = self.process_arg_types(arg_cfg)
 
-        tree = ZipWithFrontendTransformer(symbols,
+        tree = ZipWithFrontendTransformer(self.symbols,
             params).visit(tree).files[0].body[0].body
 
         func = FunctionDecl(
@@ -164,19 +172,21 @@ class ZipWith(LazySpecializedFunction):
             params,
             []
         )
-        proj = Project([CFile('map', [func])])
+        cfile = CFile('map', [func])
         type_table = self.build_type_table(params, kernel_params)
-        backend = MapOclTransform(symbols, type_table)
+        backend = MapOclTransform(self.symbols, type_table)
         loop_body = list(map(backend.visit, tree))
         shape = arg_cfg[0].shape[::-1]
         if self.backend == 'c' or self.backend == 'omp':
             if self.backend == 'omp':
                 func.defn.append(OmpParallelFor())
-                proj.files[0].config_target = 'omp'
-                proj.files[0].body.insert(0, IncludeOmpHeader())
+                cfile.config_target = 'omp'
+                cfile.body.insert(0, IncludeOmpHeader())
             func.defn.append(for_range(shape, 1, loop_body))
+            return [cfile]
         elif self.backend == 'ocl':
-            proj.files[0].body.insert(0, ocl_header)
+            cfile.config_target = 'opencl'
+            cfile.body.insert(0, ocl_header)
             arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
             control, kernel = kernel_range(shape, shape,
                                            kernel_params, loop_body)
@@ -184,20 +194,26 @@ class ZipWith(LazySpecializedFunction):
             func.params.insert(1, SymbolRef(kernel.body[0].name.name,
                                             cl.cl_kernel()))
             func.defn = control
-            proj.files.append(kernel)
-        entry_type = (None,) + arg_types
-        return 'zip_with', proj, entry_type
+            return [cfile, kernel]
 
-    def finalize(self, entry_name, proj, entry_type):
-        entry_type = ct.CFUNCTYPE(*entry_type)
+    def finalize(self, files, program_cfg):
+        arg_cfg, tune_cfg = program_cfg
+        arg_types, params, kernel_params = self.process_arg_types(arg_cfg)
+        proj = Project(files)
+        entry_name = 'zip_with'
         if self.backend == 'c' or self.backend == 'omp':
+            entry_type = (None,) + arg_types
+            entry_type = ct.CFUNCTYPE(*entry_type)
             return CConcreteZipWith(entry_name, proj, entry_type)
         elif self.backend == 'ocl':
+            arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
+            entry_type = (None,) + arg_types
+            entry_type = ct.CFUNCTYPE(*entry_type)
             fn = OclConcreteZipWith(entry_name, proj, entry_type)
             kernel = proj.find(OclFile)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
-            return fn.finalize(program[kernel.body[0].name.name])
+            return fn.finalize(program[kernel.name])
 
     def get_placeholder_output(self, args):
         return hmarray(np.empty_like(args[0]))
@@ -205,11 +221,6 @@ class ZipWith(LazySpecializedFunction):
     def get_ir_nodes(self, args):
         arg_cfg = self.args_to_subconfig(args)
         tree = copy.deepcopy(self.original_tree)
-        if hasattr(tree, '_hm_symbols'):
-            symbols = tree._hm_symbols
-        else:
-            symbols = {}
-        tree = get_ast(tree)
 
         types = ()
         params = []
@@ -222,12 +233,16 @@ class ZipWith(LazySpecializedFunction):
             type_table[params[-1].name] = types[-1]
 
         tree = ZipWithFrontendTransformer(
-            symbols, params).visit(tree).files[0].body[0].body
+            self.symbols, params).visit(tree).files[0].body[0].body
 
-        backend = MapOclTransform(symbols, type_table)
+        backend = MapOclTransform(self.symbols, type_table)
         loop_body = list(map(backend.visit, tree))
         shape = arg_cfg[0].shape[::-1]
         return [Loop(shape, params[:-1], [params[-1]], types, loop_body)]
 
 
-zip_with = ZipWith
+def zip_with(fn):
+    symbols = {}
+    if hasattr(fn, '_hm_symbols'):
+        symbols = fn._hm_symbols
+    return ZipWith(symbols, get_ast(fn))

@@ -4,7 +4,7 @@ from ctree.templates.nodes import StringTemplate
 import numpy as np
 import pycl as cl
 import ctypes as ct
-from ctree.c.nodes import CFile, SymbolRef, Constant
+from ctree.c.nodes import CFile, SymbolRef, Constant, Add
 from ctree.nodes import Project
 from ctree.ocl.nodes import OclFile
 from ctree.ocl import get_context_and_queue_from_devices
@@ -69,8 +69,8 @@ __kernel void reduce(__global float *in, __global float *out,
     out[gid] = buf[0];
   }
 }
-            """, {"augassign": SymbolRef(tree + "="),
-                  "op": SymbolRef(tree)}
+            """, {"augassign": SymbolRef(tree.name + "="),
+                  "op": tree}
         )
 
         control = StringTemplate(
@@ -111,16 +111,28 @@ float control(cl_command_queue queue, cl_kernel reduce, cl_mem input,
             """, {"type": SymbolRef('float'),
                   "size": Constant(np.prod(arg_cfg.shape))})
 
-        proj = Project([CFile('control', [control]),
-                        OclFile('kernel', [kernel])])
+        return [CFile('control', [control], config_target='opencl'), 
+                OclFile('kernel', [kernel])]
+    
+    def finalize(self, files, program_cfg):
+        arg_cfg, tune_cfg = program_cfg
+        if self.backend == 'c':
+            arg_types = (np.ctypeslib.ndpointer(
+                arg_cfg.dtype, arg_cfg.ndim, arg_cfg.shape),
+                np.ctypeslib.ndpointer(arg_cfg.dtype, arg_cfg.ndim,
+                                       arg_cfg.shape))
+        else:
+            arg_types = (cl.cl_mem, cl.cl_mem)
+        proj = Project(files)
         if self.backend == 'ocl':
             arg_types = (ct.c_float, cl.cl_command_queue,
                          cl.cl_kernel) + arg_types
             entry_type = ct.CFUNCTYPE(*arg_types)
             fn = OclConcreteReduce('control', proj, entry_type)
+            kernel = proj.find(OclFile)
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
             return fn.finalize(program['reduce'])
 
 
-sum = Reduction("+")
+sum = Reduction(SymbolRef("+"))

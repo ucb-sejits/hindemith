@@ -2,6 +2,7 @@ from ctree.templates.nodes import StringTemplate
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from hindemith.types.hmarray import NdArrCfg, kernel_range, hmarray, empty_like, Loop
 import copy
+import ast
 
 # lerp_kern_body = """
 # float x = $x_map[loop_idx];
@@ -112,9 +113,8 @@ class LinearInterp(LazySpecializedFunction):
             params,
             []
         )
-        proj = Project([CFile('lerp', [func])])
+        proj = Project([CFile('lerp', [func], config_target='opencl')])
         proj.files[0].body.insert(0, ocl_header)
-        arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
         shape = arg_cfg[1].shape
         control, kernel = kernel_range(shape, shape,
                                        kernel_params, [StringTemplate(lerp_kern_body, {
@@ -130,12 +130,19 @@ class LinearInterp(LazySpecializedFunction):
                                         cl.cl_kernel()))
         func.defn = control
         proj.files.append(kernel)
+        return proj.files
+
+    def finalize(self, files, program_cfg):
+        proj = Project(files)
+        arg_cfg, tune_cfg = program_cfg
+        arg_types, params, kernel_params = self.process_arg_types(arg_cfg)
+        arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
         entry_type = (None,) + arg_types
         fn = OclConcreteLerp('lerp', proj, ct.CFUNCTYPE(*entry_type))
         kernel = proj.find(OclFile)
         program = cl.clCreateProgramWithSource(
             fn.context, kernel.codegen()).build()
-        return fn.finalize(program[kernel.body[0].name.name])
+        return fn.finalize(program[kernel.name])
 
     def get_placeholder_output(self, args):
         return empty_like(args[-1])
@@ -157,4 +164,4 @@ class LinearInterp(LazySpecializedFunction):
                          "x_dim": Constant(arg_cfg[0].shape[1]),
                          "y_dim": Constant(arg_cfg[0].shape[0])})])]
 
-interp_linear = LinearInterp(None)
+interp_linear = LinearInterp(ast.Module())

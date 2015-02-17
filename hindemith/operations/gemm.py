@@ -14,7 +14,9 @@ from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.templates.nodes import StringTemplate
 from ctree.c.nodes import Constant, SymbolRef, FunctionDecl, CFile
 from ctree.nodes import Project
+from ctree.ocl.nodes import Project, OclFile
 from ctree.ocl import get_context_and_queue_from_devices
+import ast
 import numpy as np
 import pycl as cl
 import ctypes as ct
@@ -95,11 +97,9 @@ class Gemm(LazySpecializedFunction):
             params,
             control
         )
-        print(kernel)
-        print(func)
         entry_type = (None, cl.cl_command_queue, cl.cl_kernel, cl.cl_mem,
                       cl.cl_mem, cl.cl_mem)
-        proj = Project([CFile('gemm', [func])])
+        proj = Project([CFile('gemm', [func], config_target='opencl'), kernel])
         proj.files[0].body.insert(0, StringTemplate("""
             #ifdef __APPLE__
             #include <OpenCL/opencl.h>
@@ -107,12 +107,19 @@ class Gemm(LazySpecializedFunction):
             #include <CL/cl.h>
             #endif
             """))
+        return proj.files
 
+    def finalize(self, files, program_cfg):
+        arg_cfg, tune_cfg = program_cfg
+        proj = Project(files)
+        entry_type = (None, cl.cl_command_queue, cl.cl_kernel, cl.cl_mem,
+                      cl.cl_mem, cl.cl_mem)
         entry_type = ct.CFUNCTYPE(*entry_type)
         fn = ConcreteGemm('gemm', proj, entry_type)
+        kernel = proj.find(OclFile)
         program = cl.clCreateProgramWithSource(
             fn.context, kernel.codegen()).build()
-        return fn.finalize(program[kernel.body[0].name.name])
+        return fn.finalize(program[kernel.name])
 
 
-gemm = Gemm(None)
+gemm = Gemm(ast.Module())

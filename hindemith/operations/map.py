@@ -4,6 +4,7 @@ from ctree.frontend import get_ast
 from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, Assign, ArrayRef, \
     Constant, BinaryOp, Op, FunctionCall, Cast
 from ctree.nodes import Project, CtreeNode
+from ctree.ocl.nodes import OclFile
 from ctree.jit import LazySpecializedFunction
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
@@ -175,31 +176,46 @@ class SpecializedMap(LazySpecializedFunction):
             SymbolRef('map'),
             params
         )
-        proj = Project([CFile('map', [func])])
+        cfile = CFile('map', [func])
         if self.backend == 'ocl':
+            cfile.config_target = 'opencl'
             backend = MapOclTransform()
             loop_body = list(map(backend.visit, tree))
-            proj.files[0].body.insert(0, StringTemplate("""
+            cfile.body.insert(0, StringTemplate("""
                 #ifdef __APPLE__
                 #include <OpenCL/opencl.h>
                 #else
                 #include <CL/cl.h>
                 #endif
                 """))
-            arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
             shape = arg_cfg.shape
             control, kernel = kernel_range(shape, shape,
                                            kernel_params, loop_body)
             func.defn = control
-            entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
             func.params = [
                 SymbolRef('queue', cl.cl_command_queue()),
                 SymbolRef(kernel.body[0].name.name, cl.cl_kernel())
             ] + func.params
+            return [cfile, kernel]
+
+    def finalize(self, files, program_cfg):
+        if self.backend == 'c':
+            arg_types = (np.ctypeslib.ndpointer(
+                arg_cfg.dtype, arg_cfg.ndim, arg_cfg.shape),
+                np.ctypeslib.ndpointer(arg_cfg.dtype, arg_cfg.ndim,
+                                       arg_cfg.shape))
+        else:
+            arg_types = (cl.cl_mem, cl.cl_mem)
+        arg_types = (cl.cl_command_queue, cl.cl_kernel) + arg_types
+        entry_type = ct.CFUNCTYPE(*((None,) + arg_types))
+        proj = Project(files)
+        if self.backend == 'ocl':
             fn = OclConcreteMap('map', proj, entry_type)
+            kernel = proj.find(OclFile)
+
             program = cl.clCreateProgramWithSource(
                 fn.context, kernel.codegen()).build()
-            return fn.finalize(program[kernel.body[0].name.name])
+            return fn.finalize(program[kernel.name])
 
     def get_placeholder_output(self, args):
         return hmarray(np.empty_like(args[0]))

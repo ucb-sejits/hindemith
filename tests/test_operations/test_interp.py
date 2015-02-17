@@ -1,5 +1,5 @@
 from .base_test import HMBaseTest
-from hindemith.operations.interp import LinearInterp
+from hindemith.operations.interp import interp_linear
 from hindemith.types.hmarray import hmarray
 import numpy as np
 
@@ -37,11 +37,10 @@ def remap(im, f1, f2):
 
 class TestInterp(HMBaseTest):
     def test_simple(self):
-        interp = LinearInterp(None)
         a = np.random.rand(128, 64).astype(np.float32) * 255
         b = np.random.rand(128, 64).astype(np.float32) * 3
         c = np.random.rand(128, 64).astype(np.float32) * 3
-        actual = interp(hmarray(a), hmarray(b), hmarray(c))
+        actual = interp_linear(hmarray(a), hmarray(b), hmarray(c))
         expected = remap(a, b, c)
         actual.copy_to_host_if_dirty()
         actual = np.copy(actual)

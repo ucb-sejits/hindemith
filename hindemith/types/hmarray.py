@@ -323,6 +323,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
             func.defn.append(for_range(arg_cfg[2].shape, 1, loop_body))
             return [cfile]
         elif self.backend == 'ocl':
+            cfile.config_target = 'opencl'
             cfile.body.insert(0, StringTemplate("""
                 #ifdef __APPLE__
                 #include <OpenCL/opencl.h>
@@ -364,7 +365,7 @@ class EltWiseArrayOp(LazySpecializedFunction):
     def get_ir_nodes(self, args):
         tree = copy.deepcopy(self.original_tree)
         arg_cfg = self.args_to_subconfig(args)
-        op = op_map[tree]
+        op = op_map[tree.__class__]
         params = []
         op_args = ()
         types = []
