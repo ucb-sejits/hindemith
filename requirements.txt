@@ -1,6 +1,3 @@
--e git://github.com/ucb-sejits/ctree.git@tuning#egg=ctree
--e git://github.com/leonardt/llvmlite.git#egg=llvmlite
--e git://github.com/ucb-sejits/hindemith.git#egg=hindemith
+ctree
 pycl
 scipy
-enum34
