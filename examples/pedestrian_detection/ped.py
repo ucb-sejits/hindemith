@@ -70,12 +70,6 @@ def main():
                 hsv[..., 0] = ang
                 hsv[..., 2] = mag
                 flow = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-                # windows = []
-                # for start in range(0, 120, 60):
-                #     curr = np.copy(mag)
-                #     curr[np.where(ang <= start)] = 0
-                #     curr[np.where(ang >= start + 60)] = 0
-                #     windows.extend(get_boxes(curr, flow))
                 windows = get_boxes(mag, flow)
                 # draw_detections(frame, windows)
                 if len(windows) > 0:
@@ -87,7 +81,6 @@ def main():
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
                 prev_gray = None
-    # elif args.sequence:
     else:
         import glob
         frame0 = None
@@ -133,31 +126,6 @@ def main():
             if cv2.waitKey(1) & 0xff == ord('q'):
                 break
             frame0 = gray
-    # else:
-    #     frame0 = cv2.imread('images/frame0.png')
-    #     frame1 = cv2.imread('images/frame1.png')
-    #     im0 = cv2.cvtColor(frame0, cv2.COLOR_BGR2GRAY)
-    #     im1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-    #     solve = HS_Jacobi(1, .5)
-
-    #     u = solve(im0, im1)
-
-    #     mag, ang = cv2.cartToPolar(u[0], u[1])
-    #     mag = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
-    #     ang = ang*180/np.pi/2
-    #     hsv = np.zeros_like(frame1)
-    #     hsv[..., 1] = 255
-    #     hsv[..., 0] = ang
-    #     hsv[..., 2] = mag
-    #     flow = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-    #     windows = get_boxes(mag, flow)
-    #     # draw_detections(frame, windows)
-    #     if len(windows) > 0:
-    #         run(np.array(windows), frame1)
-    #     cv2.imshow('detection', frame1)
-    #     cv2.imshow('flow', flow)
-    #     cv2.waitKey(0) & 0xff
-    #     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()

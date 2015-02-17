@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='hindemith',
-    version='0.1.0',
+    version='0.1.1',
     author='Leonard Truong',
     author_email='leonardtruong@berkeley.edu',
     description='Package containing a suite of high performance pattern specializers',

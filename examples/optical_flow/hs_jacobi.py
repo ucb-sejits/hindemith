@@ -104,7 +104,8 @@ class HS_Jacobi(Solver):
                 break
         return u, v
 
-if __name__ == '__main__':
+
+def main():
     import cv2
     frame0 = cv2.imread('images/frame0.png')
     frame1 = cv2.imread('images/frame1.png')
@@ -130,3 +131,7 @@ if __name__ == '__main__':
 
     cv2.imshow('flow', flow)
     cv2.waitKey()
+
+if __name__ == '__main__':
+    import cProfile
+    cProfile.run('main()')

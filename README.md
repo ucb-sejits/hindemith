@@ -11,8 +11,5 @@ cross pattern analyzer that performs loop fusion across specializer where possib
 # Getting started
 ## Installation
 ```
-conda install numpy llvm llvmpy setuptools pip nose
-git clone https://github.com/ucb-sejits/hindemith.git
-cd hindemith
-python setup.py install
+pip instlal hindemith
 ```
