@@ -5,7 +5,7 @@ python:
   - '3.4'
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers
+  - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers python-scipy
 install:
   - export PYTHON_VERSION=$(python -c 'import sys; print(sys.version_info[0:2])')
   - pip install -r requirements.txt
