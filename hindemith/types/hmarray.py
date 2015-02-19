@@ -2,6 +2,7 @@ import numpy as np
 import pycl as cl
 from ctree.ocl import get_context_and_queue_from_devices
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
+
 from ctree.c.nodes import FunctionDecl, SymbolRef, For, ArrayRef, Add, Assign, \
     Constant, AddAssign, Lt, Mul, Sub, Div, CFile
 from ctree.templates.nodes import StringTemplate
@@ -236,7 +237,7 @@ class CConcreteEltOp(ConcreteSpecializedFunction):
         return output
 
 
-class OclConcreteEltOp(ConcreteSpecializedFunction):
+class OclConcreteSpecializedFunction(ConcreteSpecializedFunction):
     def __init__(self, entry_name, proj, entry_type):
         self._c_function = self._compile(entry_name, proj, entry_type)
         devices = cl.clGetDeviceIDs()
@@ -249,21 +250,20 @@ class OclConcreteEltOp(ConcreteSpecializedFunction):
 
     def __call__(self, *args):
         output = None
-        out_buf = None
         processed = []
         for arg in args:
             if isinstance(arg, hmarray):
                 if output is None:
-                    output = hmarray(np.zeros_like(arg))
-                    out_buf = cl.clCreateBuffer(self.context, output.nbytes)
-                    output._ocl_buf = out_buf
-                    output._ocl_dirty = False
+                    output = empty_like(arg)
                     output._host_dirty = True
                 processed.append(arg.ocl_buf)
-            # else:
-            #     processed.append(arg)
-        self._c_function(*([self.queue, self.kernel] + processed + [out_buf]))
+        self._c_function(*([self.queue, self.kernel] + processed +
+                           [output.ocl_buf]))
         return output
+
+
+class OclConcreteEltOp(OclConcreteSpecializedFunction):
+    pass
 
 
 class EltWiseArrayOp(LazySpecializedFunction):

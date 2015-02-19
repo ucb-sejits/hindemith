@@ -9,9 +9,8 @@ from ctree.jit import LazySpecializedFunction
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
 from hindemith.types.hmarray import NdArrCfg, hmarray, py_to_ctypes, Loop, \
-    empty_like
+    empty_like, OclConcreteSpecializedFunction
 from hindemith.nodes import kernel_range
-from hindemith.operations.common import OclConcreteSpecializedFunction
 import ast
 import sys
 
@@ -80,7 +79,7 @@ class MapOclTransform(ast.NodeTransformer):
         if isinstance(node, BinaryOp):
             if isinstance(node.op, Op.ArrayRef):
                 return self.infer_type(node.left)._dtype_.type
-            try: 
+            try:
                 return self.infer_type(node.left)
             except:
                 return self.infer_type(node.right)
@@ -199,6 +198,7 @@ class SpecializedMap(LazySpecializedFunction):
             return [cfile, kernel]
 
     def finalize(self, files, program_cfg):
+        arg_cfg, tune_cfg = program_cfg
         if self.backend == 'c':
             arg_types = (np.ctypeslib.ndpointer(
                 arg_cfg.dtype, arg_cfg.ndim, arg_cfg.shape),

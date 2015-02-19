@@ -1,5 +1,5 @@
 from hindemith.types.hmarray import NdArrCfg, hmarray, \
-    for_range, Loop
+    for_range, Loop, OclConcreteSpecializedFunction
 from hindemith.nodes import kernel_range
 from .map import MapOclTransform, ElementReference, \
     StoreOutput
@@ -7,7 +7,6 @@ from .map import MapOclTransform, ElementReference, \
 from ctree.jit import LazySpecializedFunction, ConcreteSpecializedFunction
 from ctree.c.nodes import SymbolRef, FunctionDecl, CFile, FunctionCall, Assign
 from ctree.nodes import Project
-from ctree.ocl import get_context_and_queue_from_devices
 from ctree.ocl.nodes import OclFile
 from ctree.templates.nodes import StringTemplate
 from ctree.transformations import PyBasicConversions
@@ -32,19 +31,7 @@ class CConcreteZipWith(ConcreteSpecializedFunction):
         return output
 
 
-class OclConcreteZipWith(ConcreteSpecializedFunction):
-    def __init__(self, entry_name, proj, entry_type):
-        self._c_function = self._compile(entry_name, proj, entry_type)
-        devices = cl.clGetDeviceIDs()
-        print(proj.files[0])
-        print(proj.files[1])
-        self.context, self.queue = get_context_and_queue_from_devices(
-            [devices[-1]])
-
-    def finalize(self, kernel):
-        self.kernel = kernel
-        return self
-
+class OclConcreteZipWith(OclConcreteSpecializedFunction):
     def __call__(self, *args):
         output = hmarray(np.zeros_like(args[0]))
         out_buf = cl.clCreateBuffer(self.context, output.nbytes)
@@ -163,8 +150,8 @@ class ZipWith(LazySpecializedFunction):
 
         arg_types, params, kernel_params = self.process_arg_types(arg_cfg)
 
-        tree = ZipWithFrontendTransformer(self.symbols,
-            params).visit(tree).files[0].body[0].body
+        tree = ZipWithFrontendTransformer(
+            self.symbols, params).visit(tree).files[0].body[0].body
 
         func = FunctionDecl(
             None,

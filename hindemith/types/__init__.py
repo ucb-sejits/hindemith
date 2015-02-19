@@ -1,1 +1,1 @@
-from .hmarray import hmarray
+import hmarray
