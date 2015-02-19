@@ -38,7 +38,7 @@ def th(rho_elt, gradient_elt, delta_elt, u_elt):
     elif gradient_elt > 1e-10:
         return -rho_elt / gradient_elt * delta_elt + u_elt
     else:
-        return 0
+        return 0.0
 
 from sys import platform as _platform
 if _platform == "darwin":
@@ -72,8 +72,8 @@ class TestFusion(unittest.TestCase):
         for _ in range(10):
             actual = fused(a, b, c)
             expected = unfused(a, b, c)
-            actual.copy_to_host_if_dirty()
-            expected.copy_to_host_if_dirty()
+            actual.sync()
+            expected.sync()
             self._check_arrays_equal(actual, expected)
 
     def test_threshold(self):
@@ -86,20 +86,20 @@ class TestFusion(unittest.TestCase):
         e = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
         f = hmarray(np.random.rand(480, 640).astype(np.float32) * 255)
 
-        def unfused(u1, u2, rho_c, gradient, I1wx, I1wy):
+        def unfused(I1wx, u1, rho_c, I1wy, u2, gradient):
             rho = rho_c + I1wx * u1 + I1wy * u2
-            v1 = threshold(rho, gradient, I1wx, u1)
-            v2 = threshold(rho, gradient, I1wy, u2)
-            return v1, v2
+
+            return rho, rho
 
         fused = meta(unfused)
 
         actual = fused(a, b, c, d, e, f)
         expected = unfused(a, b, c, d, e, f)
-        expected[0].copy_to_host_if_dirty()
-        expected[1].copy_to_host_if_dirty()
-        actual[0].copy_to_host_if_dirty()
-        actual[1].copy_to_host_if_dirty()
+        expected[0].sync()
+        expected[1].sync()
+        actual[0].sync()
+        actual[1].sync()
+        print(actual)
         self._check_arrays_equal(actual[0], expected[0])
         self._check_arrays_equal(actual[1], expected[1])
 

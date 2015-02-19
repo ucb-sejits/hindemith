@@ -2,15 +2,11 @@ __author__ = 'leonardtruong'
 
 import ast
 from ctree.ocl import get_context_and_queue_from_devices
-from ctree.ocl.macros import get_local_id, get_local_size, get_group_id
-from ctree.c.nodes import SymbolRef, Constant, Op, Assign, Add, For, \
-    AddAssign, Lt, Mul, Sub, FunctionDecl, FunctionCall, ArrayDef, If, \
-    And, CFile
+from ctree.c.nodes import SymbolRef, Op, FunctionDecl, CFile
 from ctree.ocl.nodes import OclFile
 from ctree.nodes import Project
 import pycl as cl
 import ctypes as ct
-import numpy as np
 from .util import get_unique_func_name, SymbolReplacer, RemoveRedcl
 from ..nodes import kernel_range, ocl_header
 from hindemith.types.hmarray import hmarray, empty
@@ -56,7 +52,6 @@ class OclConcreteMerged(ConcreteSpecializedFunction):
             output._host_dirty = True
             outputs.append(output)
 
-        # cl.clFinish(self.queue)
         self._c_function(*([self.queue, self.kernel] + processed))
         if len(outputs) == 1:
             return outputs[0]
@@ -77,8 +72,8 @@ class MergedSpecializedFunction(LazySpecializedFunction):
 
     def finalize(self, files, arg_cfg):
         tree = self.tree
-        fn = OclConcreteMerged('control', tree, self.entry_type, self.output_idxs,
-                            self.retval_idxs)
+        fn = OclConcreteMerged('control', tree, self.entry_type,
+                               self.output_idxs, self.retval_idxs)
         kernel = tree.find(OclFile)
         program = cl.clCreateProgramWithSource(
             fn.context, kernel.codegen()).build()
@@ -97,6 +92,28 @@ class PromoteToRegister(ast.NodeTransformer):
         return super(PromoteToRegister, self).generic_visit(node)
 
 
+def process_sources(sources, loop_sources, types, env, seen, body, to_promote,
+                    param_types, params, kernel_params, args):
+    for param, _type in zip(loop_sources, types):
+        source = sources.pop(0)
+        # skip constants
+        # FIXME: More elegant way to handle this case
+        while type(env[source]) in {int, float}:
+            source = sources.pop(0)
+        if source in seen:
+            visitor = SymbolReplacer(param.name, seen[source])
+            body[:] = [visitor.visit(s) for s in body]
+            if source in to_promote:
+                visitor = PromoteToRegister(seen[source])
+                body[:] = [visitor.visit(s) for s in body]
+        else:
+            seen[source] = param.name
+            param_types.append(cl.cl_mem)
+            params.append(SymbolRef(param.name, cl.cl_mem()))
+            kernel_params.append(SymbolRef(param.name, _type()))
+            args.append(ast.Name(source, ast.Load()))
+
+
 def fuse(sources, sinks, nodes, to_promote, env):
     seen = {}
     fused_body = []
@@ -109,24 +126,8 @@ def fuse(sources, sinks, nodes, to_promote, env):
     local_blocks = []
     for loop in nodes:
         body = loop.body
-        for param, _type in zip(loop.sources, loop.types):
-            source = sources.pop(0)
-            # skip constants
-            # FIXME: More elegant way to handle this case
-            while type(env[source]) in {int, float}:
-                source = sources.pop(0)
-            if source in seen:
-                visitor = SymbolReplacer(param.name, seen[source])
-                body = [visitor.visit(s) for s in body]
-                if source in to_promote:
-                    visitor = PromoteToRegister(seen[source])
-                    body = [visitor.visit(s) for s in body]
-            else:
-                seen[source] = param.name
-                param_types.append(cl.cl_mem)
-                params.append(SymbolRef(param.name, cl.cl_mem()))
-                kernel_params.append(SymbolRef(param.name, _type()))
-                args.append(ast.Name(source, ast.Load()))
+        process_sources(sources, loop.sources, loop.types, env, seen, body,
+                        to_promote, param_types, params, kernel_params, args)
 
         # FIXME: Assuming fusability
         # FIXME: Assuming one sink per node
@@ -134,8 +135,8 @@ def fuse(sources, sinks, nodes, to_promote, env):
         if sink in to_promote:
             seen[sink] = loop.sinks[0].name
             body.insert(0,
-                SymbolRef(seen[sink],
-                          loop.types[-1]._dtype_.type()))
+                        SymbolRef(seen[sink],
+                                  loop.types[-1]._dtype_.type()))
             visitor = SymbolReplacer(loop.sinks[0].name, seen[sink])
             body = [visitor.visit(s) for s in body]
             visitor = PromoteToRegister(loop.sinks[0].name)
@@ -161,13 +162,14 @@ def fuse(sources, sinks, nodes, to_promote, env):
         fused_body.extend(body)
     control = FunctionDecl(None, SymbolRef('control'), params, [])
     control_body, kernel = kernel_range(nodes[0].shape, nodes[0].shape,
-                                        kernel_params, fused_body, local_mem=local_blocks)
+                                        kernel_params, fused_body,
+                                        local_mem=local_blocks)
     print(kernel)
     params.insert(1, SymbolRef(kernel.body[0].name.name, cl.cl_kernel()))
     control.defn = control_body
     print(control)
     proj = Project([CFile('control', [ocl_header, control],
-        config_target='opencl'), kernel])
+                          config_target='opencl'), kernel])
     return proj, ct.CFUNCTYPE(*param_types), args, output_idxs, retval_idxs
 
 

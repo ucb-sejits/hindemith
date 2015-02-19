@@ -95,6 +95,24 @@ class hmarray(np.ndarray):
             self._host_dirty = False
         return self
 
+    def copy_to_buffer_if_dirty(self):
+        if self._ocl_dirty:
+            _, evt = cl.buffer_from_ndarray(self.queue, self,
+                                            self._ocl_buf, blocking=False)
+            evt.wait()
+            self._ocl_dirty = False
+        return self
+
+    def sync(self):
+        self.copy_to_host_if_dirty()
+        self.copy_to_buffer_if_dirty()
+
+    def sync_buffer(self):
+        self.copy_to_buffer_if_dirty()
+
+    def sync_host(self):
+        self.copy_to_host_if_dirty()
+
     # def __del__(self):
     #     if self.shape not in self.buffer_cache:
     #         self.buffer_cache[self.shape] = [self]

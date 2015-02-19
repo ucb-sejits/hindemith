@@ -109,6 +109,13 @@ class TestElt(unittest.TestCase):
         hm_a, hm_b, hm_c = hmarray(a), hmarray(b), hmarray(c)
         self._check(mul(sub(hm_a, hm_b), hm_c), (a - b) * c)
 
+    def test_slicing(self):
+        a, b = self.a, self.b
+        hm_a, hm_b = hmarray(a), hmarray(b)
+        hm_a.sync()
+        hm_b.sync()
+        # self._check(hm_a[2:, 2:] + hm_b[2:, 2:], a[2:, 2:] + b[2:, 2:])
+
 
 class TestScalarArrayElt(unittest.TestCase):
     def setUp(self):
