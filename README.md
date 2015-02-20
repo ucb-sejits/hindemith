@@ -11,5 +11,13 @@ cross pattern analyzer that performs loop fusion across specializer where possib
 # Getting started
 ## Installation
 ```
-pip instlal hindemith
+$ pip install hindemith
+```
+
+or
+
+```
+$ git clone https://github.com/ucb-sejits/hindemith
+$ cd hindemith
+$ pip install -r requirements.txt
 ```
