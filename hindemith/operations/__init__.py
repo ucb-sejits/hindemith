@@ -1,1 +1,1 @@
-__author__ = 'leonardtruong'
+import hindemith.operations.dense_linear_algebra.elementwise_ops

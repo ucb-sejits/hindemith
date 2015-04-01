@@ -1,13 +1,11 @@
-__author__ = 'leonardtruong'
-
 from setuptools import setup, find_packages
 
 setup(
     name='hindemith',
-    version='0.1.1',
+    version='0.1.0',
     author='Leonard Truong',
     author_email='leonardtruong@berkeley.edu',
-    description='Package containing a suite of high performance pattern specializers',
+    description='',
     url='https://github.com/ucb-sejits/hindemith',
 
     packages=find_packages(exclude=['examples', 'tests']),
