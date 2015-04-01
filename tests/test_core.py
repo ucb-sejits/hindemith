@@ -10,8 +10,8 @@ class TestCore(unittest.TestCase):
         def fn(a, b):
             return a + b
 
-        a = hmarray((512, 512), np.float32)
-        b = hmarray((512, 512), np.float32)
+        a = np.random.rand(512, 512).astype(np.float32).view(hmarray)
+        b = np.random.rand(512, 512).astype(np.float32).view(hmarray)
 
         c = fn(a, b)
         np.testing.assert_allclose(c, a + b)

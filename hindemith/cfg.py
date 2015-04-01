@@ -1,5 +1,13 @@
 import ast
 from hindemith.operations.core import operations
+import ctree.c.nodes as C
+from ctree.types import get_c_type_from_numpy_dtype
+import numpy as np
+import ctypes as ct
+import pycl as cl
+
+context = cl.clCreateContext()
+queue = cl.clCreateCommandQueue(context)
 
 
 class Analyzer(ast.NodeVisitor):
@@ -170,7 +178,62 @@ class BasicBlock(object):
 
 
 class ComposableBasicBlock(BasicBlock):
-    pass
+    def find_matching_op(self, statement, env):
+        for op in operations:
+            if op.match(statement, env):
+                return op
+        raise Exception("Found non unsupported statement in composable block")
+
+    def compile(self, name, env):
+        body = []
+        for statement in self.statements:
+            op = self.find_matching_op(statement, env)
+            body.append(op(statement, env).compile())
+        params = []
+        for arg in self.live_ins:
+            ptr = ct.POINTER(get_c_type_from_numpy_dtype(env[arg].dtype))()
+            params.append(C.SymbolRef(arg, ptr, _global=True))
+        for arg in self.live_outs:
+            ptr = ct.POINTER(get_c_type_from_numpy_dtype(env[arg].dtype))()
+            params.append(C.SymbolRef(arg, ptr, _global=True))
+        kernel = C.FunctionDecl(
+            None,
+            C.SymbolRef(name),
+            params,
+            body
+        )
+        kernel.set_kernel()
+        print(kernel)
+
+        def compiled(*args, **kwargs):
+            types = []
+            bufs = []
+            outs = []
+            for arg in args:
+                types.append(cl.cl_mem)
+                buf, evt = cl.buffer_from_ndarray(queue, arg)
+                bufs.append(buf)
+            for arg in self.live_outs:
+                types.append(cl.cl_mem)
+                buf, evt = cl.buffer_from_ndarray(queue, env[arg])
+                outs.append(buf)
+            program = cl.clCreateProgramWithSource(
+                context, kernel.codegen()
+            ).build()
+
+            kern = program[kernel.name.name]
+            kern.argtypes = types
+            print(args[0].shape)
+            run_evt = kern(*(bufs + outs)).on(queue, np.prod(args[0].shape))
+            rets = ()
+            for out in outs:
+                buf, evt = cl.buffer_to_ndarray(queue, out, like=args[0],
+                                                wait_for=run_evt)
+                rets += (buf, )
+            if len(rets) == 1:
+                return rets[0]
+            return rets
+        return compiled
 
 
 class NonComposableBasicBlock(BasicBlock):
@@ -253,6 +316,8 @@ class ControlFlowGraph(object):
             if isinstance(block, NonComposableBasicBlock):
                 blocks.extend(block.statements)
             else:
+                func_name = self.gen_func_name()
+                env[func_name] = block.compile(func_name, env)
                 if len(block.live_outs) > 1:
                     target = [ast.Tuple(
                         [ast.Name(sink, ast.Store()) for sink in
@@ -263,7 +328,7 @@ class ControlFlowGraph(object):
                                        ast.Store())]
                 blocks.append(ast.Assign(
                     target,
-                    ast.Call(ast.Name(self.gen_func_name(), ast.Load()),
+                    ast.Call(ast.Name(func_name, ast.Load()),
                              [ast.Name(source, ast.Load()) for source in
                               block.live_ins],
                              [], None, None)
