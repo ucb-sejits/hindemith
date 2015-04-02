@@ -5,18 +5,17 @@ import ctree.c.nodes as C
 from ctree.types import get_c_type_from_numpy_dtype
 
 
-class Vector(object):
-    def __init__(self, size, dtype, ndarray=None):
+class Matrix(object):
+    def __init__(self, shape, dtype, ndarray=None):
         if ndarray is None:
-            self.data = np.ndarray(size, dtype)
+            self.data = np.ndarray(shape, dtype)
             self.ocl_buf = cl.clCreateBuffer(
-                context, size * self.data.itemsize)
+                context, np.prod(shape) * self.data.itemsize)
         else:
             self.data = ndarray
             buf, evt = cl.buffer_from_ndarray(queue, self.data)
             self.ocl_buf = buf
-        self.size = size
-        self.shape = (size, )
+        self.shape = shape
         self.dtype = dtype
         self.host_dirty = False
         self.ocl_dirty = False
@@ -42,7 +41,6 @@ class Vector(object):
         return None
 
     @staticmethod
-    def rand(size, dtype):
-        data = np.random.rand(size).astype(dtype) * 255
-        vec = Vector(size, dtype, ndarray=data)
-        return vec
+    def rand(shape, dtype):
+        data = np.random.rand(*shape).astype(dtype) * 255
+        return Matrix(shape, dtype, ndarray=data)

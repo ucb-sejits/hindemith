@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from hindemith.types.vector import Vector
+from hindemith.types import Vector, Matrix
 from hindemith.core import hm
 
 
@@ -31,7 +31,7 @@ class TestCore(unittest.TestCase):
 
         d = fn(a, b, c)
         d.sync()
-        np.testing.assert_allclose(d.data, a.data + b.data + c.data)
+        self._check(d.data, a.data + b.data + c.data)
 
     def test_intermediate(self):
         @hm
@@ -47,7 +47,7 @@ class TestCore(unittest.TestCase):
         d.sync()
         d_py = a.data + b.data
         py_result = a.data + b.data * c.data + d_py
-        np.testing.assert_allclose(d.data, py_result)
+        self._check(d.data, py_result)
 
     def test_for(self):
         @hm
@@ -66,4 +66,23 @@ class TestCore(unittest.TestCase):
         expected = a.data + b.data
         for i in range(10):
             expected = a.data + expected
-        np.testing.assert_allclose(c.data, expected)
+        self._check(c.data, expected)
+
+    def test_matrix(self):
+        @hm
+        def fn(a, b):
+            c = a + b
+            for i in range(10):
+                c = a + c
+            return c
+
+        a = Matrix.rand((512, 512), np.float32)
+        b = Matrix.rand((512, 512), np.float32)
+        c = Matrix.rand((512, 512), np.float32)
+
+        c = fn(a, b)
+        c.sync()
+        expected = a.data + b.data
+        for i in range(10):
+            expected = a.data + expected
+        self._check(c.data, expected)

@@ -1,6 +1,7 @@
 from hindemith.operations.core import ElementLevel, register_operation
-from hindemith.types.vector import Vector
+from hindemith.types import Vector, Matrix
 import ast
+import numpy as np
 
 
 class ElementwiseOperation(ElementLevel):
@@ -14,16 +15,25 @@ class ElementwiseOperation(ElementLevel):
         self.operand1 = symbol_table[self.operand1_name]
         self.operand2_name = statement.value.right.id
         self.operand2 = symbol_table[self.operand2_name]
+        assert (
+            isinstance(self.operand1, (Vector, Matrix)) and
+            isinstance(self.operand2, (Vector, Matrix)) and
+            self.operand1.__class__ is self.operand2.__class__
+        )
 
-        symbol_table[statement.targets[0].id] = Vector(self.operand1.size,
-                                                       self.operand1.dtype)
+        if isinstance(self.operand1, Vector):
+            symbol_table[statement.targets[0].id] = Vector(self.operand1.size,
+                                                           self.operand1.dtype)
+        else:
+            symbol_table[statement.targets[0].id] = Matrix(self.operand1.shape,
+                                                           self.operand1.dtype)
         self.target_name = statement.targets[0].id
         self.target = symbol_table[self.target_name]
         self.sources = [self.operand1_name, self.operand2_name]
         self.sinks = [self.target_name]
 
     def get_global_size(self):
-        return self.operand1.shape
+        return (np.prod(self.operand1.shape), )
 
     def compile(self):
         return "{} = {} {} {};".format(
@@ -44,9 +54,11 @@ class ElementwiseOperation(ElementLevel):
                 isinstance(node.right, ast.Name)):
             return (
                 node.left.id in symbol_table and
-                isinstance(symbol_table[node.left.id], Vector) and
+                isinstance(symbol_table[node.left.id], (Vector, Matrix)) and
                 node.right.id in symbol_table and
-                isinstance(symbol_table[node.right.id], Vector)
+                isinstance(symbol_table[node.right.id], (Vector, Matrix)) and
+                symbol_table[node.left.id].__class__ is
+                symbol_table[node.right.id].__class__
             )
         return False
 
