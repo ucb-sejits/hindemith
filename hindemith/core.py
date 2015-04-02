@@ -24,10 +24,10 @@ def hm(fn):
                 env[arg.id] = args[index]
             else:
                 env[arg.arg] = args[index]
-        cfg.build_composable_blocks(env)
+        cfg.start_block = cfg.build_composable_blocks(env, cfg.start_block)
         print(cfg)
-        cfg.compile_composable_blocks(env)
-        print(cfg)
+        cfg.perform_liveness_analysis()
+        cfg.compiled = cfg.compile_composable_blocks(env, cfg.start_block)
         cfg.compile_to_fn(env)
         fn = cfg.compile_to_fn(env)
         return fn(*args, **kwargs)

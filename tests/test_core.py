@@ -49,7 +49,6 @@ class TestCore(unittest.TestCase):
         py_result = a.data + b.data * c.data + d_py
         np.testing.assert_allclose(d.data, py_result)
 
-    @unittest.skip("")
     def test_for(self):
         @hm
         def fn(a, b):
@@ -64,7 +63,7 @@ class TestCore(unittest.TestCase):
 
         c = fn(a, b)
         c.sync()
-        expected = a + b
+        expected = a.data + b.data
         for i in range(10):
-            expected = a + expected
+            expected = a.data + expected
         np.testing.assert_allclose(c.data, expected)

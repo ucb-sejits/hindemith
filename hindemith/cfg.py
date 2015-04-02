@@ -19,6 +19,11 @@ class Analyzer(ast.NodeVisitor):
         for arg in node.args:
             self.visit(arg)
 
+    def visit_Assign(self, node):
+        # Need to visit loads before store
+        self.visit(node.value)
+        self.visit(node.targets[0])
+
     def visit_Name(self, node):
         if isinstance(node.ctx, ast.Load):
             if node.id not in self.kill:
@@ -34,46 +39,86 @@ class Analyzer(ast.NodeVisitor):
             self.return_values.add(node.value.id)
 
 
-def perform_liveness_analysis(basic_blocks):
-    for index, block in enumerate(reversed(basic_blocks)):
-        analyzer = Analyzer()
-        for statement in block:
-            if isinstance(statement, ast.AST):
-                analyzer.visit(statement)
-            else:
-                analyzer.visit(statement.statement)
-        if index == 0:
-            block.live_outs = set()
+def perform_liveness_analysis(basic_block, live_outs=None):
+    if basic_block.next_block is not None:
+        perform_liveness_analysis(basic_block.next_block)
+        curr_block = basic_block.next_block
+        while curr_block is not None:
+            basic_block.live_outs = basic_block.live_outs.union(
+                curr_block.live_ins)
+            curr_block = curr_block.next_block
+    elif live_outs is not None:
+        basic_block.live_outs = live_outs
+    else:
+        basic_block.live_outs = set()
+    if isinstance(basic_block, LoopBlock):
+        perform_liveness_analysis(basic_block.next_block)
+        perform_liveness_analysis(basic_block.start_block,
+                                  basic_block.live_outs)
+        basic_block.live_ins = basic_block.start_block.live_ins
+        end_block = basic_block.start_block
+        while end_block.next_block is not None:
+            end_block = end_block.next_block
+        basic_block.live_outs = end_block.live_outs
+        return
+    analyzer = Analyzer()
+    for statement in basic_block:
+        if isinstance(statement, ast.AST):
+            analyzer.visit(statement)
         else:
-            block.live_outs = set().union(
-                *(b.live_ins for b in basic_blocks[-index:]))
-        block.live_outs |= analyzer.return_values
-        block.live_ins = analyzer.gen.union(
-            block.live_outs.difference(analyzer.kill))
+            analyzer.visit(statement.statement)
+    basic_block.live_outs |= analyzer.return_values
+    basic_block.live_ins = analyzer.gen.union(
+        basic_block.live_outs.difference(analyzer.kill))
 
 
-class CFGBuilder(ast.NodeTransformer):
+class LoopBlock(object):
+    def __init__(self, ast_node, start_block):
+        self.ast_node = ast_node
+        self.start_block = start_block
+        self.next_block = None
+        self.live_ins = set()
+        self.live_outs = set()
+
+    def dump(self, tab):
+        output = tab + "LoopBlock\n"
+        output += self.start_block.dump(tab + "  ")
+        if self.next_block is not None:
+            output += self.next_block.dump(tab)
+        return output
+
+
+class CFGBuilder(ast.NodeVisitor):
     def __init__(self):
         self.funcs = []
         self.tmp = -1
         self.curr_target = None
+        self.curr_basic_block = None
 
     def _gen_tmp(self):
         self.tmp += 1
         return "_t{}".format(self.tmp)
 
     def visit_FunctionDef(self, node):
-        new_body = []
+        self.start_block = BasicBlock([])
+        self.curr_basic_block = self.start_block
         for statement in node.body:
-            result = self.visit(statement)
-            if isinstance(result, list):
-                new_body.extend(result)
-            else:
-                new_body.append(result)
-        node.body = [BasicBlock(new_body)]
-        return node
+            self.visit(statement)
+
+    def visit_For(self, node):
+        start_block = BasicBlock([])
+        loop = LoopBlock(node, start_block)
+        self.curr_basic_block.next_block = loop
+        self.curr_basic_block = start_block
+        for statement in node.body:
+            self.visit(statement)
+        after_block = BasicBlock([])
+        loop.next_block = after_block
+        self.curr_basic_block = after_block
 
     def visit_Call(self, node):
+        if node.func.id == 'range':
+            return node
         args = []
         for arg in node.args:
             if isinstance(arg, ast.Name):
@@ -81,42 +126,39 @@ class CFGBuilder(ast.NodeTransformer):
             else:
                 raise NotImplementedError()
         node.args = args
-        return [ast.Assign([ast.Name(self.curr_target, ast.Store())], node)]
+        self.curr_basic_block.add_statement(
+            ast.Assign([ast.Name(self.curr_target, ast.Store())], node))
 
     def visit_BinOp(self, node):
         operands = ()
-        ret = []
         for operand in (node.right, node.left):
             if isinstance(operand, ast.Name):
                 operands += (operand, )
             else:
                 old_target = self.curr_target
                 self.curr_target = self._gen_tmp()
-                ret.extend(self.visit(operand))
+                self.visit(operand)
                 operands += (ast.Name(self.curr_target, ast.Load()), )
                 self.curr_target = old_target
         node.right = operands[0]
         node.left = operands[1]
-        ret.append(ast.Assign([ast.Name(self.curr_target, ast.Store())], node))
-        return ret
+        self.curr_basic_block.add_statement(
+            ast.Assign([ast.Name(self.curr_target, ast.Store())], node))
 
     def visit_Assign(self, node):
         old_target = self.curr_target
         self.curr_target = node.targets[0].id
-        ret = self.visit(node.value)
+        self.visit(node.value)
         self.curr_target = old_target
-        return ret
+        # self.curr_basic_block.add_statement(ret)
 
     def visit_Return(self, node):
-        if isinstance(node.value, ast.Name):
-            return node
-        elif isinstance(node.value, ast.Tuple):
-            raise NotImplementedError()
-        tmp = self._gen_tmp()
-        self.curr_target = tmp
-        value = self.visit(node.value)
-        node.value = ast.Name(tmp, ast.Load())
-        return value + [node]
+        if not isinstance(node.value, ast.Name):
+            tmp = self._gen_tmp()
+            self.curr_target = tmp
+            self.visit(node.value)
+            node.value = ast.Name(tmp, ast.Load())
+        self.curr_basic_block.add_statement(node)
 
 
 op2str = {
@@ -147,6 +189,7 @@ class BasicBlock(object):
         self.statements = statements
         self.live_ins = set()
         self.live_outs = set()
+        self.next_block = None
 
     def add_statement(self, statement):
         self.statements.append(statement)
@@ -158,6 +201,7 @@ class BasicBlock(object):
         return len(self.statements)
 
     def dump(self, tab):
+        orig_tab = tab
         output = tab + self.__class__.__name__ + "\n"
         tab += "  "
         output += tab + "live ins: {}\n".format(", ".join(self.live_ins))
@@ -165,6 +209,8 @@ class BasicBlock(object):
         output += tab + "body:\n"
         tab += "  "
         for expr in self.statements:
+            if not isinstance(expr, ast.AST):
+                expr = expr.statement
             if isinstance(expr, ast.Assign):
                 if isinstance(expr.targets[0], ast.Tuple):
                     output += tab + "{} = {}\n".format(
@@ -176,6 +222,8 @@ class BasicBlock(object):
                         expr.targets[0].id, dump_op(expr.value))
             elif isinstance(expr, ast.Return):
                 output += tab + "return {}\n".format(expr.value.id)
+        if self.next_block is not None:
+            output += self.next_block.dump(orig_tab)
         return output
 
 
@@ -197,12 +245,9 @@ class ComposableBasicBlock(BasicBlock):
                         body.insert(0, decl)
             global_size = statement.get_global_size()
             body.append(statement.compile())
+        param_set = self.live_outs.union(self.live_ins)
         params = []
-        for arg in self.live_ins:
-            ptr = ct.POINTER(get_c_type_from_numpy_dtype(
-                np.dtype(env[arg].dtype)))()
-            params.append(C.SymbolRef(arg, ptr, _global=True))
-        for arg in self.live_outs:
+        for arg in param_set:
             ptr = ct.POINTER(get_c_type_from_numpy_dtype(
                 np.dtype(env[arg].dtype)))()
             params.append(C.SymbolRef(arg, ptr, _global=True))
@@ -219,10 +264,10 @@ class ComposableBasicBlock(BasicBlock):
             types = []
             bufs = []
             outs = []
-            for arg in args:
-                types.append(cl.cl_mem)
-                bufs.append(arg.ocl_buf)
-            for arg in self.live_outs:
+            # for arg in self.live_ins:
+            #     types.append(cl.cl_mem)
+            #     bufs.append(arg.ocl_buf)
+            for arg in self.live_outs.union(self.live_ins):
                 types.append(cl.cl_mem)
                 outs.append(env[arg].ocl_buf)
                 env[arg].host_dirty = True
@@ -232,7 +277,7 @@ class ComposableBasicBlock(BasicBlock):
 
             kern = program[kernel.name.name]
             kern.argtypes = types
-            evt = kern(*(bufs + outs)).on(queue, global_size)
+            kern(*(bufs + outs)).on(queue, global_size)
             rets = ()
             for arg in self.live_outs:
                 rets += (env[arg], )
@@ -257,18 +302,24 @@ class ControlFlowGraph(object):
         """
         self.name = func.name
         self.params = func.args
-        self.graph = CFGBuilder().visit(func)
+        builder = CFGBuilder()
+        builder.visit(func)
+        self.start_block = builder.start_block
         self.func_id = -1
 
     def __str__(self):
-        output = ""
-        tab = ""
-        for block in self.graph.body:
-            if isinstance(block, BasicBlock):
-                output += block.dump(tab)
+        return self.start_block.dump("")
+
+    def compile_blocks(self, block):
+        body = []
+        while block is not None:
+            if isinstance(block, LoopBlock):
+                body.append(block.ast_node)
+                block.ast_node.body = self.compile_blocks(block.start_block)
             else:
-                raise NotImplementedError(block)
-        return output
+                body.extend(block.statements)
+            block = block.next_block
+        return body
 
     def compile_to_fn(self, env):
         # TODO: Should we create a new module/funcdef or just reuse the one
@@ -276,12 +327,12 @@ class ControlFlowGraph(object):
         if sys.version_info > (3, 0):
             tree = ast.Module(
                 [ast.FunctionDef(self.name, self.params,
-                                 self.graph.body[0].statements, [], None)]
+                                 self.compiled, [], None)]
             )
         else:
             tree = ast.Module(
                 [ast.FunctionDef(self.name, self.params,
-                                 self.graph.body[0].statements, [])]
+                                 self.compiled, [])]
             )
         ast.fix_missing_locations(tree)
         exec(compile(tree, filename="<nofile>", mode="exec"), env, env)
@@ -293,36 +344,56 @@ class ControlFlowGraph(object):
                 return op
         return None
 
-    def build_composable_blocks(self, env):
-        blocks = []
-        for block in self.graph.body:
+    def build_composable_blocks(self, env, block):
+        if block is None or not isinstance(block, LoopBlock) and \
+           len(block.statements) == 0:
+            return
+        elif isinstance(block, LoopBlock):
+            block.start_block = self.build_composable_blocks(
+                env, block.start_block)
+            new_block = block
+            start_block = new_block
+        else:
+            new_block = None
+            start_block = None
             for statement in block:
                 op = self.find_matching_op(operations, statement, env)
                 if op is not None:
-                    if len(blocks) < 1 or \
-                            not isinstance(blocks[-1],
-                                           ComposableBasicBlock):
-                        blocks.append(ComposableBasicBlock([]))
+                    if new_block is None:
+                        new_block = ComposableBasicBlock([])
+                        start_block = new_block
+                    elif not isinstance(new_block, ComposableBasicBlock):
+                        new_block.next_block = ComposableBasicBlock([])
+                        new_block = new_block.next_block
                     statement = op(statement, env)
                 else:
-                    if len(blocks) < 1 or \
-                            not isinstance(blocks[-1],
-                                           NonComposableBasicBlock):
-                        blocks.append(NonComposableBasicBlock([]))
-                blocks[-1].add_statement(statement)
-        self.graph.body = blocks
+                    if new_block is None:
+                        new_block = NonComposableBasicBlock([])
+                        start_block = new_block
+                    elif not isinstance(new_block, NonComposableBasicBlock):
+                        new_block.next_block = NonComposableBasicBlock([])
+                        new_block = new_block.next_block
+                new_block.add_statement(statement)
+        new_block.next_block = self.build_composable_blocks(
+            env, block.next_block)
+        return start_block
 
-        perform_liveness_analysis(self.graph.body)
+    def perform_liveness_analysis(self):
+        perform_liveness_analysis(self.start_block)
 
     def gen_func_name(self):
         self.func_id += 1
         return "_f{}".format(self.func_id)
 
-    def compile_composable_blocks(self, env):
-        blocks = []
-        for block in self.graph.body:
+    def compile_composable_blocks(self, env, block):
+        statements = []
+        while block is not None:
             if isinstance(block, NonComposableBasicBlock):
-                blocks.extend(block.statements)
+                statements.extend(block.statements)
+            elif isinstance(block, LoopBlock):
+                statements.append(block.ast_node)
+                block.ast_node.body = self.compile_composable_blocks(
+                    env, block.start_block)
             else:
                 func_name = self.gen_func_name()
                 env[func_name] = block.compile(func_name, env)
@@ -334,12 +405,12 @@ class ControlFlowGraph(object):
                 else:
                     target = [ast.Name(next(iter(block.live_outs)),
                                        ast.Store())]
-                blocks.append(ast.Assign(
+                statements.append(ast.Assign(
                     target,
                     ast.Call(ast.Name(func_name, ast.Load()),
                              [ast.Name(source, ast.Load()) for source in
                               block.live_ins],
                              [], None, None)
                 ))
-                ast.fix_missing_locations(blocks[-1])
-        self.graph.body = [BasicBlock(blocks)]
+            block = block.next_block
+        return statements
