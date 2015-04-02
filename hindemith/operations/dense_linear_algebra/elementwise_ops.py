@@ -1,5 +1,5 @@
 from hindemith.operations.core import ElementLevel, register_operation
-from hindemith.types import hmarray
+from hindemith.types.vector import Vector
 import ast
 
 
@@ -14,10 +14,13 @@ class ElementwiseOperation(ElementLevel):
         self.operand2_name = statement.value.right.id
         self.operand2 = symbol_table[self.operand2_name]
 
-        symbol_table[statement.targets[0].id] = hmarray(self.operand1.shape,
-                                                        self.operand1.dtype)
+        symbol_table[statement.targets[0].id] = Vector(self.operand1.size,
+                                                       self.operand1.dtype)
         self.target_name = statement.targets[0].id
         self.target = symbol_table[self.target_name]
+
+    def get_global_size(self):
+        return self.operand1.shape
 
     def compile(self):
         return "{} = {} {} {};".format(
@@ -38,9 +41,9 @@ class ElementwiseOperation(ElementLevel):
                 isinstance(node.right, ast.Name)):
             return (
                 node.left.id in symbol_table and
-                isinstance(symbol_table[node.left.id], hmarray) and
+                isinstance(symbol_table[node.left.id], Vector) and
                 node.right.id in symbol_table and
-                isinstance(symbol_table[node.right.id], hmarray)
+                isinstance(symbol_table[node.right.id], Vector)
             )
         return False
 

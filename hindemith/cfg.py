@@ -1,13 +1,11 @@
 import ast
 from hindemith.operations.core import operations
+from hindemith.cl import context, queue
 import ctree.c.nodes as C
 from ctree.types import get_c_type_from_numpy_dtype
 import numpy as np
 import ctypes as ct
 import pycl as cl
-
-context = cl.clCreateContext()
-queue = cl.clCreateCommandQueue(context)
 
 
 class Analyzer(ast.NodeVisitor):
@@ -188,13 +186,16 @@ class ComposableBasicBlock(BasicBlock):
         body = []
         for statement in self.statements:
             op = self.find_matching_op(statement, env)
-            body.append(op(statement, env).compile())
+            op = op(statement, env)
+            body.append(op.compile())
         params = []
         for arg in self.live_ins:
-            ptr = ct.POINTER(get_c_type_from_numpy_dtype(env[arg].dtype))()
+            ptr = ct.POINTER(get_c_type_from_numpy_dtype(
+                np.dtype(env[arg].dtype)))()
             params.append(C.SymbolRef(arg, ptr, _global=True))
         for arg in self.live_outs:
-            ptr = ct.POINTER(get_c_type_from_numpy_dtype(env[arg].dtype))()
+            ptr = ct.POINTER(get_c_type_from_numpy_dtype(
+                np.dtype(env[arg].dtype)))()
             params.append(C.SymbolRef(arg, ptr, _global=True))
         kernel = C.FunctionDecl(
             None,
@@ -211,25 +212,21 @@ class ComposableBasicBlock(BasicBlock):
             outs = []
             for arg in args:
                 types.append(cl.cl_mem)
-                buf, evt = cl.buffer_from_ndarray(queue, arg)
-                bufs.append(buf)
+                bufs.append(arg.ocl_buf)
             for arg in self.live_outs:
                 types.append(cl.cl_mem)
-                buf, evt = cl.buffer_from_ndarray(queue, env[arg])
-                outs.append(buf)
+                outs.append(env[arg].ocl_buf)
+                env[arg].host_dirty = True
             program = cl.clCreateProgramWithSource(
                 context, kernel.codegen()
             ).build()
 
             kern = program[kernel.name.name]
             kern.argtypes = types
-            print(args[0].shape)
-            run_evt = kern(*(bufs + outs)).on(queue, np.prod(args[0].shape))
+            evt = kern(*(bufs + outs)).on(queue, op.get_global_size())
             rets = ()
-            for out in outs:
-                buf, evt = cl.buffer_to_ndarray(queue, out, like=args[0],
-                                                wait_for=run_evt)
-                rets += (buf, )
+            for arg in self.live_outs:
+                rets += (env[arg], )
             if len(rets) == 1:
                 return rets[0]
             return rets
@@ -272,11 +269,6 @@ class ControlFlowGraph(object):
                              self.graph.body[0].statements, [])]
         )
         ast.fix_missing_locations(tree)
-        print(ast.dump(tree.body[0].body[0]))
-        # print(ast.dump(tree))
-        # for node in ast.walk(tree):
-        #     print(node)
-        #     ast.increment_lineno(node)
         exec(compile(tree, filename="<nofile>", mode="exec"), env, env)
         return env[self.name]
 
