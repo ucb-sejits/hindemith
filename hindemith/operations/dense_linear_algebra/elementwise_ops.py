@@ -16,8 +16,8 @@ class ElementwiseOperation(ElementLevel):
         self.operand2_name = statement.value.right.id
         self.operand2 = symbol_table[self.operand2_name]
         assert (
-            isinstance(self.operand1, (Vector, Matrix)) and
-            isinstance(self.operand2, (Vector, Matrix)) and
+            type(self.operand1) in {Vector, Matrix} and
+            type(self.operand2) in {Vector, Matrix} and
             self.operand1.__class__ is self.operand2.__class__
         )
 
@@ -54,11 +54,11 @@ class ElementwiseOperation(ElementLevel):
                 isinstance(node.right, ast.Name)):
             return (
                 node.left.id in symbol_table and
-                isinstance(symbol_table[node.left.id], (Vector, Matrix)) and
+                type(symbol_table[node.left.id]) in {Vector, Matrix} and
                 node.right.id in symbol_table and
-                isinstance(symbol_table[node.right.id], (Vector, Matrix)) and
-                symbol_table[node.left.id].__class__ is
-                symbol_table[node.right.id].__class__
+                type(symbol_table[node.right.id]) in {Vector, Matrix} and
+                type(symbol_table[node.left.id]) is
+                type(symbol_table[node.right.id])
             )
         return False
 

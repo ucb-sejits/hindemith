@@ -244,7 +244,6 @@ class ComposableBasicBlock(BasicBlock):
                     if decl is not None:
                         body.insert(0, decl)
             global_size = statement.get_global_size()
-            print(global_size)
             body.append(statement.compile())
         param_set = self.live_outs.union(self.live_ins)
         params = []
