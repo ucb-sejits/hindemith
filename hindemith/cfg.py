@@ -302,6 +302,7 @@ class ControlFlowGraph(object):
         """
         self.name = func.name
         self.params = func.args
+        self.compiled = None
         builder = CFGBuilder()
         builder.visit(func)
         self.start_block = builder.start_block

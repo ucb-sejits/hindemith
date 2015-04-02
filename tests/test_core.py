@@ -6,7 +6,7 @@ from hindemith.core import hm
 
 class TestCore(unittest.TestCase):
     def _check(self, actual, expected):
-        np.testing.assert_allclose(actual, expected)
+        np.testing.assert_array_almost_equal(actual, expected, decimal=2)
 
     def test_add(self):
         @hm
@@ -86,3 +86,23 @@ class TestCore(unittest.TestCase):
         for i in range(10):
             expected = a.data + expected
         self._check(c.data, expected)
+
+    def test_multiple_calls(self):
+        @hm
+        def fn(a, b):
+            c = a + b
+            for i in range(10):
+                c = a + c
+            return c
+
+        for i in range(3):
+            a = Matrix.rand((512, 512), np.float32)
+            b = Matrix.rand((512, 512), np.float32)
+            c = Matrix.rand((512, 512), np.float32)
+
+            c = fn(a, b)
+            c.sync()
+            expected = a.data + b.data
+            for i in range(10):
+                expected = a.data + expected
+            self._check(c.data, expected)

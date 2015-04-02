@@ -1,0 +1,1 @@
+-e git+git://github.com/lebedov/scikits.cuda#egg=scikits.cuda
