@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 from hindemith.types.vector import Vector
 from hindemith.core import hm
+from ctree.util import Timer
 
 
 class TestCore(unittest.TestCase):
@@ -37,7 +38,7 @@ class TestCore(unittest.TestCase):
         @hm
         def fn(a, b, c):
             d = a + b
-            return a + b + c + d
+            return a + b * c + d
 
         a = Vector.rand(512, np.float32)
         b = Vector.rand(512, np.float32)
@@ -46,5 +47,5 @@ class TestCore(unittest.TestCase):
         d = fn(a, b, c)
         d.sync()
         d_py = a.data + b.data
-        py_result = a.data + b.data + c.data + d_py
+        py_result = a.data + b.data * c.data + d_py
         np.testing.assert_allclose(d.data, py_result)
