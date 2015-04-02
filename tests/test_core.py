@@ -2,7 +2,6 @@ import unittest
 import numpy as np
 from hindemith.types.vector import Vector
 from hindemith.core import hm
-from ctree.util import Timer
 
 
 class TestCore(unittest.TestCase):
@@ -49,3 +48,23 @@ class TestCore(unittest.TestCase):
         d_py = a.data + b.data
         py_result = a.data + b.data * c.data + d_py
         np.testing.assert_allclose(d.data, py_result)
+
+    @unittest.skip("")
+    def test_for(self):
+        @hm
+        def fn(a, b):
+            c = a + b
+            for i in range(10):
+                c = a + c
+            return c
+
+        a = Vector.rand(512, np.float32)
+        b = Vector.rand(512, np.float32)
+        c = Vector.rand(512, np.float32)
+
+        c = fn(a, b)
+        c.sync()
+        expected = a + b
+        for i in range(10):
+            expected = a + expected
+        np.testing.assert_allclose(c.data, expected)

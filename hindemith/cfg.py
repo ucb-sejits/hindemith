@@ -6,6 +6,7 @@ from ctree.types import get_c_type_from_numpy_dtype
 import numpy as np
 import ctypes as ct
 import pycl as cl
+import sys
 
 
 class Analyzer(ast.NodeVisitor):
@@ -272,10 +273,16 @@ class ControlFlowGraph(object):
     def compile_to_fn(self, env):
         # TODO: Should we create a new module/funcdef or just reuse the one
         # passed in
-        tree = ast.Module(
-            [ast.FunctionDef(self.name, self.params,
-                             self.graph.body[0].statements, [])]
-        )
+        if sys.version_info > (3, 0):
+            tree = ast.Module(
+                [ast.FunctionDef(self.name, self.params,
+                                 self.graph.body[0].statements, [], None)]
+            )
+        else:
+            tree = ast.Module(
+                [ast.FunctionDef(self.name, self.params,
+                                 self.graph.body[0].statements, [])]
+            )
         ast.fix_missing_locations(tree)
         exec(compile(tree, filename="<nofile>", mode="exec"), env, env)
         return env[self.name]

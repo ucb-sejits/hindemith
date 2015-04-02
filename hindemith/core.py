@@ -3,6 +3,7 @@ from ctree.frontend import get_ast
 import inspect
 
 from hindemith.cfg import ControlFlowGraph
+import sys
 
 
 def hm(fn):
@@ -19,7 +20,10 @@ def hm(fn):
         # Make mutable copy of base symbol table
         env = dict(symbol_table)
         for index, arg in enumerate(tree.body[0].args.args):
-            env[arg.id] = args[index]
+            if sys.version_info < (3, 0):
+                env[arg.id] = args[index]
+            else:
+                env[arg.arg] = args[index]
         cfg.build_composable_blocks(env)
         print(cfg)
         cfg.compile_composable_blocks(env)
