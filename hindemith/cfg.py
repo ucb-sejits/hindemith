@@ -132,7 +132,7 @@ class CFGBuilder(ast.NodeVisitor):
     def visit_BinOp(self, node):
         operands = ()
         for operand in (node.right, node.left):
-            if isinstance(operand, ast.Name):
+            if isinstance(operand, (ast.Name, ast.Num)):
                 operands += (operand, )
             else:
                 old_target = self.curr_target
@@ -174,8 +174,15 @@ def dump_op(op):
         return "{}({})".format(op.func.id, ", ".join([arg.id for arg in
                                                       op.args]))
     elif isinstance(op, ast.BinOp):
-        return "{} {} {}".format(op.left.id, op2str[op.op.__class__],
-                                 op.right.id)
+        if isinstance(op.left, ast.Name):
+            left = op.left.id
+        else:
+            left = op.left.n
+        if isinstance(op.right, ast.Name):
+            right = op.right.id
+        else:
+            right = op.right.n
+        return "{} {} {}".format(left, op2str[op.op.__class__], right)
     else:
         raise NotImplementedError(op)
 

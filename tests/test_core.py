@@ -124,5 +124,23 @@ class TestCore(unittest.TestCase):
         expected = a.data + b.data
         for i in range(10):
             expected = 4.6 / a.data + expected - 4.6
-        print(c.data)
+        self._check(c.data, expected)
+
+    def test_scalars_inline(self):
+        @hm
+        def fn(a, b):
+            c = a + b
+            for i in range(10):
+                c = 3.2 / a + c - 1.8
+            return c
+
+        a = Matrix.rand((512, 512), np.float32)
+        b = Matrix.rand((512, 512), np.float32)
+        c = Matrix.rand((512, 512), np.float32)
+
+        c = fn(a, b)
+        c.sync()
+        expected = a.data + b.data
+        for i in range(10):
+            expected = 3.2 / a.data + expected - 1.8
         self._check(c.data, expected)
