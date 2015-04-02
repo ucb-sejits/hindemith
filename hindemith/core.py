@@ -27,6 +27,7 @@ def hm(fn):
             # Make mutable copy of base symbol table
             cfg.start_block = cfg.build_composable_blocks(env, cfg.start_block)
             cfg.perform_liveness_analysis()
+            print(cfg)
             cfg.compiled = cfg.compile_composable_blocks(env, cfg.start_block)
         fn = cfg.compile_to_fn(env)
         return fn(*args, **kwargs)

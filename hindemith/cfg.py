@@ -44,8 +44,7 @@ def perform_liveness_analysis(basic_block, live_outs=None):
         perform_liveness_analysis(basic_block.next_block)
         curr_block = basic_block.next_block
         while curr_block is not None:
-            basic_block.live_outs = basic_block.live_outs.union(
-                curr_block.live_ins)
+            basic_block.live_outs = basic_block.live_outs | curr_block.live_ins
             curr_block = curr_block.next_block
     elif live_outs is not None:
         basic_block.live_outs = live_outs
@@ -66,10 +65,11 @@ def perform_liveness_analysis(basic_block, live_outs=None):
         if isinstance(statement, ast.AST):
             analyzer.visit(statement)
         else:
-            analyzer.visit(statement.statement)
+            analyzer.gen |= set(statement.sources) - analyzer.kill
+            analyzer.kill |= set(statement.sinks)
     basic_block.live_outs |= analyzer.return_values
-    basic_block.live_ins = analyzer.gen.union(
-        basic_block.live_outs.difference(analyzer.kill))
+    basic_block.live_ins = analyzer.gen | (basic_block.live_outs -
+                                           analyzer.kill)
 
 
 class LoopBlock(object):
@@ -239,13 +239,13 @@ class ComposableBasicBlock(BasicBlock):
         global_size = None
         for statement in self.statements:
             for elem in statement.sources + statement.sinks:
-                if elem not in self.live_ins.union(self.live_outs):
+                if elem not in (self.live_ins | self.live_outs):
                     decl = env[elem].promote_to_register(elem)
                     if decl is not None:
                         body.insert(0, decl)
             global_size = statement.get_global_size()
             body.append(statement.compile())
-        param_set = self.live_outs.union(self.live_ins)
+        param_set = self.live_outs | self.live_ins
         params = []
         for arg in param_set:
             ptr = ct.POINTER(get_c_type_from_numpy_dtype(
@@ -267,7 +267,7 @@ class ComposableBasicBlock(BasicBlock):
             # for arg in self.live_ins:
             #     types.append(cl.cl_mem)
             #     bufs.append(arg.ocl_buf)
-            for arg in self.live_outs.union(self.live_ins):
+            for arg in self.live_outs | self.live_ins:
                 types.append(cl.cl_mem)
                 outs.append(env[arg].ocl_buf)
                 env[arg].host_dirty = True

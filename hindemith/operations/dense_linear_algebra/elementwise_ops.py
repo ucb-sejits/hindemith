@@ -54,9 +54,9 @@ class ElementwiseOperation(ElementLevel):
                 isinstance(node.right, ast.Name)):
             return (
                 node.left.id in symbol_table and
-                type(symbol_table[node.left.id]) in {Vector, Matrix} and
+                isinstance(symbol_table[node.left.id], (Vector, Matrix)) and
                 node.right.id in symbol_table and
-                type(symbol_table[node.right.id]) in {Vector, Matrix} and
+                isinstance(symbol_table[node.right.id], (Vector, Matrix)) and
                 type(symbol_table[node.left.id]) is
                 type(symbol_table[node.right.id])
             )
