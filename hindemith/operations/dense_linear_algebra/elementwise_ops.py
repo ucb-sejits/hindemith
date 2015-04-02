@@ -8,6 +8,7 @@ class ElementwiseOperation(ElementLevel):
 
     def __init__(self, statement, symbol_table):
         self.symbol_table = symbol_table
+        self.statement = statement
 
         self.operand1_name = statement.value.left.id
         self.operand1 = symbol_table[self.operand1_name]
@@ -18,6 +19,8 @@ class ElementwiseOperation(ElementLevel):
                                                        self.operand1.dtype)
         self.target_name = statement.targets[0].id
         self.target = symbol_table[self.target_name]
+        self.sources = [self.operand1_name, self.operand2_name]
+        self.sinks = [self.target_name]
 
     def get_global_size(self):
         return self.operand1.shape

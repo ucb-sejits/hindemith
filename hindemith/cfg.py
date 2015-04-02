@@ -37,7 +37,10 @@ def perform_liveness_analysis(basic_blocks):
     for index, block in enumerate(reversed(basic_blocks)):
         analyzer = Analyzer()
         for statement in block:
-            analyzer.visit(statement)
+            if isinstance(statement, ast.AST):
+                analyzer.visit(statement)
+            else:
+                analyzer.visit(statement.statement)
         if index == 0:
             block.live_outs = set()
         else:
@@ -184,10 +187,15 @@ class ComposableBasicBlock(BasicBlock):
 
     def compile(self, name, env):
         body = []
+        global_size = None
         for statement in self.statements:
-            op = self.find_matching_op(statement, env)
-            op = op(statement, env)
-            body.append(op.compile())
+            for elem in statement.sources + statement.sinks:
+                if elem not in self.live_ins.union(self.live_outs):
+                    decl = env[elem].promote_to_register(elem)
+                    if decl is not None:
+                        body.insert(0, decl)
+            global_size = statement.get_global_size()
+            body.append(statement.compile())
         params = []
         for arg in self.live_ins:
             ptr = ct.POINTER(get_c_type_from_numpy_dtype(
@@ -223,7 +231,7 @@ class ComposableBasicBlock(BasicBlock):
 
             kern = program[kernel.name.name]
             kern.argtypes = types
-            evt = kern(*(bufs + outs)).on(queue, op.get_global_size())
+            evt = kern(*(bufs + outs)).on(queue, global_size)
             rets = ()
             for arg in self.live_outs:
                 rets += (env[arg], )
@@ -288,6 +296,7 @@ class ControlFlowGraph(object):
                             not isinstance(blocks[-1],
                                            ComposableBasicBlock):
                         blocks.append(ComposableBasicBlock([]))
+                    statement = op(statement, env)
                 else:
                     if len(blocks) < 1 or \
                             not isinstance(blocks[-1],
