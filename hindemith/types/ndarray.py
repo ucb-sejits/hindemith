@@ -50,3 +50,7 @@ class NDArray(np.ndarray):
     @staticmethod
     def rand(shape, dtype):
         return np.random.rand(*shape).astype(dtype).view(NDArray)
+
+    @staticmethod
+    def like(ndarr):
+        return NDArray(ndarr.shape, ndarr.dtype)
