@@ -114,13 +114,6 @@ class CFGBuilder(ast.NodeVisitor):
     def visit_Call(self, node):
         if node.func.id == 'range':
             return node
-        args = []
-        for arg in node.args:
-            if isinstance(arg, ast.Name):
-                args.append(arg)
-            else:
-                raise NotImplementedError()
-        node.args = args
         self.curr_basic_block.add_statement(
             ast.Assign([ast.Name(self.curr_target, ast.Store())], node))
 

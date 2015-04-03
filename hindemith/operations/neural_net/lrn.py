@@ -12,11 +12,8 @@ class Lrn(DeviceLevel):
         self.statement = statement
         self.operand_name = statement.value.args[0].id
         self.operand = self.symbol_table[self.operand_name]
-        self.sources = [self.operand_name]
-        name, self.scale = NDArray.unique(self.operand.shape,
-                                          self.operand.dtype)
-        symbol_table[name] = self.scale
-        self.scale_name = name
+        self.scale_name = statement.value.args[1].id
+        self.sources = [self.operand_name, self.scale_name]
         for keyword in statement.value.keywords:
             if keyword.arg in {'alpha', 'beta', 'local_size', 'k'}:
                 if isinstance(keyword.value, ast.Name):
@@ -28,7 +25,6 @@ class Lrn(DeviceLevel):
                 raise Exception("Unsupport keyword arg to Lrn", keyword.arg)
 
         self.target_name = statement.targets[0].id
-        symbol_table[self.target_name] = NDArray.like(self.operand)
         self.target = symbol_table[self.target_name]
         self.sinks = [self.target_name]
 

@@ -37,12 +37,16 @@ class TestRelu(unittest.TestCase):
 
     def test_simple(self):
         a = NDArray.rand((3, 16, 27, 27), np.float32)
+        scale = NDArray((3, 16, 27, 27), np.float32)
+        actual = NDArray((3, 16, 27, 27), np.float32)
 
         @hm
-        def fn(a):
-            return Lrn(a, alpha=alpha, beta=beta, local_size=local_size, k=1)
+        def fn(bottom, scale, top):
+            top = Lrn(bottom, scale, alpha=alpha, beta=beta,
+                      local_size=local_size, k=1)
+            return top
 
-        actual = fn(a)
+        fn(a, scale, actual)
         actual.sync()
         expected = reference_lrn(a)
         self._check(actual, expected)
