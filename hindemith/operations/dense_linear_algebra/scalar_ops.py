@@ -50,7 +50,7 @@ class ScalarOperation(ElementLevel):
             )
         else:
             op1 = str(self.operand1)
-            if type(self.operand2) == float:
+            if type(self.operand1) == float:
                 op1 += "f"
             return "{} = {} {} {};".format(
                 self.target.get_element(self.target_name),
