@@ -1,5 +1,5 @@
 from hindemith.operations.core import ElementLevel, register_operation
-from hindemith.types import Vector, Matrix
+from hindemith.types import NDArray
 import ast
 import numpy as np
 
@@ -19,34 +19,26 @@ class ScalarOperation(ElementLevel):
         else:
             self.operand2_name = statement.value.right.id
             self.operand2 = symbol_table[self.operand2_name]
-        if isinstance(self.operand1, Vector):
-            symbol_table[statement.targets[0].id] = Vector(self.operand1.size,
-                                                           self.operand1.dtype)
+        if isinstance(self.operand1, NDArray):
+            symbol_table[statement.targets[0].id] = NDArray(
+                self.operand1.shape, self.operand1.dtype)
             self.sources = [self.operand1_name]
-        elif isinstance(self.operand1, Matrix):
-            symbol_table[statement.targets[0].id] = Matrix(self.operand1.shape,
-                                                           self.operand1.dtype)
-            self.sources = [self.operand1_name]
-        elif isinstance(self.operand2, Vector):
-            symbol_table[statement.targets[0].id] = Vector(self.operand2.size,
-                                                           self.operand2.dtype)
-            self.sources = [self.operand2_name]
-        elif isinstance(self.operand2, Matrix):
-            symbol_table[statement.targets[0].id] = Matrix(self.operand2.shape,
-                                                           self.operand2.dtype)
+        else:
+            symbol_table[statement.targets[0].id] = NDArray(
+                self.operand2.shape, self.operand2.dtype)
             self.sources = [self.operand2_name]
         self.target_name = statement.targets[0].id
         self.target = symbol_table[self.target_name]
         self.sinks = [self.target_name]
 
     def get_global_size(self):
-        if isinstance(self.operand1, (Vector, Matrix)):
+        if isinstance(self.operand1, NDArray):
             return (np.prod(self.operand1.shape), )
         else:
             return (np.prod(self.operand2.shape), )
 
     def compile(self):
-        if isinstance(self.operand1, (Vector, Matrix)):
+        if isinstance(self.operand1, NDArray):
             return "{} = {} {} {};".format(
                 self.target.get_element(self.target_name),
                 self.operand1.get_element(self.operand1_name),
@@ -74,21 +66,18 @@ class ScalarOperation(ElementLevel):
                     node.right.id in symbol_table):
                 return (
                     isinstance(symbol_table[node.left.id], (int, float)) and
-                    isinstance(symbol_table[node.right.id],
-                               (Vector, Matrix)) or
-                    isinstance(symbol_table[node.left.id],
-                               (Vector, Matrix)) and
+                    isinstance(symbol_table[node.right.id], NDArray) or
+                    isinstance(symbol_table[node.left.id], NDArray) and
                     isinstance(symbol_table[node.right.id], (int, float))
                 )
             elif (isinstance(node.left, ast.Name) and
                   node.left.id in symbol_table and
                   isinstance(node.right, ast.Num)):
-                return isinstance(symbol_table[node.left.id], (Vector, Matrix))
+                return isinstance(symbol_table[node.left.id], NDArray)
             elif (isinstance(node.right, ast.Name) and
                   node.right.id in symbol_table and
                   isinstance(node.left, ast.Num)):
-                return isinstance(symbol_table[node.right.id],
-                                  (Vector, Matrix))
+                return isinstance(symbol_table[node.right.id], NDArray)
         return False
 
 

@@ -1,37 +1,37 @@
 import unittest
 import numpy as np
-from hindemith.types import Vector, Matrix
+from hindemith.types import NDArray
 from hindemith.core import hm
 
 
 class TestCore(unittest.TestCase):
     def _check(self, actual, expected):
-        np.testing.assert_array_almost_equal(actual, expected, decimal=2)
+        np.testing.assert_array_almost_equal(actual, expected, decimal=1)
 
     def test_add(self):
         @hm
         def fn(a, b):
             return a + b
 
-        a = Vector.rand(512, np.float32)
-        b = Vector.rand(512, np.float32)
+        a = NDArray.rand((512, ), np.float32)
+        b = NDArray.rand((512, ), np.float32)
 
         c = fn(a, b)
         c.sync()
-        self._check(c.data, a.data + b.data)
+        self._check(c, a + b)
 
     def test_two_adds(self):
         @hm
         def fn(a, b, c):
             return a + b + c
 
-        a = Vector.rand(512, np.float32)
-        b = Vector.rand(512, np.float32)
-        c = Vector.rand(512, np.float32)
+        a = NDArray.rand((512, ), np.float32)
+        b = NDArray.rand((512, ), np.float32)
+        c = NDArray.rand((512, ), np.float32)
 
         d = fn(a, b, c)
         d.sync()
-        self._check(d.data, a.data + b.data + c.data)
+        self._check(d, a + b + c)
 
     def test_intermediate(self):
         @hm
@@ -39,15 +39,15 @@ class TestCore(unittest.TestCase):
             d = a + b
             return a + b * c + d
 
-        a = Vector.rand(512, np.float32)
-        b = Vector.rand(512, np.float32)
-        c = Vector.rand(512, np.float32)
+        a = NDArray.rand((512, ), np.float32)
+        b = NDArray.rand((512, ), np.float32)
+        c = NDArray.rand((512, ), np.float32)
 
         d = fn(a, b, c)
         d.sync()
-        d_py = a.data + b.data
-        py_result = a.data + b.data * c.data + d_py
-        self._check(d.data, py_result)
+        d_py = a + b
+        py_result = a + b * c + d_py
+        self._check(d, py_result)
 
     def test_for(self):
         @hm
@@ -57,16 +57,16 @@ class TestCore(unittest.TestCase):
                 c = a + c
             return c
 
-        a = Vector.rand(512, np.float32)
-        b = Vector.rand(512, np.float32)
-        c = Vector.rand(512, np.float32)
+        a = NDArray.rand((512, ), np.float32)
+        b = NDArray.rand((512, ), np.float32)
+        c = NDArray.rand((512, ), np.float32)
 
         c = fn(a, b)
         c.sync()
-        expected = a.data + b.data
+        expected = a + b
         for i in range(10):
-            expected = a.data + expected
-        self._check(c.data, expected)
+            expected = a + expected
+        self._check(c, expected)
 
     def test_matrix(self):
         @hm
@@ -76,16 +76,16 @@ class TestCore(unittest.TestCase):
                 c = a + c
             return c
 
-        a = Matrix.rand((512, 512), np.float32)
-        b = Matrix.rand((512, 512), np.float32)
-        c = Matrix.rand((512, 512), np.float32)
+        a = NDArray.rand((512, 512), np.float32)
+        b = NDArray.rand((512, 512), np.float32)
+        c = NDArray.rand((512, 512), np.float32)
 
         c = fn(a, b)
         c.sync()
-        expected = a.data + b.data
+        expected = a + b
         for i in range(10):
-            expected = a.data + expected
-        self._check(c.data, expected)
+            expected = a + expected
+        self._check(c, expected)
 
     def test_multiple_calls(self):
         @hm
@@ -96,16 +96,16 @@ class TestCore(unittest.TestCase):
             return c
 
         for i in range(3):
-            a = Matrix.rand((512, 512), np.float32)
-            b = Matrix.rand((512, 512), np.float32)
-            c = Matrix.rand((512, 512), np.float32)
+            a = NDArray.rand((512, 512), np.float32)
+            b = NDArray.rand((512, 512), np.float32)
+            c = NDArray.rand((512, 512), np.float32)
 
             c = fn(a, b)
             c.sync()
-            expected = a.data + b.data
+            expected = a + b
             for i in range(10):
-                expected = a.data + expected
-            self._check(c.data, expected)
+                expected = a + expected
+            self._check(c, expected)
 
     def test_scalars(self):
         @hm
@@ -115,16 +115,16 @@ class TestCore(unittest.TestCase):
                 c = alpha / a + c - alpha
             return c
 
-        a = Matrix.rand((512, 512), np.float32)
-        b = Matrix.rand((512, 512), np.float32)
-        c = Matrix.rand((512, 512), np.float32)
+        a = NDArray.rand((512, 512), np.float32)
+        b = NDArray.rand((512, 512), np.float32)
+        c = NDArray.rand((512, 512), np.float32)
 
         c = fn(a, b, 4.6)
         c.sync()
-        expected = a.data + b.data
+        expected = a + b
         for i in range(10):
-            expected = 4.6 / a.data + expected - 4.6
-        self._check(c.data, expected)
+            expected = 4.6 / a + expected - 4.6
+        self._check(c, expected)
 
     def test_scalars_inline(self):
         @hm
@@ -134,13 +134,13 @@ class TestCore(unittest.TestCase):
                 c = 3.2 / a + c - 1.8
             return c
 
-        a = Matrix.rand((512, 512), np.float32)
-        b = Matrix.rand((512, 512), np.float32)
-        c = Matrix.rand((512, 512), np.float32)
+        a = NDArray.rand((512, 512), np.float32)
+        b = NDArray.rand((512, 512), np.float32)
+        c = NDArray.rand((512, 512), np.float32)
 
         c = fn(a, b)
         c.sync()
-        expected = a.data + b.data
+        expected = a + b
         for i in range(10):
-            expected = 3.2 / a.data + expected - 1.8
-        self._check(c.data, expected)
+            expected = 3.2 / a + expected - 1.8
+        self._check(c, expected)

@@ -1,5 +1,5 @@
 from hindemith.operations.core import ElementLevel, register_operation
-from hindemith.types import Vector, Matrix
+from hindemith.types import NDArray
 import ast
 import numpy as np
 
@@ -15,18 +15,10 @@ class ElementwiseOperation(ElementLevel):
         self.operand1 = symbol_table[self.operand1_name]
         self.operand2_name = statement.value.right.id
         self.operand2 = symbol_table[self.operand2_name]
-        assert (
-            type(self.operand1) in {Vector, Matrix} and
-            type(self.operand2) in {Vector, Matrix} and
-            self.operand1.__class__ is self.operand2.__class__
-        )
+        assert self.operand1.shape == self.operand2.shape
 
-        if isinstance(self.operand1, Vector):
-            symbol_table[statement.targets[0].id] = Vector(self.operand1.size,
-                                                           self.operand1.dtype)
-        else:
-            symbol_table[statement.targets[0].id] = Matrix(self.operand1.shape,
-                                                           self.operand1.dtype)
+        symbol_table[statement.targets[0].id] = NDArray(self.operand1.shape,
+                                                        self.operand1.dtype)
         self.target_name = statement.targets[0].id
         self.target = symbol_table[self.target_name]
         self.sources = [self.operand1_name, self.operand2_name]
@@ -54,11 +46,11 @@ class ElementwiseOperation(ElementLevel):
                 isinstance(node.right, ast.Name)):
             return (
                 node.left.id in symbol_table and
-                isinstance(symbol_table[node.left.id], (Vector, Matrix)) and
+                isinstance(symbol_table[node.left.id], NDArray) and
                 node.right.id in symbol_table and
-                isinstance(symbol_table[node.right.id], (Vector, Matrix)) and
-                type(symbol_table[node.left.id]) is
-                type(symbol_table[node.right.id])
+                isinstance(symbol_table[node.right.id], NDArray) and
+                symbol_table[node.left.id].shape ==
+                symbol_table[node.right.id].shape
             )
         return False
 
