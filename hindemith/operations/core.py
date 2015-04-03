@@ -6,11 +6,11 @@ class HMLevel(object):
         raise NotImplementedError()
 
 
-class PlatformLevel(HMLevel):
+class DeviceLevel(HMLevel):
     pass
 
 
-class DeviceLevel(HMLevel):
+class BlockLevel(HMLevel):
     pass
 
 

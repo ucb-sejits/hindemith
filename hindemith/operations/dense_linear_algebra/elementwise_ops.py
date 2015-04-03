@@ -28,12 +28,13 @@ class ElementwiseOperation(ElementLevel):
         return (np.prod(self.operand1.shape), )
 
     def compile(self):
-        return "{} = {} {} {};".format(
+        body = "{} = {} {} {};".format(
             self.target.get_element(self.target_name),
             self.operand1.get_element(self.operand1_name),
             self.op,
             self.operand2.get_element(self.operand2_name)
         )
+        return body, (np.prod(self.operand1.shape), ), self.sources, self.sinks
 
     @classmethod
     def match(cls, node, symbol_table):

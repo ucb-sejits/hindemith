@@ -6,6 +6,8 @@ from ctree.types import get_c_type_from_numpy_dtype
 
 
 class NDArray(np.ndarray):
+    unique_id = -1
+
     def __new__(subtype, shape, dtype=float, buffer=None, offset=0,
                 strides=None, order=None, info=None):
         obj = np.ndarray.__new__(subtype, shape, dtype, buffer,
@@ -54,3 +56,8 @@ class NDArray(np.ndarray):
     @staticmethod
     def like(ndarr):
         return NDArray(ndarr.shape, ndarr.dtype)
+
+    @staticmethod
+    def unique(shape, dtype):
+        NDArray.unique_id += 1
+        return "__ndarr{}".format(NDArray.unique_id), NDArray(shape, dtype)

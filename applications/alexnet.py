@@ -1,7 +1,7 @@
 from hindemith.types import NDArray
 # from hindemith.operations.image_processing import patches_to_rows
-from hindemith.operations.neural_net import relu, lrn, pool, conv, dropout
-from hindemith.operations.ndarray import transpose, reshape, dot
+from hindemith.operations.neural_net import Relu, Lrn, Pool, Conv, Dropout
+# from hindemith.operations.ndarray import transpose, reshape, dot
 
 
 num_img = 256
@@ -47,35 +47,35 @@ def forward(data, conv1_filters, conv2_filters, conv3_filters,
     #                                     stride=(4, 4))
     #     conv1[i] = row_per_patch * transpose(reshape(conv1_filters, 96, 363))
     # conv1
-    conv1 = conv(data, conv1_filters, padding=(0, 0), stride=(4, 4))
-    conv1 = relu(conv1)
-    norm1 = lrn(conv1, padding=(0, 0), stride=(1, 1))
-    pool1 = pool(norm1, padding=(0, 0), stride=(2, 2))
+    conv1 = Conv(data, conv1_filters, padding=(0, 0), stride=(4, 4))
+    conv1 = Relu(conv1)
+    norm1 = Lrn(conv1, padding=(0, 0), stride=(1, 1))
+    pool1 = Pool(norm1, padding=(0, 0), stride=(2, 2))
 
-    conv2 = conv(pool1, conv2_filters, padding=(2, 2), stride=(1, 1))
-    conv2 = relu(conv2)
-    norm2 = lrn(conv2, padding=(0, 0), stride=(1, 1))
-    pool2 = pool(norm2, padding=(0, 0), stride=(2, 2))
+    conv2 = Conv(pool1, conv2_filters, padding=(2, 2), stride=(1, 1))
+    conv2 = Relu(conv2)
+    norm2 = Lrn(conv2, padding=(0, 0), stride=(1, 1))
+    pool2 = Pool(norm2, padding=(0, 0), stride=(2, 2))
 
-    conv3 = conv(pool2, conv3_filters, padding=(1, 1), stride=(1, 1))
-    conv3 = relu(conv3)
+    conv3 = Conv(pool2, conv3_filters, padding=(1, 1), stride=(1, 1))
+    conv3 = Relu(conv3)
 
-    conv4 = conv(conv3, conv4_filters, padding=(1, 1), stride=(1, 1))
-    conv4 = relu(conv4)
+    conv4 = Conv(conv3, conv4_filters, padding=(1, 1), stride=(1, 1))
+    conv4 = Relu(conv4)
 
-    conv5 = conv(conv4, conv5_filters, padding=(1, 1), stride=(1, 1))
-    conv5 = relu(conv5)
-    pool5 = pool(conv5, padding=(0, 0), stride=(2, 2))
+    conv5 = Conv(conv4, conv5_filters, padding=(1, 1), stride=(1, 1))
+    conv5 = Relu(conv5)
+    pool5 = Pool(conv5, padding=(0, 0), stride=(2, 2))
 
-    fc6 = conv(pool5, fc6_conv_filters, padding=(0, 0), stride=(1, 1))
-    fc6 = relu(fc6)
-    fc6 = dropout(fc6)
+    fc6 = Conv(pool5, fc6_conv_filters, padding=(0, 0), stride=(1, 1))
+    fc6 = Relu(fc6)
+    fc6 = Dropout(fc6)
 
-    fc7 = conv(fc6, fc7_conv_filters, padding=(0, 0), stride=(1, 1))
-    fc7 = relu(fc7)
-    fc7 = dropout(fc7)
+    fc7 = Conv(fc6, fc7_conv_filters, padding=(0, 0), stride=(1, 1))
+    fc7 = Relu(fc7)
+    fc7 = Dropout(fc7)
 
-    fc8 = conv(fc7, fc8_conv_filters, padding=(0, 0), stride=(1, 1))
+    fc8 = Conv(fc7, fc8_conv_filters, padding=(0, 0), stride=(1, 1))
     return fc8
 
 if __name__ == 'main':

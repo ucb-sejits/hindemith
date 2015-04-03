@@ -17,14 +17,13 @@ class Relu(ElementLevel):
         self.target = symbol_table[self.target_name]
         self.sinks = [self.target_name]
 
-    def get_global_size(self):
-        return (np.prod(self.operand.shape), )
-
     def compile(self):
-        return ("{target}[get_global_id(0)] = "
-                "{operand}[get_global_id(0)] > 0 ?"
-                "{operand}[get_global_id(0)] : 0;").format(
-                    target=self.target_name, operand=self.operand_name)
+        body = (
+            "{target}[get_global_id(0)] = "
+            "{op}[get_global_id(0)] > 0 ? {op}[get_global_id(0)] : 0;"
+        ).format(target=self.target_name, op=self.operand_name)
+        global_size = (np.prod(self.operand.shape), )
+        return body, global_size, self.sources, self.sinks
 
     @classmethod
     def match(cls, node, symbol_table):

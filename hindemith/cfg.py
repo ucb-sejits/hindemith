@@ -1,11 +1,6 @@
 import ast
-from hindemith.operations.core import operations
-from hindemith.cl import context, queue
-import ctree.c.nodes as C
-from ctree.types import get_c_type_from_numpy_dtype
-import numpy as np
-import ctypes as ct
-import pycl as cl
+from hindemith.operations.core import operations, DeviceLevel, ElementLevel
+from hindemith.cl import ElementLevelKernel
 import sys
 
 
@@ -242,52 +237,64 @@ class ComposableBasicBlock(BasicBlock):
         raise Exception("Found non unsupported statement in composable block")
 
     def compile(self, name, env):
-        body = []
-        global_size = None
+        # body = []
+        kernels = []
+        # global_size = None
         for statement in self.statements:
-            for elem in statement.sources + statement.sinks:
-                if elem not in (self.live_ins | self.live_outs):
-                    decl = env[elem].promote_to_register(elem)
-                    if decl is not None:
-                        body.insert(0, decl)
-            global_size = statement.get_global_size()
-            body.append(statement.compile())
-        param_set = self.live_outs | self.live_ins
-        params = []
-        for arg in param_set:
-            ptr = ct.POINTER(get_c_type_from_numpy_dtype(
-                np.dtype(env[arg].dtype)))()
-            params.append(C.SymbolRef(arg, ptr, _global=True))
-        kernel = C.FunctionDecl(
-            None,
-            C.SymbolRef(name),
-            params,
-            body
-        )
-        kernel.set_kernel()
-        print(kernel)
+            if isinstance(statement, DeviceLevel):
+                kernels.extend(statement.compile())
+            elif isinstance(statement, ElementLevel):
+                body, global_size, sources, sinks = statement.compile()
+                if len(kernels) < 1 or \
+                   not isinstance(kernels[-1], ElementLevelKernel) or \
+                   global_size != kernels[-1].global_size:
+                    kernels.append(ElementLevelKernel(global_size))
+                kernels[-1].body += "\n" + body
+                kernels[-1].sources |= set(sources)
+                kernels[-1].sinks |= set(sinks)
+            # for elem in statement.sources + statement.sinks:
+            #     if elem not in (self.live_ins | self.live_outs):
+            #         decl = env[elem].promote_to_register(elem)
+            #         if decl is not None:
+            #             body.insert(0, decl)
+            # body.append(statement.compile())
+            # global_size = statement.get_global_size()
+        # param_set = self.live_outs | self.live_ins
+        # params = []
+        # for arg in param_set:
+        #     ptr = ct.POINTER(get_c_type_from_numpy_dtype(
+        #         np.dtype(env[arg].dtype)))()
+        #     params.append(C.SymbolRef(arg, ptr, _global=True))
+        # kernel = C.FunctionDecl(
+        #     None,
+        #     C.SymbolRef(name),
+        #     params,
+        #     body
+        # )
+        # kernel.set_kernel()
+        # print(kernel)
 
         def compiled(*args, **kwargs):
-            types = []
-            bufs = []
-            outs = []
+            # types = []
+            # bufs = []
+            # outs = []
             # for arg in self.live_ins:
             #     types.append(cl.cl_mem)
             #     bufs.append(arg.ocl_buf)
-            for arg in self.live_outs | self.live_ins:
-                types.append(cl.cl_mem)
-                outs.append(env[arg].ocl_buf)
-                env[arg].host_dirty = True
-            program = cl.clCreateProgramWithSource(
-                context, kernel.codegen()
-            ).build()
+            # for arg in self.live_outs | self.live_ins:
+            #     types.append(cl.cl_mem)
+            #     outs.append(env[arg].ocl_buf)
+            #     env[arg].host_dirty = True
+            # program = cl.clCreateProgramWithSource(
+            #     context, kernel.codegen()
+            # ).build()
 
-            kern = program[kernel.name.name]
-            kern.argtypes = types
-            kern(*(bufs + outs)).on(queue, global_size)
-            rets = ()
-            for arg in self.live_outs:
-                rets += (env[arg], )
+            # kern = program[kernel.name.name]
+            # kern.argtypes = types
+            # kern(*(bufs + outs)).on(queue, global_size)
+            for kernel in kernels:
+                kernel.launch(env)
+            rets = tuple(env[out] for out in self.live_outs)
             if len(rets) == 1:
                 return rets[0]
             return rets
