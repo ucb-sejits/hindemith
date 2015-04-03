@@ -6,7 +6,7 @@ from hindemith.core import hm
 
 class TestCore(unittest.TestCase):
     def _check(self, actual, expected):
-        np.testing.assert_array_almost_equal(actual, expected, decimal=1)
+        np.testing.assert_array_almost_equal(actual, expected)
 
     def test_add(self):
         @hm
@@ -115,9 +115,9 @@ class TestCore(unittest.TestCase):
                 c = alpha / a + c - alpha
             return c
 
-        a = NDArray.rand((512, 512), np.float32)
-        b = NDArray.rand((512, 512), np.float32)
-        c = NDArray.rand((512, 512), np.float32)
+        a = NDArray.rand((2, 2), np.float32)
+        b = NDArray.rand((2, 2), np.float32)
+        c = NDArray.rand((2, 2), np.float32)
 
         c = fn(a, b, 4.6)
         c.sync()

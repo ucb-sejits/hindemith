@@ -39,16 +39,22 @@ class ScalarOperation(ElementLevel):
 
     def compile(self):
         if isinstance(self.operand1, NDArray):
+            op2 = str(self.operand2)
+            if type(self.operand2) == float:
+                op2 += "f"
             return "{} = {} {} {};".format(
                 self.target.get_element(self.target_name),
                 self.operand1.get_element(self.operand1_name),
                 self.op,
-                self.operand2
+                op2
             )
         else:
+            op1 = str(self.operand1)
+            if type(self.operand2) == float:
+                op1 += "f"
             return "{} = {} {} {};".format(
                 self.target.get_element(self.target_name),
-                self.operand1,
+                op1,
                 self.op,
                 self.operand2.get_element(self.operand2_name),
             )
