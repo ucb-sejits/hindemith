@@ -50,12 +50,12 @@ def forward(data, conv1_filters, conv2_filters, conv3_filters,
     conv1 = Conv(data, conv1_filters, padding=(0, 0), stride=(4, 4))
     conv1 = Relu(conv1)
     norm1 = Lrn(conv1, padding=(0, 0), stride=(1, 1))
-    pool1 = Pool(norm1, padding=(0, 0), stride=(2, 2))
+    pool1 = Pool(norm1, kernel_size=(3, 3), padding=(0, 0), stride=(2, 2))
 
     conv2 = Conv(pool1, conv2_filters, padding=(2, 2), stride=(1, 1))
     conv2 = Relu(conv2)
     norm2 = Lrn(conv2, padding=(0, 0), stride=(1, 1))
-    pool2 = Pool(norm2, padding=(0, 0), stride=(2, 2))
+    pool2 = Pool(norm2, kernel_size=(3, 3), padding=(0, 0), stride=(2, 2))
 
     conv3 = Conv(pool2, conv3_filters, padding=(1, 1), stride=(1, 1))
     conv3 = Relu(conv3)
@@ -65,7 +65,7 @@ def forward(data, conv1_filters, conv2_filters, conv3_filters,
 
     conv5 = Conv(conv4, conv5_filters, padding=(1, 1), stride=(1, 1))
     conv5 = Relu(conv5)
-    pool5 = Pool(conv5, padding=(0, 0), stride=(2, 2))
+    pool5 = Pool(conv5, kernel_size=(3, 3), padding=(0, 0), stride=(2, 2))
 
     fc6 = Conv(pool5, fc6_conv_filters, padding=(0, 0), stride=(1, 1))
     fc6 = Relu(fc6)
