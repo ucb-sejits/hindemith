@@ -19,8 +19,10 @@ class Kernel(object):
     def launch(self, env):
         bufs = []
         for arr in self.inputs:
+            env[arr].sync()
             bufs.append(env[arr].ocl_buf)
         for arr in self.outputs:
+            env[arr].sync()
             bufs.append(env[arr].ocl_buf)
             env[arr].host_dirty = True
         self.kernel(*bufs).on(queue, self.global_size)
