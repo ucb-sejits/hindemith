@@ -23,10 +23,15 @@ class NDArray(np.ndarray):
         if obj is None:
             return
 
-        buf, evt = cl.buffer_from_ndarray(queue, obj)
-        self.ocl_buf = buf
-        self.host_dirty = False
-        self.ocl_dirty = False
+        if hasattr(obj, 'ocl_buf'):
+            self.ocl_buf = obj.ocl_buf
+            self.host_dirty = obj.host_dirty
+            self.ocl_dirty = obj.ocl_dirty
+        else:
+            buf, evt = cl.buffer_from_ndarray(queue, obj)
+            self.ocl_buf = buf
+            self.host_dirty = False
+            self.ocl_dirty = False
         self.register = None
 
     def get_element(self, name):
@@ -40,6 +45,10 @@ class NDArray(np.ndarray):
             _, evt = cl.buffer_to_ndarray(queue, self.ocl_buf, self)
             evt.wait()
             self.host_dirty = False
+        elif self.ocl_dirty:
+            self.ocl_buf, evt = cl.buffer_from_ndarray(queue, self)
+            evt.wait()
+            self.ocl_dirty = False
 
     def promote_to_register(self, name):
         print(self.register)

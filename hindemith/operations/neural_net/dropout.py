@@ -22,7 +22,8 @@ class Dropout(ElementLevel):
             elif keyword.arg == 'mask':
                 self.mask_name = keyword.value.id
             else:
-                raise Exception("Unsupport keyword arg to Dropout", keyword.arg)
+                raise Exception("Unsupport keyword arg to Dropout",
+                                keyword.arg)
         self.sources = [self.operand_name, self.mask_name]
 
         self.target_name = statement.targets[0].id

@@ -48,8 +48,12 @@ class ElementLevelKernel(Kernel):
             )
             kernel = """
 __kernel void func({params}) {{
-  {body}
-}}""".format(params=sources + ", " + sinks, body=self.body)
+  if (get_global_id(0) < {size}) {{
+    {body}
+  }}
+}}""".format(params=sources + ", " + sinks, body=self.body,
+             size=self.global_size[0])
+            print(kernel)
             self.compiled = cl.clCreateProgramWithSource(
                 context, kernel
             ).build()['func']
@@ -61,4 +65,8 @@ __kernel void func({params}) {{
         for arr in self.sinks:
             bufs.append(env[arr].ocl_buf)
             env[arr].host_dirty = True
-        self.compiled(*bufs).on(queue, self.global_size)
+        global_size = self.global_size
+        if global_size[0] % 32:
+            global_size[0] = (global_size + 31) & ~0x20
+        print(global_size[0])
+        self.compiled(*bufs).on(queue, global_size)
