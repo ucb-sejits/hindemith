@@ -6,7 +6,8 @@ from hindemith.core import hm
 
 class TestCore(unittest.TestCase):
     def _check(self, actual, expected):
-        np.testing.assert_array_almost_equal(actual, expected)
+        # np.testing.assert_array_almost_equal(actual, expected, decimal=3)
+        np.testing.assert_allclose(actual, expected, rtol=1e-5)
 
     def test_add(self):
         @hm
