@@ -3,7 +3,6 @@ python:
   - '2.7'
   - '3.3'
   - '3.4'
-env: LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib/64
 before_install:
   - sudo apt-get update -qq
   - sudo apt-get install -qq fglrx=2:8.960-0ubuntu1 opencl-headers cmake
@@ -18,7 +17,7 @@ install:
   - make && sudo make install
   - cd $TRAVIS_BUILD_DIR
 script:
-  - nosetests --verbose --with-coverage --cover-package=hindemith --cover-erase
+  - LD_LIBRARY_PATH=/usr/local/lib64 nosetests --verbose --with-coverage --cover-package=hindemith --cover-erase
 deploy:
   provider: pypi
   user: leonardt
