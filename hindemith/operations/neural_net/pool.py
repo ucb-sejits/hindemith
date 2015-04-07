@@ -1,5 +1,4 @@
 from hindemith.operations.core import ElementLevel, register_operation
-from hindemith.types import NDArray
 import numpy as np
 import ast
 

@@ -63,6 +63,10 @@ class NDArray(np.ndarray):
         return np.random.rand(*shape).astype(dtype).view(NDArray)
 
     @staticmethod
+    def zeros(shape, dtype):
+        return np.zeros(shape, dtype).view(NDArray)
+
+    @staticmethod
     def like(ndarr):
         return NDArray(ndarr.shape, ndarr.dtype)
 

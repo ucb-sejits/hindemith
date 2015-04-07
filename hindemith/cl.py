@@ -63,12 +63,17 @@ __kernel void func({params}) {{
                 cl.cl_mem for _ in self.sources + self.sinks)
         bufs = []
         for arr in self.sources:
+            env[arr].sync()
             bufs.append(env[arr].ocl_buf)
         for arr in self.sinks:
+            env[arr].sync()
             bufs.append(env[arr].ocl_buf)
             env[arr].host_dirty = True
         global_size = self.global_size
-        if global_size[0] % 32:
-            global_size[0] = (global_size + 31) & ~0x20
-        print(global_size[0])
+        padded = ()
+        for s in global_size:
+            if s % 32:
+                padded += ((s + 31) & ~0x20,)
+            else:
+                padded += (s, )
         self.compiled(*bufs).on(queue, global_size)
