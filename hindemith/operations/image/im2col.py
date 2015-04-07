@@ -21,7 +21,7 @@ class Im2Col(ElementLevel):
                 self.stride_h, self.stride_w = tuple(
                     elt.n for elt in keyword.value.elts)
             else:
-                raise Exception("Unsupport keyword arg to Pool", keyword.arg)
+                raise Exception("Unsupport keyword arg to Lrn", keyword.arg)
         channels, height, width = self.operand.shape
         self.channels_col = channels * self.kernel_h * self.kernel_w
         self.height_col = (height + 2 * self.pad_h - self.kernel_h) // self.stride_h + 1
