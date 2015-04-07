@@ -48,12 +48,16 @@ class ElementLevelKernel(Kernel):
                 "__global float* {}".format(name)
                 for name in self.sinks
             )
+            params = ""
+            if len(sources) > 0:
+                params += sources + ", "
+            params += sinks
             kernel = """
 __kernel void func({params}) {{
   if (get_global_id(0) < {size}) {{
     {body}
   }}
-}}""".format(params=sources + ", " + sinks, body=self.body,
+}}""".format(params=params, body=self.body,
              size=self.global_size[0])
             print(kernel)
             self.compiled = cl.clCreateProgramWithSource(
