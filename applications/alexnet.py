@@ -79,17 +79,12 @@ beta = 0.75
 
 
 @hm
-def forward(data, conv1, lrn1_scale, conv1_filters, norm1, pool1, pool1_mask, conv2,
-            conv2_filters, lr2n_scale, norm2, pool2, pool2_mask, conv3, conv3_filters, conv4,
-            conv4_filters, conv5, conv5_filters, pool5, pool5_mask, fc6, fc6_mask,
-            fc6_conv_filters, fc7, fc7_mask, fc7_conv_filters, fc8,
-            fc8_conv_filters):
-    # conv1
-    # for i in range(data.shape[0]):
-    #     row_per_patch = patches_to_rows(data[i], padding=(0, 0),
-    #                                     stride=(4, 4))
-    #     conv1[i] = row_per_patch * transpose(reshape(conv1_filters, 96, 363))
-    # conv1
+def forward(data, conv1, lrn1_scale, conv1_filters, norm1, pool1,
+            pool1_mask, conv2, conv2_filters, lr2n_scale, norm2,
+            pool2, pool2_mask, conv3, conv3_filters, conv4,
+            conv4_filters, conv5, conv5_filters, pool5, pool5_mask,
+            fc6, fc6_mask, fc6_conv_filters, fc7, fc7_mask,
+            fc7_conv_filters, fc8, fc8_conv_filters):
     conv1 = Conv(data, conv1_filters, kernel_size=(11, 11),
                  padding=(0, 0), stride=(4, 4))
     conv1 = Relu(conv1)
