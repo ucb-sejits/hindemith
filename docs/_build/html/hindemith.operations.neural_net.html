@@ -1,0 +1,222 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>hindemith.operations.neural_net package &mdash; Hindemith 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Hindemith 0.1.0 documentation" href="index.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Hindemith 0.1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="hindemith-operations-neural-net-package">
+<h1>hindemith.operations.neural_net package<a class="headerlink" href="#hindemith-operations-neural-net-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-hindemith.operations.neural_net.conv">
+<span id="hindemith-operations-neural-net-conv-module"></span><h2>hindemith.operations.neural_net.conv module<a class="headerlink" href="#module-hindemith.operations.neural_net.conv" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="hindemith.operations.neural_net.conv.Conv">
+<em class="property">class </em><code class="descclassname">hindemith.operations.neural_net.conv.</code><code class="descname">Conv</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/conv.html#Conv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.conv.Conv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="hindemith.operations.html#hindemith.operations.core.DeviceLevel" title="hindemith.operations.core.DeviceLevel"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.core.DeviceLevel</span></code></a></p>
+<dl class="method">
+<dt id="hindemith.operations.neural_net.conv.Conv.compile">
+<code class="descname">compile</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/conv.html#Conv.compile"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.conv.Conv.compile" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="classmethod">
+<dt id="hindemith.operations.neural_net.conv.Conv.match">
+<em class="property">classmethod </em><code class="descname">match</code><span class="sig-paren">(</span><em>node</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/conv.html#Conv.match"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.conv.Conv.match" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="hindemith.operations.neural_net.conv.sgemm">
+<code class="descclassname">hindemith.operations.neural_net.conv.</code><code class="descname">sgemm</code><span class="sig-paren">(</span><em>A</em>, <em>A_offset</em>, <em>B</em>, <em>B_offset</em>, <em>C</em>, <em>C_offset</em>, <em>m</em>, <em>n</em>, <em>k</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/conv.html#sgemm"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.conv.sgemm" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-hindemith.operations.neural_net.dropout">
+<span id="hindemith-operations-neural-net-dropout-module"></span><h2>hindemith.operations.neural_net.dropout module<a class="headerlink" href="#module-hindemith.operations.neural_net.dropout" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="hindemith.operations.neural_net.dropout.Dropout">
+<em class="property">class </em><code class="descclassname">hindemith.operations.neural_net.dropout.</code><code class="descname">Dropout</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/dropout.html#Dropout"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.dropout.Dropout" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="hindemith.operations.html#hindemith.operations.core.ElementLevel" title="hindemith.operations.core.ElementLevel"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.core.ElementLevel</span></code></a></p>
+<dl class="method">
+<dt id="hindemith.operations.neural_net.dropout.Dropout.compile">
+<code class="descname">compile</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/dropout.html#Dropout.compile"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.dropout.Dropout.compile" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="classmethod">
+<dt id="hindemith.operations.neural_net.dropout.Dropout.match">
+<em class="property">classmethod </em><code class="descname">match</code><span class="sig-paren">(</span><em>node</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/dropout.html#Dropout.match"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.dropout.Dropout.match" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-hindemith.operations.neural_net.lrn">
+<span id="hindemith-operations-neural-net-lrn-module"></span><h2>hindemith.operations.neural_net.lrn module<a class="headerlink" href="#module-hindemith.operations.neural_net.lrn" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="hindemith.operations.neural_net.lrn.Lrn">
+<em class="property">class </em><code class="descclassname">hindemith.operations.neural_net.lrn.</code><code class="descname">Lrn</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/lrn.html#Lrn"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.lrn.Lrn" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="hindemith.operations.html#hindemith.operations.core.DeviceLevel" title="hindemith.operations.core.DeviceLevel"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.core.DeviceLevel</span></code></a></p>
+<dl class="method">
+<dt id="hindemith.operations.neural_net.lrn.Lrn.compile">
+<code class="descname">compile</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/lrn.html#Lrn.compile"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.lrn.Lrn.compile" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="classmethod">
+<dt id="hindemith.operations.neural_net.lrn.Lrn.match">
+<em class="property">classmethod </em><code class="descname">match</code><span class="sig-paren">(</span><em>node</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/lrn.html#Lrn.match"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.lrn.Lrn.match" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-hindemith.operations.neural_net.pool">
+<span id="hindemith-operations-neural-net-pool-module"></span><h2>hindemith.operations.neural_net.pool module<a class="headerlink" href="#module-hindemith.operations.neural_net.pool" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="hindemith.operations.neural_net.pool.Pool">
+<em class="property">class </em><code class="descclassname">hindemith.operations.neural_net.pool.</code><code class="descname">Pool</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/pool.html#Pool"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.pool.Pool" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="hindemith.operations.html#hindemith.operations.core.ElementLevel" title="hindemith.operations.core.ElementLevel"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.core.ElementLevel</span></code></a></p>
+<dl class="method">
+<dt id="hindemith.operations.neural_net.pool.Pool.compile">
+<code class="descname">compile</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/pool.html#Pool.compile"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.pool.Pool.compile" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="classmethod">
+<dt id="hindemith.operations.neural_net.pool.Pool.match">
+<em class="property">classmethod </em><code class="descname">match</code><span class="sig-paren">(</span><em>node</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/pool.html#Pool.match"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.pool.Pool.match" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-hindemith.operations.neural_net.relu">
+<span id="hindemith-operations-neural-net-relu-module"></span><h2>hindemith.operations.neural_net.relu module<a class="headerlink" href="#module-hindemith.operations.neural_net.relu" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="hindemith.operations.neural_net.relu.Relu">
+<em class="property">class </em><code class="descclassname">hindemith.operations.neural_net.relu.</code><code class="descname">Relu</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/relu.html#Relu"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.relu.Relu" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="hindemith.operations.html#hindemith.operations.core.ElementLevel" title="hindemith.operations.core.ElementLevel"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.core.ElementLevel</span></code></a></p>
+<dl class="method">
+<dt id="hindemith.operations.neural_net.relu.Relu.compile">
+<code class="descname">compile</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/relu.html#Relu.compile"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.relu.Relu.compile" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="classmethod">
+<dt id="hindemith.operations.neural_net.relu.Relu.match">
+<em class="property">classmethod </em><code class="descname">match</code><span class="sig-paren">(</span><em>node</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/neural_net/relu.html#Relu.match"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.neural_net.relu.Relu.match" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-hindemith.operations.neural_net">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-hindemith.operations.neural_net" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">hindemith.operations.neural_net package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-hindemith.operations.neural_net.conv">hindemith.operations.neural_net.conv module</a></li>
+<li><a class="reference internal" href="#module-hindemith.operations.neural_net.dropout">hindemith.operations.neural_net.dropout module</a></li>
+<li><a class="reference internal" href="#module-hindemith.operations.neural_net.lrn">hindemith.operations.neural_net.lrn module</a></li>
+<li><a class="reference internal" href="#module-hindemith.operations.neural_net.pool">hindemith.operations.neural_net.pool module</a></li>
+<li><a class="reference internal" href="#module-hindemith.operations.neural_net.relu">hindemith.operations.neural_net.relu module</a></li>
+<li><a class="reference internal" href="#module-hindemith.operations.neural_net">Module contents</a></li>
+</ul>
+</li>
+</ul>
+
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/hindemith.operations.neural_net.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2015, Leonard Truong.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.3</a>
+      
+      |
+      <a href="_sources/hindemith.operations.neural_net.txt"
+          rel="nofollow">Page source</a></li>
+    </div>
+
+    
+
+    
+  </body>
+</html>

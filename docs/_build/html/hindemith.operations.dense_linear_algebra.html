@@ -1,0 +1,340 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>hindemith.operations.dense_linear_algebra package &mdash; Hindemith 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Hindemith 0.1.0 documentation" href="index.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Hindemith 0.1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="hindemith-operations-dense-linear-algebra-package">
+<h1>hindemith.operations.dense_linear_algebra package<a class="headerlink" href="#hindemith-operations-dense-linear-algebra-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-hindemith.operations.dense_linear_algebra.elementwise_ops">
+<span id="hindemith-operations-dense-linear-algebra-elementwise-ops-module"></span><h2>hindemith.operations.dense_linear_algebra.elementwise_ops module<a class="headerlink" href="#module-hindemith.operations.dense_linear_algebra.elementwise_ops" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseAdd">
+<em class="property">class </em><code class="descclassname">hindemith.operations.dense_linear_algebra.elementwise_ops.</code><code class="descname">ElementwiseAdd</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/elementwise_ops.html#ElementwiseAdd"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseAdd" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation" title="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation</span></code></a></p>
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseAdd.op">
+<code class="descname">op</code><em class="property"> = '+'</em><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseAdd.op" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseAdd.py_op">
+<code class="descname">py_op</code><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseAdd.py_op" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal"><span class="pre">Add</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseDiv">
+<em class="property">class </em><code class="descclassname">hindemith.operations.dense_linear_algebra.elementwise_ops.</code><code class="descname">ElementwiseDiv</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/elementwise_ops.html#ElementwiseDiv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseDiv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation" title="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation</span></code></a></p>
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseDiv.op">
+<code class="descname">op</code><em class="property"> = '/'</em><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseDiv.op" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseDiv.py_op">
+<code class="descname">py_op</code><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseDiv.py_op" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal"><span class="pre">Div</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseMul">
+<em class="property">class </em><code class="descclassname">hindemith.operations.dense_linear_algebra.elementwise_ops.</code><code class="descname">ElementwiseMul</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/elementwise_ops.html#ElementwiseMul"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseMul" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation" title="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation</span></code></a></p>
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseMul.op">
+<code class="descname">op</code><em class="property"> = '*'</em><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseMul.op" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseMul.py_op">
+<code class="descname">py_op</code><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseMul.py_op" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal"><span class="pre">Mult</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation">
+<em class="property">class </em><code class="descclassname">hindemith.operations.dense_linear_algebra.elementwise_ops.</code><code class="descname">ElementwiseOperation</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/elementwise_ops.html#ElementwiseOperation"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="hindemith.operations.html#hindemith.operations.core.ElementLevel" title="hindemith.operations.core.ElementLevel"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.core.ElementLevel</span></code></a></p>
+<dl class="method">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation.compile">
+<code class="descname">compile</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/elementwise_ops.html#ElementwiseOperation.compile"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation.compile" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation.get_global_size">
+<code class="descname">get_global_size</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/elementwise_ops.html#ElementwiseOperation.get_global_size"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation.get_global_size" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="classmethod">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation.match">
+<em class="property">classmethod </em><code class="descname">match</code><span class="sig-paren">(</span><em>node</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/elementwise_ops.html#ElementwiseOperation.match"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation.match" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation.py_op">
+<code class="descname">py_op</code><em class="property"> = None</em><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation.py_op" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseSub">
+<em class="property">class </em><code class="descclassname">hindemith.operations.dense_linear_algebra.elementwise_ops.</code><code class="descname">ElementwiseSub</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/elementwise_ops.html#ElementwiseSub"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseSub" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation" title="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseOperation</span></code></a></p>
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseSub.op">
+<code class="descname">op</code><em class="property"> = '-'</em><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseSub.op" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseSub.py_op">
+<code class="descname">py_op</code><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseSub.py_op" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal"><span class="pre">Sub</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.elementwise_ops.op">
+<code class="descclassname">hindemith.operations.dense_linear_algebra.elementwise_ops.</code><code class="descname">op</code><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.op" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference internal" href="#hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseSub" title="hindemith.operations.dense_linear_algebra.elementwise_ops.ElementwiseSub"><code class="xref py py-class docutils literal"><span class="pre">ElementwiseSub</span></code></a></p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-hindemith.operations.dense_linear_algebra.matmul">
+<span id="hindemith-operations-dense-linear-algebra-matmul-module"></span><h2>hindemith.operations.dense_linear_algebra.matmul module<a class="headerlink" href="#module-hindemith.operations.dense_linear_algebra.matmul" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="hindemith.operations.dense_linear_algebra.matmul.MMult">
+<em class="property">class </em><code class="descclassname">hindemith.operations.dense_linear_algebra.matmul.</code><code class="descname">MMult</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/matmul.html#MMult"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.matmul.MMult" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="hindemith.operations.html#hindemith.operations.core.DeviceLevel" title="hindemith.operations.core.DeviceLevel"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.core.DeviceLevel</span></code></a></p>
+<dl class="method">
+<dt id="hindemith.operations.dense_linear_algebra.matmul.MMult.compile">
+<code class="descname">compile</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/matmul.html#MMult.compile"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.matmul.MMult.compile" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="classmethod">
+<dt id="hindemith.operations.dense_linear_algebra.matmul.MMult.match">
+<em class="property">classmethod </em><code class="descname">match</code><span class="sig-paren">(</span><em>node</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/matmul.html#MMult.match"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.matmul.MMult.match" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-hindemith.operations.dense_linear_algebra.scalar_ops">
+<span id="hindemith-operations-dense-linear-algebra-scalar-ops-module"></span><h2>hindemith.operations.dense_linear_algebra.scalar_ops module<a class="headerlink" href="#module-hindemith.operations.dense_linear_algebra.scalar_ops" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarAdd">
+<em class="property">class </em><code class="descclassname">hindemith.operations.dense_linear_algebra.scalar_ops.</code><code class="descname">ScalarAdd</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/scalar_ops.html#ScalarAdd"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarAdd" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation" title="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation</span></code></a></p>
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarAdd.op">
+<code class="descname">op</code><em class="property"> = '+'</em><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarAdd.op" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarAdd.py_op">
+<code class="descname">py_op</code><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarAdd.py_op" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal"><span class="pre">Add</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarDiv">
+<em class="property">class </em><code class="descclassname">hindemith.operations.dense_linear_algebra.scalar_ops.</code><code class="descname">ScalarDiv</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/scalar_ops.html#ScalarDiv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarDiv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation" title="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation</span></code></a></p>
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarDiv.op">
+<code class="descname">op</code><em class="property"> = '/'</em><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarDiv.op" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarDiv.py_op">
+<code class="descname">py_op</code><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarDiv.py_op" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal"><span class="pre">Div</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarMul">
+<em class="property">class </em><code class="descclassname">hindemith.operations.dense_linear_algebra.scalar_ops.</code><code class="descname">ScalarMul</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/scalar_ops.html#ScalarMul"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarMul" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation" title="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation</span></code></a></p>
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarMul.op">
+<code class="descname">op</code><em class="property"> = '*'</em><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarMul.op" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarMul.py_op">
+<code class="descname">py_op</code><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarMul.py_op" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal"><span class="pre">Mult</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation">
+<em class="property">class </em><code class="descclassname">hindemith.operations.dense_linear_algebra.scalar_ops.</code><code class="descname">ScalarOperation</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/scalar_ops.html#ScalarOperation"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="hindemith.operations.html#hindemith.operations.core.ElementLevel" title="hindemith.operations.core.ElementLevel"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.core.ElementLevel</span></code></a></p>
+<dl class="method">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation.compile">
+<code class="descname">compile</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/scalar_ops.html#ScalarOperation.compile"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation.compile" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation.get_global_size">
+<code class="descname">get_global_size</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/scalar_ops.html#ScalarOperation.get_global_size"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation.get_global_size" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="classmethod">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation.match">
+<em class="property">classmethod </em><code class="descname">match</code><span class="sig-paren">(</span><em>node</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/scalar_ops.html#ScalarOperation.match"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation.match" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarSub">
+<em class="property">class </em><code class="descclassname">hindemith.operations.dense_linear_algebra.scalar_ops.</code><code class="descname">ScalarSub</code><span class="sig-paren">(</span><em>statement</em>, <em>symbol_table</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/hindemith/operations/dense_linear_algebra/scalar_ops.html#ScalarSub"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarSub" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation" title="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation"><code class="xref py py-class docutils literal"><span class="pre">hindemith.operations.dense_linear_algebra.scalar_ops.ScalarOperation</span></code></a></p>
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarSub.op">
+<code class="descname">op</code><em class="property"> = '-'</em><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarSub.op" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarSub.py_op">
+<code class="descname">py_op</code><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarSub.py_op" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <code class="xref py py-class docutils literal"><span class="pre">Sub</span></code></p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="attribute">
+<dt id="hindemith.operations.dense_linear_algebra.scalar_ops.op">
+<code class="descclassname">hindemith.operations.dense_linear_algebra.scalar_ops.</code><code class="descname">op</code><a class="headerlink" href="#hindemith.operations.dense_linear_algebra.scalar_ops.op" title="Permalink to this definition">¶</a></dt>
+<dd><p>alias of <a class="reference internal" href="#hindemith.operations.dense_linear_algebra.scalar_ops.ScalarSub" title="hindemith.operations.dense_linear_algebra.scalar_ops.ScalarSub"><code class="xref py py-class docutils literal"><span class="pre">ScalarSub</span></code></a></p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-hindemith.operations.dense_linear_algebra">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-hindemith.operations.dense_linear_algebra" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">hindemith.operations.dense_linear_algebra package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-hindemith.operations.dense_linear_algebra.elementwise_ops">hindemith.operations.dense_linear_algebra.elementwise_ops module</a></li>
+<li><a class="reference internal" href="#module-hindemith.operations.dense_linear_algebra.matmul">hindemith.operations.dense_linear_algebra.matmul module</a></li>
+<li><a class="reference internal" href="#module-hindemith.operations.dense_linear_algebra.scalar_ops">hindemith.operations.dense_linear_algebra.scalar_ops module</a></li>
+<li><a class="reference internal" href="#module-hindemith.operations.dense_linear_algebra">Module contents</a></li>
+</ul>
+</li>
+</ul>
+
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/hindemith.operations.dense_linear_algebra.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2015, Leonard Truong.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.3</a>
+      
+      |
+      <a href="_sources/hindemith.operations.dense_linear_algebra.txt"
+          rel="nofollow">Page source</a></li>
+    </div>
+
+    
+
+    
+  </body>
+</html>

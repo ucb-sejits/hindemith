@@ -1,0 +1,204 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>hindemith.operations.neural_net.lrn &mdash; Hindemith 0.1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../../../../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Hindemith 0.1.0 documentation" href="../../../../index.html" />
+    <link rel="up" title="Module code" href="../../../index.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">Hindemith 0.1.0 documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for hindemith.operations.neural_net.lrn</h1><div class="highlight"><pre>
+<span class="kn">from</span> <span class="nn">hindemith.operations.core</span> <span class="kn">import</span> <span class="n">DeviceLevel</span><span class="p">,</span> <span class="n">register_operation</span>
+<span class="kn">from</span> <span class="nn">hindemith.types</span> <span class="kn">import</span> <span class="n">NDArray</span>
+<span class="kn">from</span> <span class="nn">hindemith.cl</span> <span class="kn">import</span> <span class="n">context</span><span class="p">,</span> <span class="n">Kernel</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pycl</span> <span class="kn">as</span> <span class="nn">cl</span>
+<span class="kn">import</span> <span class="nn">ast</span>
+
+
+<div class="viewcode-block" id="Lrn"><a class="viewcode-back" href="../../../../hindemith.operations.neural_net.html#hindemith.operations.neural_net.lrn.Lrn">[docs]</a><span class="k">class</span> <span class="nc">Lrn</span><span class="p">(</span><span class="n">DeviceLevel</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">statement</span><span class="p">,</span> <span class="n">symbol_table</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">symbol_table</span> <span class="o">=</span> <span class="n">symbol_table</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">statement</span> <span class="o">=</span> <span class="n">statement</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">operand_name</span> <span class="o">=</span> <span class="n">statement</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">operand</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">symbol_table</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">operand_name</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale_name</span> <span class="o">=</span> <span class="n">statement</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sources</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">operand_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale_name</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">keyword</span> <span class="ow">in</span> <span class="n">statement</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">keywords</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">keyword</span><span class="o">.</span><span class="n">arg</span> <span class="ow">in</span> <span class="p">{</span><span class="s">&#39;alpha&#39;</span><span class="p">,</span> <span class="s">&#39;beta&#39;</span><span class="p">,</span> <span class="s">&#39;local_size&#39;</span><span class="p">,</span> <span class="s">&#39;k&#39;</span><span class="p">}:</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">keyword</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">ast</span><span class="o">.</span><span class="n">Name</span><span class="p">):</span>
+                    <span class="n">value</span> <span class="o">=</span> <span class="n">symbol_table</span><span class="p">[</span><span class="n">keyword</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">id</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">value</span> <span class="o">=</span> <span class="n">keyword</span><span class="o">.</span><span class="n">value</span><span class="o">.</span><span class="n">n</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keyword</span><span class="o">.</span><span class="n">arg</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&quot;Unsupport keyword arg to Lrn&quot;</span><span class="p">,</span> <span class="n">keyword</span><span class="o">.</span><span class="n">arg</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_name</span> <span class="o">=</span> <span class="n">statement</span><span class="o">.</span><span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target</span> <span class="o">=</span> <span class="n">symbol_table</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">target_name</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sinks</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">target_name</span><span class="p">]</span>
+
+<div class="viewcode-block" id="Lrn.compile"><a class="viewcode-back" href="../../../../hindemith.operations.neural_net.html#hindemith.operations.neural_net.lrn.Lrn.compile">[docs]</a>    <span class="k">def</span> <span class="nf">compile</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">operand</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">kernels</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">__kernel void LRNFillScale(global const float* in, global float* scale) {{</span>
+<span class="s">  int index = get_global_id(0);</span>
+<span class="s">  int w = index % {width};</span>
+<span class="s">  int h = (index / {width}) % {height};</span>
+<span class="s">  int n = index / {width} / {height};</span>
+<span class="s">  int offset = (n * {channels} * {height} + h) * {width} + w;</span>
+<span class="s">  int step = {height} * {width};</span>
+<span class="s">  in += offset;</span>
+<span class="s">  scale += offset;</span>
+<span class="s">  int head = 0;</span>
+<span class="s">  int pre_pad = ({local_size} - 1) / 2;</span>
+<span class="s">  int post_pad = {local_size} - pre_pad - 1;</span>
+<span class="s">  float accum_scale = 0;</span>
+<span class="s">  // fill the scale at [n, :, h, w]</span>
+<span class="s">  // accumulate values</span>
+<span class="s">  while (head &lt; post_pad &amp;&amp; head &lt; {channels}) {{</span>
+<span class="s">    accum_scale += in[head * step] * in[head * step];</span>
+<span class="s">    ++head;</span>
+<span class="s">  }}</span>
+<span class="s">  // both add and subtract</span>
+<span class="s">  while (head &lt; {channels}) {{</span>
+<span class="s">    accum_scale += in[head * step] * in[head * step];</span>
+<span class="s">    if (head - {local_size} &gt;= 0) {{</span>
+<span class="s">      accum_scale -= in[(head - {local_size}) * step] * </span><span class="se">\</span>
+<span class="s">          in[(head - {local_size}) * step];</span>
+<span class="s">    }}</span>
+<span class="s">    scale[(head - post_pad) * step] = {k} + accum_scale * {alpha_over_size};</span>
+<span class="s">    ++head;</span>
+<span class="s">  }}</span>
+<span class="s">  // subtract only</span>
+<span class="s">  while (head &lt; {channels} + post_pad) {{</span>
+<span class="s">    if (head - {local_size} &gt;= 0) {{</span>
+<span class="s">      accum_scale -= in[(head - {local_size}) * step] * </span><span class="se">\</span>
+<span class="s">          in[(head - {local_size}) * step];</span>
+<span class="s">    }}</span>
+<span class="s">    scale[(head - post_pad) * step] = {k} + accum_scale * {alpha_over_size};</span>
+<span class="s">    ++head;</span>
+<span class="s">  }}</span>
+<span class="s">}}</span>
+<span class="s">__kernel void LRNComputeOutput(global const float* in,</span>
+<span class="s">                               global const float* scale,</span>
+<span class="s">                               global float* out) {{</span>
+<span class="s">  int index = get_global_id(0);</span>
+<span class="s">  out[index] = in[index] * pow(scale[index], {negative_beta}f);</span>
+<span class="s">}}&quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+             <span class="n">height</span><span class="o">=</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
+             <span class="n">channels</span><span class="o">=</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+             <span class="n">local_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">local_size</span><span class="p">,</span>
+             <span class="n">alpha_over_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">local_size</span><span class="p">,</span>
+             <span class="n">k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">k</span><span class="p">,</span>
+             <span class="n">negative_beta</span><span class="o">=-</span><span class="bp">self</span><span class="o">.</span><span class="n">beta</span><span class="p">)</span>
+        <span class="n">program</span> <span class="o">=</span> <span class="n">cl</span><span class="o">.</span><span class="n">clCreateProgramWithSource</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span> <span class="n">kernels</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">build</span><span class="p">()</span>
+        <span class="n">fill_kern</span> <span class="o">=</span> <span class="n">program</span><span class="p">[</span><span class="s">&#39;LRNFillScale&#39;</span><span class="p">]</span>
+        <span class="n">fill_kern</span><span class="o">.</span><span class="n">argtypes</span> <span class="o">=</span> <span class="p">(</span><span class="n">cl</span><span class="o">.</span><span class="n">cl_mem</span><span class="p">,</span> <span class="n">cl</span><span class="o">.</span><span class="n">cl_mem</span><span class="p">)</span>
+        <span class="n">fill_global</span> <span class="o">=</span> <span class="p">(</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="p">)</span>
+        <span class="n">fill_inputs</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">operand_name</span><span class="p">]</span>
+        <span class="n">fill_outputs</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">scale_name</span><span class="p">]</span>
+        <span class="n">compute_kern</span> <span class="o">=</span> <span class="n">program</span><span class="p">[</span><span class="s">&#39;LRNComputeOutput&#39;</span><span class="p">]</span>
+        <span class="n">compute_kern</span><span class="o">.</span><span class="n">argtypes</span> <span class="o">=</span> <span class="p">(</span><span class="n">cl</span><span class="o">.</span><span class="n">cl_mem</span><span class="p">,</span> <span class="n">cl</span><span class="o">.</span><span class="n">cl_mem</span><span class="p">,</span> <span class="n">cl</span><span class="o">.</span><span class="n">cl_mem</span><span class="p">)</span>
+        <span class="n">compute_inputs</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">operand_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale_name</span><span class="p">]</span>
+        <span class="n">compute_outputs</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">target_name</span><span class="p">]</span>
+        <span class="n">compute_global</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">shape</span><span class="p">),</span> <span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">Kernel</span><span class="p">(</span><span class="n">fill_kern</span><span class="p">,</span> <span class="n">fill_inputs</span><span class="p">,</span> <span class="n">fill_outputs</span><span class="p">,</span> <span class="n">fill_global</span><span class="p">),</span>
+                <span class="n">Kernel</span><span class="p">(</span><span class="n">compute_kern</span><span class="p">,</span> <span class="n">compute_inputs</span><span class="p">,</span> <span class="n">compute_outputs</span><span class="p">,</span>
+                       <span class="n">compute_global</span><span class="p">)]</span>
+</div>
+    <span class="nd">@classmethod</span>
+<div class="viewcode-block" id="Lrn.match"><a class="viewcode-back" href="../../../../hindemith.operations.neural_net.html#hindemith.operations.neural_net.lrn.Lrn.match">[docs]</a>    <span class="k">def</span> <span class="nf">match</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">symbol_table</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ast</span><span class="o">.</span><span class="n">Assign</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="n">node</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ast</span><span class="o">.</span><span class="n">Call</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">func</span><span class="p">,</span> <span class="n">ast</span><span class="o">.</span><span class="n">Name</span><span class="p">)</span> <span class="ow">and</span> \
+                <span class="n">node</span><span class="o">.</span><span class="n">func</span><span class="o">.</span><span class="n">id</span> <span class="o">==</span> <span class="s">&#39;Lrn&#39;</span>
+
+</div></div>
+<span class="n">register_operation</span><span class="p">(</span><span class="n">Lrn</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2015, Leonard Truong.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.3</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
