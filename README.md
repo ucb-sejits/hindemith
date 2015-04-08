@@ -6,3 +6,17 @@ This project was started by Mike Anderson during his PhD at UC Berkeley
 ([dissertation link](http://www.eecs.berkeley.edu/Pubs/TechRpts/2014/EECS-2014-210.html)).
 
 [![Build Status](https://travis-ci.org/ucb-sejits/hindemith.svg?branch=master)](https://travis-ci.org/ucb-sejits/hindemith)
+
+
+Non-Python Dependencies
+-----------------------
+clBLAS
+
+```
+git clone https://github.com/arrayfire/clBLAS.git
+cd clBLAS
+mkdir build && cd build
+cmake ../src -DCMAKE_BUILD_TYPE=Release -DBUILD_KTEST=OFF
+CORES=$(grep -c ^processor /proc/cpuinfo 2>/dev/null || sysctl -n hw.ncpu)
+make -j$CORES && sudo make install
+```
