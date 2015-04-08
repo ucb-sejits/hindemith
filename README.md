@@ -1,5 +1,6 @@
 Hindemith
 =========
+[![Build Status](https://travis-ci.org/ucb-sejits/hindemith.svg?branch=master)](https://travis-ci.org/ucb-sejits/hindemith)
 A Framework for Composing High-Performance Code from Python Descriptions
 
 This project was started by Mike Anderson during his PhD at UC Berkeley
