@@ -60,13 +60,13 @@ pool5_mask = NDArray((num_img, 256, 6, 6), np.float32)
 fc6_conv_filters = NDArray.rand((4096, 256, 6, 6), np.float32)
 fc6_conv_biases = NDArray((4096, ), np.float32)
 fc6 = NDArray((num_img, 4096, 1, 1), np.float32)
-fc6_mask = NDArray((num_img, 4096, 1, 1), np.float32)
+fc6_mask = NDArray.rand((num_img, 4096, 1, 1), np.float32)
 
 # fc7
 fc7_conv_filters = NDArray.rand((4096, 4096, 1, 1), np.float32)
 fc7_conv_biases = NDArray((4096, ), np.float32)
 fc7 = NDArray((num_img, 4096, 1, 1), np.float32)
-fc7_mask = NDArray((num_img, 4096, 1, 1), np.float32)
+fc7_mask = NDArray.rand((num_img, 4096, 1, 1), np.float32)
 
 # fc8
 fc8_conv_filters = NDArray.rand((1000, 4096, 1, 1), np.float32)

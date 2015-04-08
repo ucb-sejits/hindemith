@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 from hindemith.types import NDArray
 from hindemith.core import hm
-from hindemith.operations.neural_net import Conv
+from hindemith.operations.neural_net import ConvForward
 
 def reference_conv(in_data, weights, out, stride, pad):
     stride_h, stride_w = stride
@@ -22,10 +22,10 @@ def reference_conv(in_data, weights, out, stride, pad):
 
 
 class TestConv(unittest.TestCase):
-    def test_simple(self):
+    def test_forward(self):
         @hm
         def fn(a, weights, out):
-            out = Conv(a, weights, kernel_size=(11, 11), padding=(0, 0), stride=(4, 4))
+            out = ConvForward(a, weights, kernel_size=(11, 11), padding=(0, 0), stride=(4, 4))
             return out
 
         a = NDArray.rand((3, 3, 227, 227), np.float32) * 255
@@ -40,3 +40,31 @@ class TestConv(unittest.TestCase):
         reference_conv(a, weights, expected, (4, 4), (0, 0))
         out.sync()
         np.testing.assert_array_almost_equal(out, expected.reshape(3, 12, 3025), decimal=2)
+
+
+    def test_forward(self):
+        n = .1
+        @hm
+        def fn(top_diff, weights, bottom, bottom_diff):
+            bottom_diff = ConvBackward(bottom, top_diff, weights,
+                                       learning_rate=n,
+                                       kernel_size=(11, 11),
+                                       padding=(0, 0),
+                                       stride=(4, 4))
+            return bottom_diff
+
+        bottom_diff = NDArray.rand((3, 3, 227, 227), np.float32) * 255
+        bottom_diff.ocl_dirty = True
+        bottom = NDArray.rand((3, 3, 227, 227), np.float32) * 255
+        bottom.ocl_dirty = True
+        weights = NDArray.rand((12, 363), np.float32)
+        out = NDArray.zeros((3, 12, 3025), np.float32)
+
+        out = fn(out, weights, bottom, bottom_diff)
+
+        weights = weights.reshape(12, 3, 11, 11)
+        expected = np.zeros((3, 12, 55, 55), np.float32)
+        # reference_conv(a, weights, expected, (4, 4), (0, 0))
+        out.sync()
+        print(out)
+        # np.testing.assert_array_almost_equal(out, expected.reshape(3, 12, 3025), decimal=2)

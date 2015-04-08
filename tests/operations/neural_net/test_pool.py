@@ -41,9 +41,6 @@ class TestPool(unittest.TestCase):
         a.sync()
         actual_mask = NDArray((3, 16, 12, 12), np.float32)
         actual = NDArray((3, 16, 12, 12), np.float32)
-        actual.fill(float('-inf'))
-        actual.ocl_dirty = True
-        actual.sync()
         expected_mask = NDArray((3, 16, 12, 12), np.float32)
         expected = NDArray((3, 16, 12, 12), np.float32)
         expected.fill(float('-inf'))
