@@ -110,13 +110,14 @@ __kernel void im2col(global const float* {data_im}, global float* {data_col}, in
         class ConvLauncher(object):
             def __init__(self, op):
                 self.op = op
+
             def launch(self, env):
                 bottom = env[self.op.operand_name]
-                bottom.sync()
+                bottom.sync_ocl()
+                self.op.weights.sync_ocl()
                 top = env[self.op.target_name]
                 top_offset = np.prod(top.shape[1:])
                 bot_offset = np.prod(bottom.shape[1:])
-                top.host_dirty = True
                 for i in range(bottom.shape[0]):
                     im2col(bottom.ocl_buf, self.op.col_data.ocl_buf, i
                            * bot_offset).on(queue, im2col_global_size)
@@ -124,8 +125,12 @@ __kernel void im2col(global const float* {data_im}, global float* {data_col}, in
                           1.0, self.op.weights, 0, self.op.col_data, 0,
                           0.0, top, i * top_offset,
                           self.op.weights.shape[0],
-                          self.op.col_data.shape[1],
+                          np.prod(top.shape[2:]),
                           self.op.weights.shape[1])
+                    top.host_dirty = True
+                    top.sync_host()
+                    print(top[i])
+                top.host_dirty = True
         return [ConvLauncher(self)]
 
         # return body, global_size, self.sources, self.sinks

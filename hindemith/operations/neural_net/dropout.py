@@ -37,7 +37,6 @@ class Dropout(ElementLevel):
             "{op}[get_global_id(0)] * {mask}[get_global_id(0)] * {scale}f;"
         ).format(target=self.target_name, op=self.operand_name,
                  mask=self.mask_name, scale=self.scale)
-        print(body)
         global_size = (np.prod(self.operand.shape), )
         return body, global_size, self.sources, self.sinks
 

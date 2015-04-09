@@ -5,7 +5,7 @@ try:
     devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
 except cl.DeviceNotFoundError:
     devices = cl.clGetDeviceIDs()
-context = cl.clCreateContext(devices[-1:])
+context = cl.clCreateContext(devices)
 queue = cl.clCreateCommandQueue(context)
 
 
@@ -19,10 +19,10 @@ class Kernel(object):
     def launch(self, env):
         bufs = []
         for arr in self.inputs:
-            env[arr].sync()
+            env[arr].sync_ocl()
             bufs.append(env[arr].ocl_buf)
         for arr in self.outputs:
-            env[arr].sync()
+            env[arr].sync_ocl()
             bufs.append(env[arr].ocl_buf)
             env[arr].host_dirty = True
         self.kernel(*bufs).on(queue, self.global_size)
@@ -67,10 +67,10 @@ __kernel void func({params}) {{
                 cl.cl_mem for _ in self.sources + self.sinks)
         bufs = []
         for arr in self.sources:
-            env[arr].sync()
+            env[arr].sync_ocl()
             bufs.append(env[arr].ocl_buf)
         for arr in self.sinks:
-            env[arr].sync()
+            env[arr].sync_ocl()
             bufs.append(env[arr].ocl_buf)
             env[arr].host_dirty = True
         global_size = self.global_size

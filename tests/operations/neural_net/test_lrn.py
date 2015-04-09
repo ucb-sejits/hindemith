@@ -3,7 +3,7 @@ import numpy as np
 from math import pow
 
 
-from hindemith.operations.neural_net import Lrn
+from hindemith.operations.neural_net import LrnForward
 from hindemith.types import NDArray
 from hindemith.core import hm
 
@@ -31,7 +31,7 @@ def reference_lrn(blob):
     return output
 
 
-class TestRelu(unittest.TestCase):
+class TestLrn(unittest.TestCase):
     def _check(self, actual, expected):
         np.testing.assert_array_almost_equal(actual, expected, decimal=2)
 
@@ -42,11 +42,20 @@ class TestRelu(unittest.TestCase):
 
         @hm
         def fn(bottom, scale, top):
-            top = Lrn(bottom, scale, alpha=alpha, beta=beta,
-                      local_size=local_size, k=1)
+            top = LrnForward(bottom, scale, alpha=alpha, beta=beta,
+                             local_size=local_size, k=1)
             return top
 
         fn(a, scale, actual)
         actual.sync()
         expected = reference_lrn(a)
         self._check(actual, expected)
+
+        @hm
+        def fn(bottom, top, scale, top_diff, bottom_diff):
+            bottom_diff = LrnBackward(bottom, top, top_diff, scale,
+                                      alpha=alpha, beta=beta, local_size=local_size)
+            return bottom_diff
+        top_diff = NDArray.rand((3, 16, 27, 27), np.float32)
+        bottom_diff = NDArray.zeros(a.shape, np.float32)
+        fn(a, actual, scale, top_diff, bottom_diff)
