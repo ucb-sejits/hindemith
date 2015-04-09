@@ -292,8 +292,6 @@ __kernel void im2col(global const float* data_im, global float* data_col, int bo
                 self.op.bottom_diff.host_dirty = True
         return [ConvLauncher(self)]
 
-        # return body, global_size, self.sources, self.sinks
-
     @classmethod
     def match(cls, node, symbol_table):
         if not isinstance(node, ast.Assign):
