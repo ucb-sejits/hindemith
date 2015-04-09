@@ -52,7 +52,7 @@ class TestPool(unittest.TestCase):
         shape = (3, 16, 24, 24)
         a = NDArray.rand(shape, np.float32) * 255
         a.ocl_dirty = True
-        a.sync()
+        a.sync_host()
         actual_mask = NDArray((3, 16, 12, 12), np.float32)
         actual = NDArray((3, 16, 12, 12), np.float32)
         expected_mask = NDArray((3, 16, 12, 12), np.float32)
@@ -66,8 +66,8 @@ class TestPool(unittest.TestCase):
             return top
 
         fn(a, actual_mask, actual)
-        actual.sync()
-        actual_mask.sync()
+        actual.sync_host()
+        actual_mask.sync_host()
         reference_pool(a, expected, expected_mask, (2, 2), (2, 2), (0, 0))
         self._check(actual, expected)
         self._check(actual_mask, expected_mask)
@@ -88,7 +88,7 @@ class TestPool(unittest.TestCase):
             return bottom_diff
 
         fn(top_diff, mask, bottom_diff)
-        bottom_diff.sync()
+        bottom_diff.sync_host()
         reference_pool_backward(top_diff, mask, expected_bottom_diff,
                                 (2, 2), (2, 2), (0, 0))
         self._check(bottom_diff, expected_bottom_diff)

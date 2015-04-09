@@ -18,7 +18,7 @@ class TestCore(unittest.TestCase):
         b = NDArray.rand((512, ), np.float32)
 
         c = fn(a, b)
-        c.sync()
+        c.sync_host()
         self._check(c, a + b)
 
     def test_two_adds(self):
@@ -31,7 +31,7 @@ class TestCore(unittest.TestCase):
         c = NDArray.rand((512, ), np.float32)
 
         d = fn(a, b, c)
-        d.sync()
+        d.sync_host()
         self._check(d, a + b + c)
 
     def test_intermediate(self):
@@ -45,7 +45,7 @@ class TestCore(unittest.TestCase):
         c = NDArray.rand((512, ), np.float32)
 
         d = fn(a, b, c)
-        d.sync()
+        d.sync_host()
         d_py = a + b
         py_result = a + b * c + d_py
         self._check(d, py_result)
@@ -63,7 +63,7 @@ class TestCore(unittest.TestCase):
         c = NDArray.rand((512, ), np.float32)
 
         c = fn(a, b)
-        c.sync()
+        c.sync_host()
         expected = a + b
         for i in range(10):
             expected = a + expected
@@ -82,7 +82,7 @@ class TestCore(unittest.TestCase):
         c = NDArray.rand((512, 512), np.float32)
 
         c = fn(a, b)
-        c.sync()
+        c.sync_host()
         expected = a + b
         for i in range(10):
             expected = a + expected
@@ -102,7 +102,7 @@ class TestCore(unittest.TestCase):
             c = NDArray.rand((512, 512), np.float32)
 
             c = fn(a, b)
-            c.sync()
+            c.sync_host()
             expected = a + b
             for i in range(10):
                 expected = a + expected
@@ -121,7 +121,7 @@ class TestCore(unittest.TestCase):
         c = NDArray.rand((1024, 1024), np.float32)
 
         c = fn(a, b, 4.6)
-        c.sync()
+        c.sync_host()
         expected = a + b
         for i in range(10):
             expected = 4.6 / a + expected - 4.6
@@ -140,7 +140,7 @@ class TestCore(unittest.TestCase):
         c = NDArray.rand((512, 512), np.float32)
 
         c = fn(a, b)
-        c.sync()
+        c.sync_host()
         expected = a + b
         for i in range(10):
             expected = 3.2 / a + expected - 1.8

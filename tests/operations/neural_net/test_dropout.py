@@ -21,7 +21,7 @@ class TestDropout(unittest.TestCase):
             return Dropout(a, threshold=0.5, mask=mask)
 
         actual = fn(a, mask)
-        actual.sync()
+        actual.sync_host()
         expected = np.copy(a)
         scale = 1.0 / (1.0 - threshold)
         expected = expected * mask * scale

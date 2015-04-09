@@ -127,9 +127,6 @@ __kernel void im2col(global const float* {data_im}, global float* {data_col}, in
                           self.op.weights.shape[0],
                           np.prod(top.shape[2:]),
                           self.op.weights.shape[1])
-                    top.host_dirty = True
-                    top.sync_host()
-                    print(top[i])
                 top.host_dirty = True
         return [ConvLauncher(self)]
 
@@ -267,9 +264,9 @@ __kernel void im2col(global const float* data_im, global float* data_col, int bo
 
             def launch(self, env):
                 bottom = env[self.op.bottom_name]
-                bottom.sync()
+                bottom.sync_ocl()
                 bot_offset = np.prod(bottom.shape[1:])
-                self.op.top_diff.sync()
+                self.op.top_diff.sync_ocl()
                 top_offset = np.prod(self.op.top_diff.shape[1:])
                 for i in range(self.op.top_diff.shape[0]):
                     im2col(bottom.ocl_buf, self.op.col_data.ocl_buf, i
@@ -277,7 +274,7 @@ __kernel void im2col(global const float* data_im, global float* data_col, int bo
                     # FIXME: Passing transpose to sgemm causes error,
                     # have to do it here first for now
                     self.op.col_data.host_dirty = True
-                    self.op.col_data.sync()
+                    self.op.col_data.sync_host()
                     buf = np.copy(self.op.col_data).T.view(NDArray)
                     sgemm(False, False, 1.0, self.op.top_diff, i * top_offset,
                           buf, 0, 1.0,

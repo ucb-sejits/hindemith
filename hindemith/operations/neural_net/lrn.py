@@ -95,6 +95,7 @@ __kernel void LRNComputeOutput(global const float* in,
         compute_inputs = [self.operand_name, self.scale_name]
         compute_outputs = [self.target_name]
         compute_global = (np.prod(shape), )
+        self.target.host_dirty = True
         return [Kernel(fill_kern, fill_inputs, fill_outputs, fill_global),
                 Kernel(compute_kern, compute_inputs, compute_outputs,
                        compute_global)]

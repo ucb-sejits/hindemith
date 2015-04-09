@@ -45,5 +45,5 @@ class TestIm2Row(unittest.TestCase):
 
         expected = reference_im2col(a, (11, 11), (4, 4), (0, 0))
         col = fn(a, col)
-        col.sync()
+        col.sync_host()
         self._check(col, expected.reshape(363, 3025))

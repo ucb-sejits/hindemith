@@ -5,6 +5,7 @@ from hindemith.core import hm
 from hindemith.operations import MMult
 
 
+@unittest.skip("Deprecated")
 class TestDot(unittest.TestCase):
     def _check(self, actual, expected):
         np.testing.assert_allclose(actual, expected, rtol=1e-5)
@@ -22,7 +23,7 @@ class TestDot(unittest.TestCase):
         c = NDArray.rand((512, 512), np.float32)
 
         c = fn(a, b, c)
-        c.sync()
+        c.sync_host()
         self._check(c, a.dot(b))
         
     def test_not_square(self):
@@ -38,6 +39,6 @@ class TestDot(unittest.TestCase):
         c = NDArray.rand((512, 128), np.float32)
 
         c = fn(a, b, c)
-        c.sync()
+        c.sync_host()
         self._check(c, a.dot(b))
         

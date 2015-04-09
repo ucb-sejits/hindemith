@@ -19,7 +19,7 @@ class TestRelu(unittest.TestCase):
             return Relu(a)
 
         actual = fn(a)
-        actual.sync()
+        actual.sync_host()
         expected = np.copy(a)
         expected[expected < 0] = 0
         self._check(actual, expected)

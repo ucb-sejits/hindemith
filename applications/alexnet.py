@@ -134,8 +134,5 @@ forward(data, conv1, lrn1_scale, conv1_filters, norm1, pool1,
         conv4_filters, conv5, conv5_filters, pool5, pool5_mask,
         fc6, fc6_mask, fc6_conv_filters, fc7, fc7_mask,
         fc7_conv_filters, fc8, fc8_conv_filters)
-conv2.sync_host()
-print(pool1)
 fc8.sync_host()
 print(fc8)
-

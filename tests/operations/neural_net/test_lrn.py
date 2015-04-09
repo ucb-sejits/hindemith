@@ -47,7 +47,7 @@ class TestLrn(unittest.TestCase):
             return top
 
         fn(a, scale, actual)
-        actual.sync()
+        actual.sync_host()
         expected = reference_lrn(a)
         self._check(actual, expected)
 

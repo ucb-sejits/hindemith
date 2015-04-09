@@ -84,7 +84,7 @@ class TestConv(unittest.TestCase):
         weights = weights.reshape(12, 3, 11, 11)
         expected = np.zeros((3, 12, 5, 5), np.float32)
         reference_conv(a, weights, expected, (4, 4), (0, 0))
-        out.sync()
+        out.sync_host()
         np.testing.assert_array_almost_equal(out, expected.reshape(3, 12, 25), decimal=2)
 
 
@@ -116,7 +116,7 @@ class TestConv(unittest.TestCase):
             expected_weights_diff += top_diff[i].dot(col_data.T)
             expected_bottom_diff[i] = reference_col2im(weights.T.dot(top_diff[i]), (11, 11),
                                                        (4, 4), (0, 0), expected_bottom_diff[i].shape)
-        weights_diff.sync()
+        weights_diff.sync_host()
         np.testing.assert_array_almost_equal(weights_diff, expected_weights_diff, decimal=2)
-        bottom_diff.sync()
+        bottom_diff.sync_host()
         np.testing.assert_array_almost_equal(bottom_diff, expected_bottom_diff, decimal=2)
