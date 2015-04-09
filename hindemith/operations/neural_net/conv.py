@@ -5,8 +5,15 @@ import numpy as np
 import pycl as cl
 import ctypes as ct
 import ast
-_clblaslib = ct.cdll.LoadLibrary(ct.util.find_library("clBLAS"))
-# _clblaslib = ct.cdll.LoadLibrary("/usr/local/lib64/" + ct.util.find_library("clBLAS"))
+try:
+    try:
+        _clblaslib = ct.cdll.LoadLibrary(ct.util.find_library("clBLAS"))
+    except OSError:
+        _clblaslib = ct.cdll.LoadLibrary("/usr/local/lib64/" + ct.util.find_library("clBLAS"))
+except OSError:
+    raise Exception("Could not find clBLAS, please install it and add"
+                    "it to your LD_LIBRARY_PATH or DYLD_LIBRARY_PATH (for osx)")
+
 err = _clblaslib.clblasSetup()
 
 def sgemm(transA, transB, alpha, A, A_offset, B, B_offset, beta, C, C_offset, m, n, k):
@@ -164,9 +171,9 @@ class ConvBackward(DeviceLevel):
             elif keyword.arg == 'stride':
                 self.stride_h, self.stride_w = tuple(
                     elt.n for elt in keyword.value.elts)
-            elif keyword.arg == 'learning_rate':
-                # TODO: Support numbers and symbols
-                self.learning_rate = self.symbol_table[keyword.value.id]
+            # elif keyword.arg == 'learning_rate':
+            #     # TODO: Support numbers and symbols
+            #     self.learning_rate = self.symbol_table[keyword.value.id]
             else:
                 raise Exception("Unsupport keyword arg to Conv", keyword.arg)
 
@@ -182,10 +189,11 @@ class ConvBackward(DeviceLevel):
         self.sinks = [self.bottom_diff_name, self.weights_diff_name]
 
     def compile(self):
-        global_size = (self.bottom_diff.shape[1] * self.height_col * self.width_col, )
-        col2im_kernel = """
-__kernel void col2im(global float* data_col, global float* data_im, int offset) {{
-  if (get_global_id(0) < {global_size}) {{
+        im2col_global_size = (self.bottom.shape[1] * self.height_col * self.width_col, )
+        col2im_global_size = (np.prod(self.bottom.shape[1:]), )
+        kernels = """
+__kernel void col2im(global float* data_col, global float* data_im, int im_offset) {{
+  if (get_global_id(0) < {col2im_global_size}) {{
     int index = get_global_id(0);
     float val = 0;
     int w = index % {width} + {pad_w};
@@ -197,20 +205,20 @@ __kernel void col2im(global float* data_col, global float* data_im, int offset) 
     int h_col_start = (h < {kernel_h}) ? 0 : (h - {kernel_h}) / {stride_h} + 1;
     int h_col_end = min(h / {stride_h} + 1, {height_col});
     // equivalent implementation
-    int offset =
+    int offset = \
         (c * {kernel_h} * {kernel_w} + h * {kernel_w} + w) * {height_col} * {width_col};
     int coeff_h_col = (1 - {stride_h} * {kernel_w} * {height_col}) * {width_col};
     int coeff_w_col = (1 - {stride_w} * {height_col} * {width_col});
     for (int h_col = h_col_start; h_col < h_col_end; ++h_col) {{
       for (int w_col = w_col_start; w_col < w_col_end; ++w_col) {{
-        val += data_col[offset + h_col * coeff_h_col + w_col * coeff_w_col];
+          val += data_col[offset + h_col * coeff_h_col + w_col * coeff_w_col];
       }}
     }}
-    data_im[offset + index] = val;
+    data_im[im_offset + index] = val;
   }}
 }}
 __kernel void im2col(global const float* data_im, global float* data_col, int bot_offset) {{
-  if (get_global_id(0) < {global_size}) {{
+  if (get_global_id(0) < {im2col_global_size}) {{
     int index = get_global_id(0);
     int w_out = index % {width_col};
     int h_index = index / {width_col};
@@ -236,12 +244,13 @@ __kernel void im2col(global const float* data_im, global float* data_col, int bo
 }}
 """.format(height_col=self.height_col,
            width_col=self.width_col, channels_col=self.channels_col,
-           height=self.bottom_diff.shape[2], width=self.bottom_diff.shape[3],
+           height=self.bottom.shape[2], width=self.bottom.shape[3],
            kernel_h=self.kernel_h, kernel_w=self.kernel_w,
            stride_h=self.stride_h, stride_w=self.stride_w,
            pad_h=self.pad_h, pad_w=self.pad_w,
-           global_size=global_size[0])
-        program = cl.clCreateProgramWithSource(context, col2im_kernel).build()
+           im2col_global_size=im2col_global_size[0],
+           col2im_global_size=col2im_global_size[0])
+        program = cl.clCreateProgramWithSource(context, kernels).build()
         col2im = program['col2im']
         col2im.argtypes = (cl.cl_mem, cl.cl_mem, cl.cl_int)
         im2col = program['im2col']
@@ -254,15 +263,12 @@ __kernel void im2col(global const float* data_im, global float* data_col, int bo
             def launch(self, env):
                 bottom = env[self.op.bottom_name]
                 bottom.sync()
-                self.op.top_diff.sync()
                 bot_offset = np.prod(bottom.shape[1:])
+                self.op.top_diff.sync()
                 top_offset = np.prod(self.op.top_diff.shape[1:])
                 for i in range(self.op.top_diff.shape[0]):
-                    self.op.col_data.host_dirty = True
-                    self.op.col_data.sync()
-                    print(self.op.col_data)
                     im2col(bottom.ocl_buf, self.op.col_data.ocl_buf, i
-                           * bot_offset).on(queue, global_size)
+                           * bot_offset).on(queue, im2col_global_size)
                     # FIXME: Passing transpose to sgemm causes error,
                     # have to do it here first for now
                     self.op.col_data.host_dirty = True
@@ -273,15 +279,17 @@ __kernel void im2col(global const float* data_im, global float* data_col, int bo
                           self.op.weights_diff, 0,
                           self.op.top_diff.shape[1],
                           buf.shape[1], buf.shape[0])
-                    # sgemm(False, True, self.op.top_diff, i * top_offset,
-                    #       1.0, self.op.weights, 0, 0.0,
-                    #       self.op.col_data, 0,
-                    #       self.op.top_diff.shape[0],
-                    #       self.op.weights.shape[1],
-                    #       self.op.col_data.shape[1])
-                    # col2im(self.op.col_data.ocl_buf, self.op.bottom_diff.ocl_buf, i *
-                    #        bot_offset).on(queue, col2im_global_size)
+                    weight_trans = np.copy(self.op.weights).T.view(NDArray)
+                    sgemm(False, False, 1.0, weight_trans, 0,
+                          self.op.top_diff, i * top_offset, 0.0,
+                          self.op.col_data, 0,
+                          weight_trans.shape[0],
+                          self.op.top_diff.shape[2],
+                          weight_trans.shape[1])
+                    col2im(self.op.col_data.ocl_buf, self.op.bottom_diff.ocl_buf, i *
+                           bot_offset).on(queue, col2im_global_size)
                 self.op.weights_diff.host_dirty = True
+                self.op.bottom_diff.host_dirty = True
         return [ConvLauncher(self)]
 
         # return body, global_size, self.sources, self.sinks

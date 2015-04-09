@@ -1,7 +1,8 @@
 import ast
 from hindemith.operations.core import operations, DeviceLevel, ElementLevel
-from hindemith.cl import ElementLevelKernel
+from hindemith.cl import ElementLevelKernel, queue
 import sys
+import pycl as cl
 
 
 class Analyzer(ast.NodeVisitor):
@@ -287,6 +288,7 @@ class ComposableBasicBlock(BasicBlock):
             # kern(*(bufs + outs)).on(queue, global_size)
             for kernel in kernels:
                 kernel.launch(env)
+                cl.clFinish(queue)
             rets = tuple(env[out] for out in self.live_outs)
             if len(rets) == 1:
                 return rets[0]
