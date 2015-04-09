@@ -177,7 +177,7 @@ __kernel void LrnComputeDiff(global const float* bottom, global const float* sca
             top[(head - {local_size}) * step] / scale[(head - {local_size}) * step];
       }}
       bottom_diff[(head - post_pad) * step] = top_diff[(head - post_pad) * step]
-          * pow(scale[(head - post_pad) * step], {negative_beta}) - {cache_ratio} *
+          * pow(scale[(head - post_pad) * step], (float){negative_beta}) - {cache_ratio} *
           bottom[(head - post_pad) * step] * accum_ratio;
       ++head;
     }}
@@ -188,7 +188,7 @@ __kernel void LrnComputeDiff(global const float* bottom, global const float* sca
             top[(head - {local_size}) * step] / scale[(head - {local_size}) * step];
       }}
       bottom_diff[(head - post_pad) * step] = top_diff[(head - post_pad) * step]
-          * pow(scale[(head - post_pad) * step], {negative_beta}) - {cache_ratio} *
+          * pow(scale[(head - post_pad) * step], (float){negative_beta}) - {cache_ratio} *
           bottom[(head - post_pad) * step] * accum_ratio;
       ++head;
     }}
