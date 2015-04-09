@@ -5,24 +5,27 @@ import numpy as np
 import pycl as cl
 import ctypes as ct
 import ast
-# _clblaslib = ct.cdll.LoadLibrary(ct.util.find_library("clBLAS"))
-_clblaslib = ct.cdll.LoadLibrary("/usr/local/lib64/" + ct.util.find_library("clBLAS"))
+_clblaslib = ct.cdll.LoadLibrary(ct.util.find_library("clBLAS"))
+# _clblaslib = ct.cdll.LoadLibrary("/usr/local/lib64/" + ct.util.find_library("clBLAS"))
 err = _clblaslib.clblasSetup()
 
-def sgemm(A, A_offset, alpha, B, B_offset, beta, C, C_offset, m, n, k):
+def sgemm(transA, transB, alpha, A, A_offset, B, B_offset, beta, C, C_offset, m, n, k):
     cblas_row_major = ct.c_int(0)
-    no_trans = ct.c_int(0)
+    transA = ct.c_int(1 if transA else 0)
+    transB = ct.c_int(1 if transB else 0)
     m = ct.c_size_t(int(m))
     n = ct.c_size_t(int(n))
     k = ct.c_size_t(int(k))
-    one = ct.c_float(alpha)
-    zero = ct.c_float(beta)
-    _clblaslib.clblasSgemm(cblas_row_major, no_trans, no_trans, m, n, k,
-                           one, A.ocl_buf, ct.c_size_t(A_offset), k, B.ocl_buf,
-                           ct.c_size_t(B_offset), n, zero, C.ocl_buf,
+    alpha = ct.c_float(alpha)
+    beta = ct.c_float(beta)
+    err = _clblaslib.clblasSgemm(cblas_row_major, transA, transB, m, n, k,
+                           alpha, A.ocl_buf, ct.c_size_t(A_offset), k, B.ocl_buf,
+                           ct.c_size_t(B_offset), n, beta, C.ocl_buf,
                            ct.c_size_t(C_offset), n,
                            ct.c_size_t(1), ct.byref(queue), ct.c_size_t(0),
                            None, None)
+    if err:
+        raise Exception("clBLAS sgemm returned error code {}".format(err))
 
 
 class ConvForward(DeviceLevel):
@@ -110,7 +113,8 @@ __kernel void im2col(global const float* {data_im}, global float* {data_col}, in
                 for i in range(bottom.shape[0]):
                     im2col(bottom.ocl_buf, self.op.col_data.ocl_buf, i
                            * bot_offset).on(queue, im2col_global_size)
-                    sgemm(self.op.weights, 0, 1.0, self.op.col_data, 0,
+                    sgemm(False, False,
+                          1.0, self.op.weights, 0, self.op.col_data, 0,
                           0.0, top, i * top_offset,
                           self.op.weights.shape[0],
                           self.op.col_data.shape[1],
@@ -145,6 +149,8 @@ class ConvBackward(DeviceLevel):
         self.top_diff = self.symbol_table[self.top_diff_name]
         self.weights_name = statement.value.args[2].id
         self.weights = self.symbol_table[self.weights_name]
+        self.weights_diff_name = statement.value.args[3].id
+        self.weights_diff = self.symbol_table[self.weights_diff_name]
 
         self.sources = [self.bottom_name, self.top_diff_name, self.weights_name]
 
@@ -168,17 +174,15 @@ class ConvBackward(DeviceLevel):
         self.channels_col = channels * self.kernel_h * self.kernel_w
         self.height_col = (height + 2 * self.pad_h - self.kernel_h) // self.stride_h + 1
         self.width_col = (width + 2 * self.pad_w - self.kernel_w) // self.stride_w + 1
-        self.weights_diff_name, self.weights_diff = NDArray.unique(self.weights.shape, np.float32)
         self.col_data_name, self.col_data = \
             NDArray.unique((self.channels_col, self.height_col * self.width_col), np.float32)
-        self.symbol_table[self.col_data_name] = self.col_data
 
         self.bottom_diff_name = statement.targets[0].id
         self.bottom_diff = symbol_table[self.bottom_diff_name]
-        self.sinks = [self.bottom_diff_name, self.weights_name]
+        self.sinks = [self.bottom_diff_name, self.weights_diff_name]
 
     def compile(self):
-        col2im_global_size = (self.bottom_diff.shape[1] * self.height_col * self.width_col, )
+        global_size = (self.bottom_diff.shape[1] * self.height_col * self.width_col, )
         col2im_kernel = """
 __kernel void col2im(global float* data_col, global float* data_im, int offset) {{
   if (get_global_id(0) < {global_size}) {{
@@ -236,7 +240,7 @@ __kernel void im2col(global const float* data_im, global float* data_col, int bo
            kernel_h=self.kernel_h, kernel_w=self.kernel_w,
            stride_h=self.stride_h, stride_w=self.stride_w,
            pad_h=self.pad_h, pad_w=self.pad_w,
-           global_size=col2im_global_size[0])
+           global_size=global_size[0])
         program = cl.clCreateProgramWithSource(context, col2im_kernel).build()
         col2im = program['col2im']
         col2im.argtypes = (cl.cl_mem, cl.cl_mem, cl.cl_int)
@@ -249,27 +253,35 @@ __kernel void im2col(global const float* data_im, global float* data_col, int bo
 
             def launch(self, env):
                 bottom = env[self.op.bottom_name]
+                bottom.sync()
+                self.op.top_diff.sync()
                 bot_offset = np.prod(bottom.shape[1:])
-                bottom_diff = env[self.op.bottom_diff_name]
-                top = env[self.op.top_diff_name]
-                top_offset = np.prod(top.shape[1:])
-                top.host_dirty = True
-                for i in range(top.shape[0]):
+                top_offset = np.prod(self.op.top_diff.shape[1:])
+                for i in range(self.op.top_diff.shape[0]):
+                    self.op.col_data.host_dirty = True
+                    self.op.col_data.sync()
+                    print(self.op.col_data)
                     im2col(bottom.ocl_buf, self.op.col_data.ocl_buf, i
-                           * bot_offset).on(queue, col2im_global_size)
-                    sgemm(self.op.top_diff, i * top_offset,
-                          1.0, self.op.col_data, 0, 1.0,
+                           * bot_offset).on(queue, global_size)
+                    # FIXME: Passing transpose to sgemm causes error,
+                    # have to do it here first for now
+                    self.op.col_data.host_dirty = True
+                    self.op.col_data.sync()
+                    buf = np.copy(self.op.col_data).T.view(NDArray)
+                    sgemm(False, False, 1.0, self.op.top_diff, i * top_offset,
+                          buf, 0, 1.0,
                           self.op.weights_diff, 0,
-                          self.op.weights.shape[0],
-                          self.op.col_data.shape[1],
-                          self.op.weights.shape[1])
-                    sgemm(self.op.weights, 0, 1.0, self.op.top_diff, i * top_offset,
-                          0.0, self.op.col_data, 0,
-                          self.op.weights.shape[0],
-                          self.op.col_data.shape[1],
-                          self.op.weights.shape[1])
-                    col2im(self.op.col_data.ocl_buf, self.op.bottom_diff.ocl_buf, i *
-                           bot_offset).on(queue, col2im_global_size)
+                          self.op.top_diff.shape[1],
+                          buf.shape[1], buf.shape[0])
+                    # sgemm(False, True, self.op.top_diff, i * top_offset,
+                    #       1.0, self.op.weights, 0, 0.0,
+                    #       self.op.col_data, 0,
+                    #       self.op.top_diff.shape[0],
+                    #       self.op.weights.shape[1],
+                    #       self.op.col_data.shape[1])
+                    # col2im(self.op.col_data.ocl_buf, self.op.bottom_diff.ocl_buf, i *
+                    #        bot_offset).on(queue, col2im_global_size)
+                self.op.weights_diff.host_dirty = True
         return [ConvLauncher(self)]
 
         # return body, global_size, self.sources, self.sinks
