@@ -128,10 +128,10 @@ class PoolBackward(ElementLevel):
     float gradient = 0;
     int offset = (n * {channels} + c) * {pooled_height} * {pooled_width};
     {top_diff} += offset;
-    mask += offset;
+    {mask} += offset;
     for (int ph = phstart; ph < phend; ++ph) {{
       for (int pw = pwstart; pw < pwend; ++pw) {{
-        if (mask[ph * {pooled_width} + pw] == h * {width} + w) {{
+        if ({mask}[ph * {pooled_width} + pw] == h * {width} + w) {{
           gradient += {top_diff}[ph * {pooled_width} + pw];
         }}
       }}
@@ -139,11 +139,12 @@ class PoolBackward(ElementLevel):
     {bottom_diff}[index] = gradient;
 """.format(bottom_diff=self.bottom_diff_name, mask=self.mask_name,
            top_diff=self.top_diff_name, pooled_width=self.pooled_width,
-           pooled_height=self.pooled_height, channels=self.bottom_diff.shape[1],
+           pooled_height=self.pooled_height,
+           channels=self.bottom_diff.shape[1],
            height=self.bottom_diff.shape[2], width=self.bottom_diff.shape[3],
            kernel_h=self.kernel_h, kernel_w=self.kernel_w,
-           stride_h=self.stride_h, stride_w=self.stride_w,
-           pad_h=self.pad_h, pad_w=self.pad_w)
+           stride_h=self.stride_h, stride_w=self.stride_w, pad_h=self.pad_h,
+           pad_w=self.pad_w)
         global_size = (np.prod(self.bottom_diff.shape), )
         return body, global_size, self.sources, self.sinks
 

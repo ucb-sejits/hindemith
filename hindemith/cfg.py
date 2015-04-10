@@ -113,7 +113,7 @@ class CFGBuilder(ast.NodeVisitor):
         self.curr_basic_block = after_block
 
     def visit_Call(self, node):
-        if node.func.id == 'range':
+        if node.func.id in {'range', 'print'}:
             return node
         self.curr_basic_block.add_statement(
             ast.Assign([ast.Name(self.curr_target, ast.Store())], node))

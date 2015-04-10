@@ -40,8 +40,8 @@ class NDArray(np.ndarray):
         else:
             return "{}[get_global_id(0)]".format(name)
 
-    def sync_host(self):
-        if self.host_dirty:
+    def sync_host(self, force=True):
+        if self.host_dirty or force:
             _, evt = cl.buffer_to_ndarray(queue, self.ocl_buf, self)
             evt.wait()
             self.host_dirty = False

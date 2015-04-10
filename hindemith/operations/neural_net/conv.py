@@ -19,20 +19,23 @@ except OSError:
 err = _clblaslib.clblasSetup()
 
 
-def sgemm(transA, transB, alpha, A, A_offset, B, B_offset, beta, C, C_offset,
-          m, n, k):
+def sgemm(transA, transB, alpha, A, A_offset, lda, B, B_offset, ldb, beta, C,
+          C_offset, ldc, m, n, k):
     cblas_row_major = ct.c_int(0)
     transA = ct.c_int(1 if transA else 0)
     transB = ct.c_int(1 if transB else 0)
+    lda = ct.c_size_t(int(lda))
+    ldb = ct.c_size_t(int(ldb))
+    ldc = ct.c_size_t(int(ldc))
     m = ct.c_size_t(int(m))
     n = ct.c_size_t(int(n))
     k = ct.c_size_t(int(k))
     alpha = ct.c_float(alpha)
     beta = ct.c_float(beta)
     err = _clblaslib.clblasSgemm(cblas_row_major, transA, transB, m, n, k,
-                                 alpha, A.ocl_buf, ct.c_size_t(A_offset), k,
-                                 B.ocl_buf, ct.c_size_t(B_offset), n, beta,
-                                 C.ocl_buf, ct.c_size_t(C_offset), n,
+                                 alpha, A.ocl_buf, ct.c_size_t(A_offset), lda,
+                                 B.ocl_buf, ct.c_size_t(B_offset), ldb, beta,
+                                 C.ocl_buf, ct.c_size_t(C_offset), ldc,
                                  ct.c_size_t(1), ct.byref(queue),
                                  ct.c_size_t(0), None, None)
     if err:
@@ -132,12 +135,12 @@ __kernel void im2col(global const float* $data_im, global float* $data_col,
                 for i in range(bottom.shape[0]):
                     im2col(bottom.ocl_buf, self.op.col_data.ocl_buf, i
                            * bot_offset).on(queue, im2col_global_size)
+                    m = self.op.weights.shape[0]
+                    n = np.prod(top.shape[2:])
+                    k = self.op.weights.shape[1]
                     sgemm(False, False,
-                          1.0, self.op.weights, 0, self.op.col_data, 0,
-                          0.0, top, i * top_offset,
-                          self.op.weights.shape[0],
-                          np.prod(top.shape[2:]),
-                          self.op.weights.shape[1])
+                          1.0, self.op.weights, 0, k, self.op.col_data, 0, n,
+                          0.0, top, i * top_offset, n, m, n, k)
                 top.host_dirty = True
         return [ConvLauncher(self)]
 
@@ -291,23 +294,22 @@ __kernel void im2col(global const float* data_im, global float* data_col,
                 for i in range(self.op.top_diff.shape[0]):
                     im2col(bottom.ocl_buf, self.op.col_data.ocl_buf, i
                            * bot_offset).on(queue, im2col_global_size)
-                    # FIXME: Passing transpose to sgemm causes error,
-                    # have to do it here first for now
-                    self.op.col_data.host_dirty = True
-                    self.op.col_data.sync_host()
-                    buf = np.copy(self.op.col_data).T.view(NDArray)
-                    sgemm(False, False, 1.0, self.op.top_diff, i * top_offset,
-                          buf, 0, 1.0,
-                          self.op.weights_diff, 0,
-                          self.op.top_diff.shape[1],
-                          buf.shape[1], buf.shape[0])
-                    weight_trans = np.copy(self.op.weights).T.view(NDArray)
-                    sgemm(False, False, 1.0, weight_trans, 0,
-                          self.op.top_diff, i * top_offset, 0.0,
-                          self.op.col_data, 0,
-                          weight_trans.shape[0],
-                          self.op.top_diff.shape[2],
-                          weight_trans.shape[1])
+                    m = self.op.top_diff.shape[1]
+                    n = self.op.col_data.shape[0]
+                    k = self.op.col_data.shape[1]
+
+                    sgemm(False, True, 1.0, self.op.top_diff, i *
+                          top_offset, k, self.op.col_data, 0, k, 1.0,
+                          self.op.weights_diff, 0, n, m, n, k)
+
+                    m = self.op.weights.shape[1]
+                    n = self.op.col_data.shape[1]
+                    k = self.op.weights.shape[0]
+
+                    sgemm(True, False, 1.0, self.op.weights, 0, m,
+                          self.op.top_diff, i * top_offset, n, 0.0,
+                          self.op.col_data, 0, n,
+                          m, n, k)
                     col2im(self.op.col_data.ocl_buf,
                            self.op.bottom_diff.ocl_buf, i *
                            bot_offset).on(queue, col2im_global_size)
