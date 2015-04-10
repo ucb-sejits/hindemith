@@ -7,7 +7,7 @@ import ast
 from string import Template
 
 kernels = Template("""
-@begin=cl@
+// @begin=cl@
 __kernel void kernel_channel_max(global const float* data,
                                  global float* out) {
   if (get_global_id(0) < $count) {
@@ -96,7 +96,7 @@ __kernel void SoftmaxLossForward(global const float* prob_data,
     }
   }
 }
-@end=cl@
+// @end=cl@
 """)
 
 
