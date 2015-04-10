@@ -209,7 +209,6 @@ class ConvBackward(DeviceLevel):
         im2col_global_size = (self.bottom.shape[1] * self.height_col *
                               self.width_col, )
         col2im_global_size = (np.prod(self.bottom.shape[1:]), )
-# s/{\([^}]*\)}/$\1/g
         kernels = Template("""
 // @begin=cl@
 __kernel void col2im(global float* data_col, global float* data_im,
@@ -258,7 +257,7 @@ __kernel void im2col(global const float* data_im, global float* data_col,
       for (int j = 0; j < $kernel_w; ++j) {
         int h = h_in + i;
         int w = w_in + j;
-        *data_col_ptr = (h >= 0 && w >= 0 && h < $height && w < $width) ?
+        *data{_col_ptr = (h >= 0 && w >= 0 && h < $height && w < $width) ?
             data_im_ptr[i * $width + j] : 0;
         data_col_ptr += $height_col * $width_col;
       }
