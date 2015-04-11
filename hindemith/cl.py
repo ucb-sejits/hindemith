@@ -59,7 +59,6 @@ __kernel void func({params}) {{
   }}
 }}""".format(params=params, body=self.body,
              size=self.global_size[0])
-            print(kernel)
             self.compiled = cl.clCreateProgramWithSource(
                 context, kernel
             ).build()['func']

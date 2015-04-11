@@ -287,6 +287,7 @@ class ComposableBasicBlock(BasicBlock):
             # kern.argtypes = types
             # kern(*(bufs + outs)).on(queue, global_size)
             for kernel in kernels:
+                cl.clFinish(queue)
                 kernel.launch(env)
                 cl.clFinish(queue)
             rets = tuple(env[out] for out in self.live_outs)

@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 from hindemith.types import NDArray
 from hindemith.core import hm
-from hindemith.operations.neural_net import ConvForward
+from hindemith.operations.neural_net import ConvForward, ConvBackward
 
 def reference_conv(in_data, weights, out, stride, pad):
     stride_h, stride_w = stride
@@ -29,7 +29,8 @@ def reference_im2col(data, kernel_size, stride, padding):
     height_col = (height + 2 * pad_h - kernel_h) // stride_h + 1
     width_col = (width + 2 * pad_w - kernel_w) // stride_w + 1
     channels_col = channels * kernel_h * kernel_w
-    data_col = NDArray.zeros((channels_col, height_col * width_col), np.float32)
+    data_col = NDArray.zeros((channels_col, height_col * width_col),
+                             np.float32)
     for c in range(channels_col):
         w_offset = c % kernel_w
         h_offset = (c / kernel_w) % kernel_h
@@ -38,10 +39,11 @@ def reference_im2col(data, kernel_size, stride, padding):
             for w in range(width_col):
                 h_pad = h * stride_h - pad_h + h_offset
                 w_pad = w * stride_w - pad_w + w_offset
-                if (h_pad >= 0 and h_pad < height and w_pad >= 0 and w_pad < width):
-                    data_col[c, h * width_col + w] = data[c_im, h_pad, w_pad];
+                if (h_pad >= 0 and h_pad < height and
+                        w_pad >= 0 and w_pad < width):
+                    data_col[c, h * width_col + w] = data[c_im, h_pad, w_pad]
                 else:
-                    data_col[c, h * width_col + w] = 0;
+                    data_col[c, h * width_col + w] = 0
     return data_col
 
 
@@ -62,7 +64,8 @@ def reference_col2im(data_col, kernel_size, stride, padding, shape):
             for w in range(width_col):
                 h_pad = h * stride_h - pad_h + h_offset
                 w_pad = w * stride_w - pad_w + w_offset
-                if (h_pad >= 0 and h_pad < height and w_pad >= 0 and w_pad < width):
+                if (h_pad >= 0 and h_pad < height and w_pad >= 0 and w_pad <
+                        width):
                     data[c_im, h_pad, w_pad] += data_col[c, h * width_col + w]
     return data
 
@@ -71,11 +74,12 @@ class TestConv(unittest.TestCase):
     def test_forward(self):
         @hm
         def fn(a, weights, out):
-            out = ConvForward(a, weights, kernel_size=(11, 11), padding=(0, 0), stride=(4, 4))
+            out = ConvForward(a, weights, kernel_size=(11, 11), padding=(0, 0),
+                              stride=(4, 4))
             return out
 
         a = NDArray.rand((3, 3, 27, 27), np.float32) * 255
-        a.ocl_dirty = True
+        a.sync_ocl(True)
         weights = NDArray.rand((12, 363), np.float32)
         out = NDArray.zeros((3, 12, 25), np.float32)
 
@@ -84,22 +88,22 @@ class TestConv(unittest.TestCase):
         weights = weights.reshape(12, 3, 11, 11)
         expected = np.zeros((3, 12, 5, 5), np.float32)
         reference_conv(a, weights, expected, (4, 4), (0, 0))
-        out.sync_host()
-        np.testing.assert_array_almost_equal(out, expected.reshape(3, 12, 25), decimal=2)
-
+        out.sync_host(True)
+        np.testing.assert_array_almost_equal(out, expected.reshape(3, 12, 25),
+                                             decimal=2)
 
     def test_backward(self):
         @hm
         def fn(top_diff, weights, bottom, bottom_diff, weights_diff):
             bottom_diff = ConvBackward(bottom, top_diff, weights, weights_diff,
-                                       kernel_size=(11, 11),
-                                       padding=(0, 0),
+                                       kernel_size=(11, 11), padding=(0, 0),
                                        stride=(4, 4))
             return bottom_diff
 
-        top_diff = NDArray.rand((3, 12, 25), np.float32)
+        top_diff = NDArray.rand((3, 12, 25), np.float32) * 5
+        top_diff.sync_ocl(True)
         bottom = NDArray.rand((3, 3, 27, 27), np.float32) * 255
-        bottom.ocl_dirty = True
+        bottom.sync_ocl(True)
         weights = NDArray.rand((12, 363), np.float32)
 
         weights_diff = NDArray.zeros((12, 363), np.float32)
@@ -108,15 +112,17 @@ class TestConv(unittest.TestCase):
         fn(top_diff, weights, bottom, bottom_diff, weights_diff)
 
         expected_weights_diff = np.zeros_like(weights)
-        expected = np.zeros((3, 12, 5, 5), np.float32)
-
         expected_bottom_diff = np.zeros_like(bottom_diff)
+
         for i in range(top_diff.shape[0]):
             col_data = reference_im2col(bottom[i], (11, 11), (4, 4), (0, 0))
             expected_weights_diff += top_diff[i].dot(col_data.T)
-            expected_bottom_diff[i] = reference_col2im(weights.T.dot(top_diff[i]), (11, 11),
-                                                       (4, 4), (0, 0), expected_bottom_diff[i].shape)
-        weights_diff.sync_host()
-        np.testing.assert_array_almost_equal(weights_diff, expected_weights_diff, decimal=2)
-        bottom_diff.sync_host()
-        np.testing.assert_array_almost_equal(bottom_diff, expected_bottom_diff, decimal=2)
+            expected_bottom_diff[i] = reference_col2im(
+                weights.T.dot(top_diff[i]), (11, 11), (4, 4), (0, 0),
+                expected_bottom_diff[i].shape)
+        weights_diff.sync_host(True)
+        np.testing.assert_array_almost_equal(weights_diff,
+                                             expected_weights_diff, decimal=2)
+        bottom_diff.sync_host(True)
+        np.testing.assert_array_almost_equal(bottom_diff, expected_bottom_diff,
+                                             decimal=2)

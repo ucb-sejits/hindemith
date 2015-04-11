@@ -3,7 +3,7 @@ import numpy as np
 from math import pow
 
 
-from hindemith.operations.neural_net import LrnForward
+from hindemith.operations.neural_net import LrnForward, LrnBackward
 from hindemith.types import NDArray
 from hindemith.core import hm
 
@@ -54,7 +54,8 @@ class TestLrn(unittest.TestCase):
         @hm
         def fn(bottom, top, scale, top_diff, bottom_diff):
             bottom_diff = LrnBackward(bottom, top, top_diff, scale,
-                                      alpha=alpha, beta=beta, local_size=local_size)
+                                      alpha=alpha, beta=beta,
+                                      local_size=local_size)
             return bottom_diff
         top_diff = NDArray.rand((3, 16, 27, 27), np.float32)
         bottom_diff = NDArray.zeros(a.shape, np.float32)

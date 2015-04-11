@@ -144,7 +144,7 @@ fc8_diff = NDArray.zeros((num_img, 1000, 1, 1), np.float32)
 for filt in (conv1_filters, conv2_filters, conv3_filters, conv4_filters,
              conv5_filters, fc6_conv_filters, fc7_conv_filters,
              fc8_conv_filters):
-    filt[:] = filt * .2
+    filt[:] = filt * .02
     filt.sync_ocl(True)
 
 
@@ -206,64 +206,104 @@ def forward():
 
 @hm
 def backward(loss_diff):
+    # Softmax
     fc8_diff = SoftMaxWithLossBackward(loss_diff, label, softmax_prob)
+    # fc8
     fc7_diff = ConvBackward(fc7, fc8_diff, fc8_conv_filters,
                             fc8_conv_filters_diff, kernel_size=(1, 1),
                             padding=(0, 0), stride=(1, 1))
     fc7_diff = Dropout(fc7_diff, threshold=0.5, mask=fc7_mask)
     fc7_diff = Relu(fc7_diff)
 
+    # fc7
     fc6_diff = ConvBackward(fc6, fc7_diff, fc7_conv_filters,
                             fc7_conv_filters_diff, kernel_size=(1, 1),
                             padding=(0, 0), stride=(1, 1))
     fc6_diff = Dropout(fc6_diff, threshold=0.5, mask=fc6_mask)
     fc6_diff = Relu(fc6_diff)
 
+    # fc6
     pool5_diff = ConvBackward(pool5, fc6_diff, fc6_conv_filters,
                               fc6_conv_filters_diff, kernel_size=(6, 6),
                               padding=(0, 0), stride=(1, 1))
 
+    # pool5
     conv5_diff = PoolBackward(pool5_diff, pool5_mask, kernel_size=(3, 3),
                               padding=(0, 0), stride=(2, 2))
     conv5_diff = Relu(conv5_diff)
 
+    # conv5
     conv4_diff = ConvBackward(conv4, conv5_diff, conv5_filters,
                               conv5_filters_diff, kernel_size=(3, 3),
                               padding=(1, 1), stride=(1, 1))
     conv4_diff = Relu(conv4_diff)
 
+    # conv4
     conv3_diff = ConvBackward(conv3, conv4_diff, conv4_filters,
                               conv4_filters_diff, kernel_size=(3, 3),
                               padding=(1, 1), stride=(1, 1))
     conv3_diff = Relu(conv3_diff)
 
-    pool2_diff = ConvForward(pool2, conv3_diff, conv3_filters,
-                             conv3_filters_diff, kernel_size=(3, 3),
-                             padding=(1, 1), stride=(1, 1))
+    # conv3
+    pool2_diff = ConvBackward(pool2, conv3_diff, conv3_filters,
+                              conv3_filters_diff, kernel_size=(3, 3),
+                              padding=(1, 1), stride=(1, 1))
+    # pool2
     norm2_diff = PoolBackward(pool2_diff, pool2_mask, kernel_size=(3, 3),
                               padding=(0, 0), stride=(2, 2))
 
+    # lrn2
     conv2_diff = LrnBackward(conv2, norm2, norm2_diff, lrn2_scale, alpha=alpha,
                              beta=beta, local_size=local_size, k=1)
     conv2_diff = Relu(conv2_diff)
+    # conv2
     pool1_diff = ConvBackward(pool1, conv2_diff, conv2_filters,
                               conv2_filters_diff, kernel_size=(5, 5),
                               padding=(2, 2), stride=(1, 1))
 
-    norm1_diff = PoolBackward(pool1_diff, pool2_mask, kernel_size=(3, 3),
+    # pool1
+    norm1_diff = PoolBackward(pool1_diff, pool1_mask, kernel_size=(3, 3),
                               padding=(0, 0), stride=(2, 2))
+    # lrn1
     conv1_diff = LrnBackward(conv1, norm1, norm1_diff, lrn1_scale, alpha=alpha,
                              beta=beta, local_size=local_size, k=1)
     conv1_diff = Relu(conv1_diff)
+    # conv1
     data_diff = ConvBackward(data, conv1_diff, conv1_filters,
                              conv1_filters_diff, kernel_size=(11, 11),
                              padding=(0, 0), stride=(4, 4))
     return data_diff
 
-for i in range(5):
-    print("Running iter {}".format(i))
+for outer_i in range(6):
+    print("Running iter {}".format(outer_i))
+    for i in range(num_img):
+        datum.ParseFromString(next(cursor)[1])
+        channels, datum_height, datum_width = datum.channels, datum.height, \
+            datum.width
+        # channels, datum_height, datum_width = 1, 28, 28
+        height = datum_height
+        width = datum_width
+        if PHASE == "train":
+            height = crop_size
+            width = crop_size
+            h_off = random.randrange(datum_height - crop_size + 1)
+            w_off = random.randrange(datum_width - crop_size + 1)
+        else:
+            h_off = (datum_height - crop_size) / 2
+            w_off = (datum_width - crop_size) / 2
+        uncropped = np.fromstring(
+            datum.data, dtype=np.uint8
+        ).astype(np.float32).reshape(channels, datum_height, datum_width)
+        for c in range(channels):
+            uncropped[c] = np.fliplr(uncropped[c])
+        data[i] = uncropped[..., h_off:h_off + height, w_off:w_off + width]
+        label[i] = datum.label
+    data.sync_ocl(True)
+    label.sync_ocl(True)
     forward()
-    print(np.max(softmax_prob))
+    softmax_prob.sync_host(True)
+    print("Median of softmax", np.median(softmax_prob[0]))
+    print("Loss", loss)
     backward(loss)
 
     for filt, diff in ((conv1_filters, conv1_filters_diff),
@@ -271,12 +311,13 @@ for i in range(5):
                        (conv3_filters, conv3_filters_diff),
                        (conv4_filters, conv4_filters_diff),
                        (conv5_filters, conv5_filters_diff),
-                       (fc6_conv_filters, fc6_conv_filters),
-                       (fc7_conv_filters, fc7_conv_filters),
-                       (fc8_conv_filters, fc8_conv_filters)):
+                       (fc6_conv_filters, fc6_conv_filters_diff),
+                       (fc7_conv_filters, fc7_conv_filters_diff),
+                       (fc8_conv_filters, fc8_conv_filters_diff)):
         filt.sync_host(True)
         diff.sync_host(True)
-        print(np.max(diff))
+        print("Max of diff", np.max(diff))
         filt = filt - .1 * diff
+        diff.fill(0)
         filt.sync_ocl(True)
         diff.sync_ocl(True)

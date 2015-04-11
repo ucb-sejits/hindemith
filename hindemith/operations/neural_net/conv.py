@@ -127,8 +127,6 @@ __kernel void im2col(global const float* $data_im, global float* $data_col,
 
             def launch(self, env):
                 bottom = env[self.op.operand_name]
-                bottom.sync_ocl()
-                self.op.weights.sync_ocl()
                 top = env[self.op.target_name]
                 top_offset = np.prod(top.shape[1:])
                 bot_offset = np.prod(bottom.shape[1:])
@@ -141,7 +139,6 @@ __kernel void im2col(global const float* $data_im, global float* $data_col,
                     sgemm(False, False,
                           1.0, self.op.weights, 0, k, self.op.col_data, 0, n,
                           0.0, top, i * top_offset, n, m, n, k)
-                top.host_dirty = True
         return [ConvLauncher(self)]
 
         # return body, global_size, self.sources, self.sinks
@@ -287,9 +284,7 @@ __kernel void im2col(global const float* data_im, global float* data_col,
 
             def launch(self, env):
                 bottom = env[self.op.bottom_name]
-                bottom.sync_ocl()
                 bot_offset = np.prod(bottom.shape[1:])
-                self.op.top_diff.sync_ocl()
                 top_offset = np.prod(self.op.top_diff.shape[1:])
                 for i in range(self.op.top_diff.shape[0]):
                     im2col(bottom.ocl_buf, self.op.col_data.ocl_buf, i
