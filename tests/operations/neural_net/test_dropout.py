@@ -12,17 +12,19 @@ class TestDropout(unittest.TestCase):
         np.testing.assert_allclose(actual, expected)
 
     def test_simple(self):
-        a = NDArray.rand((256, 12, 56, 56), np.float32)
+        bottom = NDArray.rand((256, 12, 56, 56), np.float32)
+        top = NDArray.rand((256, 12, 56, 56), np.float32)
         threshold = .5
         mask = NDArray.rand((256, 12, 56, 56), np.float32)
 
         @hm
-        def fn(a, mask):
-            return Dropout(a, threshold=0.5, mask=mask)
+        def fn(bottom, mask, top):
+            top = Dropout(bottom, threshold=0.5, mask=mask)
+            return top
 
-        actual = fn(a, mask)
-        actual.sync_host()
-        expected = np.copy(a)
+        fn(bottom, mask, top)
+        top.sync_host()
+        expected = np.copy(bottom)
         scale = 1.0 / (1.0 - threshold)
         expected = expected * mask * scale
-        self._check(actual, expected)
+        self._check(top, expected)
