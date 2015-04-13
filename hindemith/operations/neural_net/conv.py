@@ -1,45 +1,11 @@
 from hindemith.operations.core import DeviceLevel, register_operation
 from hindemith.types import NDArray
 from hindemith.cl import context, queue
+from hindemith.clibs.clBLAS import sgemm
 from string import Template
 import numpy as np
 import pycl as cl
-import ctypes as ct
 import ast
-try:
-    clBLAS_lib = ct.util.find_library("clBLAS")
-    try:
-        _clblaslib = ct.cdll.LoadLibrary(clBLAS_lib)
-    except OSError:
-        _clblaslib = ct.cdll.LoadLibrary("/usr/local/lib64/" + clBLAS_lib)
-except OSError:
-    raise Exception("Could not find clBLAS, please install it and add"
-                    "it to your LD_LIBRARY_PATH or DYLD_LIBRARY_PATH")
-
-err = _clblaslib.clblasSetup()
-
-
-def sgemm(transA, transB, alpha, A, A_offset, lda, B, B_offset, ldb, beta, C,
-          C_offset, ldc, m, n, k):
-    cblas_row_major = ct.c_int(0)
-    transA = ct.c_int(1 if transA else 0)
-    transB = ct.c_int(1 if transB else 0)
-    lda = ct.c_size_t(int(lda))
-    ldb = ct.c_size_t(int(ldb))
-    ldc = ct.c_size_t(int(ldc))
-    m = ct.c_size_t(int(m))
-    n = ct.c_size_t(int(n))
-    k = ct.c_size_t(int(k))
-    alpha = ct.c_float(alpha)
-    beta = ct.c_float(beta)
-    err = _clblaslib.clblasSgemm(cblas_row_major, transA, transB, m, n, k,
-                                 alpha, A.ocl_buf, ct.c_size_t(A_offset), lda,
-                                 B.ocl_buf, ct.c_size_t(B_offset), ldb, beta,
-                                 C.ocl_buf, ct.c_size_t(C_offset), ldc,
-                                 ct.c_size_t(1), ct.byref(queue),
-                                 ct.c_size_t(0), None, None)
-    if err:
-        raise Exception("clBLAS sgemm returned error code {}".format(err))
 
 
 class ConvForward(DeviceLevel):

@@ -10,13 +10,7 @@ install:
   - export PYTHON_VERSION=$(python -c 'import sys; print(sys.version_info[0:2])')
   - pip install -r requirements.txt
   - pip install coveralls coverage
-  - git clone https://github.com/arrayfire/clBLAS
-  - cd clBLAS
-  - mkdir build
-  - cd build
-  - cmake ../src -DCMAKE_BUILD_TYPE=Release -DBUILD_KTEST=OFF
-  - make && sudo make install
-  - cd $TRAVIS_BUILD_DIR
+  - ./build_clBLAS.sh
 script:
   - LD_LIBRARY_PATH=/usr/local/lib64 nosetests --verbose --with-coverage --cover-package=hindemith --cover-erase
 deploy:

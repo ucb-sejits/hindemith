@@ -1,19 +1,18 @@
 from hindemith.types import NDArray
 from hindemith.core import hm
 import numpy as np
-# from hindemith.operations.image_processing import patches_to_rows
 from hindemith.operations.neural_net import Relu, LrnForward, PoolForward, \
     ConvForward, Dropout, SoftMaxWithLossForward, LrnBackward, PoolBackward, \
     ConvBackward, SoftMaxWithLossBackward
-# from hindemith.operations.ndarray import transpose, reshape, dot
 import lmdb
 import caffe_pb2 as pb
 import random
+import math
 
 # env = lmdb.open(
 #     "/home/neubotech/denoise_caffe/examples/mnist/mnist_train_lmdb")
 env = lmdb.Environment(
-    "/storage2/datasets/ilsvrc2012_train_256x256_lmdb", readonly=True)
+    "/storage2/datasets/ilsvrc2012_train_256x256_lmdb", readonly=True, lock=False)
 
 PHASE = "train"
 crop_size = 227
@@ -57,9 +56,23 @@ data_diff = NDArray.zeros(data.shape, np.float32)
 label = label.view(NDArray)
 label.sync_ocl(force=True)
 
+def init_filters(shape):
+    """
+    Initialize filters using xaviar scheme.
+    Draws random sample from [-\frac{1}{\sqrt{n}}, \frac{1}{\sqrt{n}}] where
+    n is the number of filters
+
+    :param NDArray shape: Tuple of scheme (num_filters, spatial_dim)
+    :return tuple[NDArray, NDArray]: Tuple of initialized filters, zero-ed diff
+    """
+    num_filters = shape[0]
+    filters = NDArray.rand(shape, np.float32) * 2 - 1
+    filters *= (1.0 / math.sqrt(num_fitlers))
+    diff = NDArra.zeros_like(shape)
+    return filters, diff
+
 # Conv1
-conv1_filters = NDArray.rand((96, 3 * 11 * 11), np.float32) * 2 - 1
-conv1_filters_diff = NDArray.zeros((96, 3 * 11 * 11), np.float32)
+conv1_filters, conv1_filters_diff = init_filters((96, 3 * 11 * 11))
 conv1_biases = NDArray((96, ), np.float32)
 conv1 = NDArray.zeros((num_img, 96, 55, 55), np.float32)
 conv1_diff = NDArray.zeros((num_img, 96, 55, 55), np.float32)
