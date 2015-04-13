@@ -9,15 +9,9 @@ This project was started by Mike Anderson during his PhD at UC Berkeley
 [![Coverage Status](https://coveralls.io/repos/ucb-sejits/hindemith/badge.svg?branch=master)](https://coveralls.io/r/ucb-sejits/hindemith?branch=master)
 
 
-Non-Python Dependencies
------------------------
-clBLAS
-
-```
-git clone https://github.com/arrayfire/clBLAS.git
-cd clBLAS
-mkdir build && cd build
-cmake ../src -DCMAKE_BUILD_TYPE=Release -DBUILD_KTEST=OFF
-CORES=$(grep -c ^processor /proc/cpuinfo 2>/dev/null || sysctl -n hw.ncpu)
-make -j$CORES && sudo make install
+Setup
+-----
+```shell
+./build_clBLAS.sh
+pip install --user -r requirements.txt
 ```
