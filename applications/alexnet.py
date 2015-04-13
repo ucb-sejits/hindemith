@@ -12,8 +12,8 @@ import random
 
 # env = lmdb.open(
 #     "/home/neubotech/denoise_caffe/examples/mnist/mnist_train_lmdb")
-env = lmdb.open(
-    "/storage2/datasets/ilsvrc2012_train_256x256_lmdb")
+env = lmdb.Environment(
+    "/storage2/datasets/ilsvrc2012_train_256x256_lmdb", readonly=True)
 
 PHASE = "train"
 crop_size = 227

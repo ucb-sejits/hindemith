@@ -27,7 +27,6 @@ class Dropout(ElementLevel):
         self.sources = [self.operand_name, self.mask_name]
 
         self.target_name = statement.targets[0].id
-        symbol_table[self.target_name] = NDArray.like(self.operand)
         self.target = symbol_table[self.target_name]
         self.sinks = [self.target_name]
 
