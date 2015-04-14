@@ -128,19 +128,28 @@ pool5_mask = NDArray.zeros((num_img, 256, 6, 6), np.float32)
 pool5_diff = NDArray.zeros((num_img, 256, 6, 6), np.float32)
 
 # fc6
-fc6_conv_filters, fc6_conv_filters_diff = init_filters((4096, 256 * 6 * 6))
+fc6_conv_filters = NDArray.rand((4096, 256 * 6 * 6), np.float32) * 2 - 1
+fc6_conv_filters_diff = NDArray((4096, 256 * 6 * 6), np.float32)
+fc6_conv_filters.sync_ocl(True)
+fc6_conv_filters_diff.sync_ocl(True)
 fc6 = NDArray.zeros((num_img, 4096, 1, 1), np.float32)
 fc6_mask = NDArray.rand((num_img, 4096, 1, 1), np.float32)
 fc6_diff = NDArray.zeros((num_img, 4096, 1, 1), np.float32)
 
 # fc7
-fc7_conv_filters, fc7_conv_filters_diff = init_filters((4096, 4096 * 1 * 1))
+fc7_conv_filters = NDArray.rand((4096, 4096 * 1 * 1), np.float32) * 2 - 1
+fc7_conv_filters_diff = NDArray((4096, 4096 * 1 * 1), np.float32)
+fc7_conv_filters.sync_ocl(True)
+fc7_conv_filters_diff.sync_ocl(True)
 fc7 = NDArray.zeros((num_img, 4096, 1, 1), np.float32)
 fc7_diff = NDArray.zeros((num_img, 4096, 1, 1), np.float32)
 fc7_mask = NDArray.rand((num_img, 4096, 1, 1), np.float32)
 
 # fc8
-fc8_conv_filters, fc8_conv_filters_diff = init_filters((1000, 4096 * 1 * 1))
+fc8_conv_filters = NDArray.rand((1000, 4096 * 1 * 1), np.float32) * 2 - 1
+fc8_conv_filters_diff = NDArray((1000, 4096 * 1 * 1), np.float32)
+fc8_conv_filters.sync_ocl(True)
+fc8_conv_filters_diff.sync_ocl(True)
 fc8_conv_biases = NDArray((1000,), np.float32)
 fc8 = NDArray.zeros((num_img, 1000, 1, 1), np.float32)
 fc8_diff = NDArray.zeros((num_img, 1000, 1, 1), np.float32)
