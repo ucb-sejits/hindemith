@@ -49,3 +49,23 @@ def sgemm(transA, transB, alpha, A, A_offset, lda, B, B_offset, ldb, beta, C,
                                  ct.c_size_t(0), None, None)
     if err:
         raise Exception("clBLAS sgemm returned error code {}".format(err))
+
+
+def sgemv(transA, M, N, alpha, bufA, offA, lda, bufX, offX, incx, beta, bufY, offY, incy):
+    cblas_row_major = ct.c_int(0)
+    transA = ct.c_int(1 if transA else 0)
+    lda = ct.c_size_t(int(lda))
+    incx = ct.c_size_t(int(incx))
+    incy = ct.c_size_t(int(incy))
+    M = ct.c_size_t(int(M))
+    N = ct.c_size_t(int(N))
+    alpha = ct.c_float(alpha)
+    beta = ct.c_float(beta)
+    err = _clblaslib.clblasSgemv(cblas_row_major, transA, M, N,
+                                 alpha, bufA.ocl_buf, ct.c_size_t(offA), lda,
+                                 bufX.ocl_buf, ct.c_size_t(offX), incx, beta,
+                                 bufY.ocl_buf, ct.c_size_t(offY), incy,
+                                 ct.c_size_t(1), ct.byref(queue),
+                                 ct.c_size_t(0), None, None)
+    if err:
+        raise Exception("clBLAS sgemv returned error code {}".format(err))

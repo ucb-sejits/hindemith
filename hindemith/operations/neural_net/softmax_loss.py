@@ -9,7 +9,7 @@ from string import Template
 kernels = Template("""
 // @begin=cl@
 __kernel void kernel_copy(global const float* data,
-                                 global float* out) {
+                          global float* out) {
   if (get_global_id(0) < $count) {
     int index = get_global_id(0);
     out[index] = data[index];

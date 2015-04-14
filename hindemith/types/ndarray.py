@@ -76,3 +76,7 @@ class NDArray(np.ndarray):
     def unique(shape, dtype):
         NDArray.unique_id += 1
         return "__ndarr{}".format(NDArray.unique_id), NDArray(shape, dtype)
+
+    @staticmethod
+    def normal(mu, sigma, shape, dtype):
+        return np.random.normal(mu, sigma, shape).astype(dtype).view(NDArray)

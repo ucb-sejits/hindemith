@@ -1,7 +1,7 @@
 from hindemith.operations.core import DeviceLevel, register_operation
 from hindemith.types import NDArray
 from hindemith.cl import context, queue
-from hindemith.clibs.clBLAS import sgemm
+from hindemith.clibs.clBLAS import sgemm, sgemv
 from string import Template
 import numpy as np
 import pycl as cl
@@ -16,7 +16,9 @@ class ConvForward(DeviceLevel):
         self.operand = self.symbol_table[self.operand_name]
         self.weights_name = statement.value.args[1].id
         self.weights = self.symbol_table[self.weights_name]
-        self.sources = [self.operand_name, self.weights_name]
+        self.bias_name = statement.value.args[2].id
+        self.bias = self.symbol_table[self.bias_name]
+        self.sources = [self.operand_name, self.weights_name, self.bias_name]
         for keyword in statement.value.keywords:
             if keyword.arg == 'kernel_size':
                 self.kernel_h, self.kernel_w = tuple(
@@ -42,6 +44,9 @@ class ConvForward(DeviceLevel):
 
         self.target_name = statement.targets[0].id
         self.target = symbol_table[self.target_name]
+        self.bias_multiplier = NDArray((1, np.prod(self.target.shape[2:])), np.float32)
+        self.bias_multiplier.fill(1.0)
+        self.bias_multiplier.sync_ocl(True)
         self.sinks = [self.target_name, self.col_data_name]
 
     def compile(self):
@@ -105,9 +110,10 @@ __kernel void im2col(global const float* $data_im, global float* $data_col,
                     sgemm(False, False,
                           1.0, self.op.weights, 0, k, self.op.col_data, 0, n,
                           0.0, top, i * top_offset, n, m, n, k)
+                    sgemm(False, False, 1.0, self.op.bias, 0, 1,
+                           self.op.bias_multiplier, 0, n, 1.0, top, i *
+                           top_offset, n, m, n, 1)
         return [ConvLauncher(self)]
-
-        # return body, global_size, self.sources, self.sinks
 
     @classmethod
     def match(cls, node, symbol_table):
@@ -137,9 +143,12 @@ class ConvBackward(DeviceLevel):
         self.weights = self.symbol_table[self.weights_name]
         self.weights_diff_name = statement.value.args[3].id
         self.weights_diff = self.symbol_table[self.weights_diff_name]
+        self.bias_diff_name = statement.value.args[4].id
+        self.bias_diff = self.symbol_table[self.bias_diff_name]
 
+        self.bias_multiplier = NDArray((1, np.prod(self.top_diff.shape[2:])), np.float32)
         self.sources = [self.bottom_name, self.top_diff_name,
-                        self.weights_name]
+                        self.weights_name, self.bias_diff_name]
 
         for keyword in statement.value.keywords:
             if keyword.arg == 'kernel_size':
@@ -252,7 +261,16 @@ __kernel void im2col(global const float* data_im, global float* data_col,
                 bottom = env[self.op.bottom_name]
                 bot_offset = np.prod(bottom.shape[1:])
                 top_offset = np.prod(self.op.top_diff.shape[1:])
+                self.op.bias_diff.fill(0)
+                self.op.bias_diff.sync_ocl(True)
+                self.op.weights_diff.fill(0)
+                self.op.weights_diff.sync_ocl(True)
                 for i in range(self.op.top_diff.shape[0]):
+                    n = np.prod(self.op.top_diff.shape[2:])
+                    sgemv(False, self.op.top_diff.shape[1],
+                          n, 1.0, self.op.top_diff, i *
+                          top_offset, n, self.op.bias_multiplier, 0, 1, 1.0,
+                          self.op.bias_diff, 0, 1)
                     im2col(bottom.ocl_buf, self.op.col_data.ocl_buf, i
                            * bot_offset).on(queue, im2col_global_size)
                     m = self.op.top_diff.shape[1]
