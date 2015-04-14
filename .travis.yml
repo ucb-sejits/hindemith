@@ -12,7 +12,7 @@ install:
   - pip install coveralls coverage
   - ./build_clBLAS.sh
 script:
-  - LD_LIBRARY_PATH=/usr/local/lib64 nosetests --verbose --with-coverage --cover-package=hindemith --cover-erase
+  - nosetests --verbose --with-coverage --cover-package=hindemith --cover-erase
 deploy:
   provider: pypi
   user: leonardt
