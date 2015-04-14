@@ -116,7 +116,7 @@ class CFGBuilder(ast.NodeVisitor):
         if node.func.id in {'range', 'print'}:
             return node
         self.curr_basic_block.add_statement(
-            ast.Assign([ast.Name(self.curr_target, ast.Store())], node))
+            ast.Assign([self.curr_target], node))
 
     def visit_BinOp(self, node):
         operands = ()
@@ -125,18 +125,18 @@ class CFGBuilder(ast.NodeVisitor):
                 operands += (operand, )
             else:
                 old_target = self.curr_target
-                self.curr_target = self._gen_tmp()
+                self.curr_target = ast.Name(self._gen_tmp(), ast.Store())
                 self.visit(operand)
-                operands += (ast.Name(self.curr_target, ast.Load()), )
+                operands += (ast.Name(self.curr_target.name, ast.Load()), )
                 self.curr_target = old_target
         node.right = operands[0]
         node.left = operands[1]
         self.curr_basic_block.add_statement(
-            ast.Assign([ast.Name(self.curr_target, ast.Store())], node))
+            ast.Assign([self.curr_target], node))
 
     def visit_Assign(self, node):
         old_target = self.curr_target
-        self.curr_target = node.targets[0].id
+        self.curr_target = node.targets[0]
         self.visit(node.value)
         self.curr_target = old_target
         # self.curr_basic_block.add_statement(ret)
@@ -144,7 +144,7 @@ class CFGBuilder(ast.NodeVisitor):
     def visit_Return(self, node):
         if not isinstance(node.value, ast.Name):
             tmp = self._gen_tmp()
-            self.curr_target = tmp
+            self.curr_target = ast.Name(tmp, ast.Store())
             self.visit(node.value)
             node.value = ast.Name(tmp, ast.Load())
         self.curr_basic_block.add_statement(node)

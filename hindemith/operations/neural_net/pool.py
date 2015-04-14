@@ -3,6 +3,13 @@ import numpy as np
 import ast
 
 
+def eval_keyword(elts, env):
+    if isinstance(elts[0], ast.Num):
+        return tuple(elt.n for elt in elts)
+    else:
+        return tuple(env[elt.id] for elt in elts)
+
+
 class PoolForward(ElementLevel):
     def __init__(self, statement, symbol_table):
         self.symbol_table = symbol_table
@@ -13,14 +20,11 @@ class PoolForward(ElementLevel):
         self.sources = [self.operand_name]
         for keyword in statement.value.keywords:
             if keyword.arg == 'kernel_size':
-                self.kernel_h, self.kernel_w = tuple(
-                    elt.n for elt in keyword.value.elts)
+                self.kernel_h, self.kernel_w = eval_keyword(keyword.value.elts, symbol_table)
             elif keyword.arg == 'padding':
-                self.pad_h, self.pad_w = tuple(
-                    elt.n for elt in keyword.value.elts)
+                self.pad_h, self.pad_w = eval_keyword(keyword.value.elts, symbol_table)
             elif keyword.arg == 'stride':
-                self.stride_h, self.stride_w = tuple(
-                    elt.n for elt in keyword.value.elts)
+                self.stride_h, self.stride_w = eval_keyword(keyword.value.elts, symbol_table)
             else:
                 raise Exception("Unsupport keyword arg to Pool", keyword.arg)
         height, width = self.operand.shape[2:]
