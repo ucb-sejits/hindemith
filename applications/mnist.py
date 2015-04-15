@@ -66,7 +66,6 @@ class ConvLayer(object):
         return self.top, self.top_diff
 
     def forward(self):
-        self.weights.sync_host(True)
         self.hm_forward(self.top, self.bottom, self.weights, self.bias,
                         self.kernel_size, self.padding, self.stride)
 
@@ -174,7 +173,6 @@ class InnerProductLayer(object):
 
     def update_weights(self):
         for buf, diff in [(self.weights, self.weights_diff), (self.bias, self.bias_diff)]:
-            diff.sync_host(True)
             buf -= .1 * diff
             buf.sync_ocl(True)
 
@@ -194,7 +192,7 @@ class ReluLayer(object):
         self.hm_relu(self.bottom)
 
     def backward(self):
-        self.hm_relu(self.bottom)
+        self.hm_relu(self.bottom_diff)
 
 
 class SoftmaxWithLossLayer(object):
@@ -221,7 +219,6 @@ class SoftmaxWithLossLayer(object):
 
     def forward(self):
         self.hm_forward(self.top, self.bottom, self.label, self.prob)
-        self.prob.sync_host(True)
 
     def backward(self):
         self.hm_backward(self.bottom_diff, self.top, self.label, self.prob)
@@ -303,15 +300,19 @@ def update_weights():
     conv2_layer.update_weights()
     conv1_layer.update_weights()
 
-for i in range(5):
-    for i in range(batch_size):
-        datum.ParseFromString(next(cursor)[1])
-        unscaled = np.fromstring(
-            datum.data, dtype=np.uint8).astype(np.float32).reshape(1, 28, 28)
-        data[i] = unscaled * scale
-        label[i] = datum.label
+for i in range(40):
+    # for i in range(batch_size):
+    #     datum.ParseFromString(next(cursor)[1])
+    #     unscaled = np.fromstring(
+    #         datum.data, dtype=np.uint8).astype(np.float32).reshape(1, 28, 28)
+    #     data[i] = unscaled * scale
+    #     label[i] = datum.label
     forward_all()
     backward_all()
+    # ip2_layer.top.sync_host(True)
+    # print(ip2_layer.top[0])
+    loss_layer.prob.sync_host(True)
+    print(loss_layer.prob[0])
+    print(loss_layer.label[0])
     update_weights()
-    print(loss)
 exit(1)

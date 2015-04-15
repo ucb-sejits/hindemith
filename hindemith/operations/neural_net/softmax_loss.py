@@ -17,7 +17,7 @@ __kernel void kernel_copy(global const float* data,
 }
 __kernel void kernel_channel_max(global const float* data,
                                  global float* out) {
-  if (get_global_id(0) < $outer_inner) {
+  if (get_global_id(0) < $num_times_spatial) {
     int index = get_global_id(0);
     int n = index / $spatial_dim;
     int s = index % $spatial_dim;
@@ -45,7 +45,7 @@ __kernel void kernel_exp(global const float* data, global float* out) {
 }
 __kernel void kernel_channel_sum(global const float* data,
                                  global float* channel_sum) {
-  if (get_global_id(0) < $outer_inner) {
+  if (get_global_id(0) < $num_times_spatial) {
     int index = get_global_id(0);
     int n = index / $spatial_dim;
     int s = index % $spatial_dim;
@@ -65,24 +65,9 @@ __kernel void kernel_channel_div(global const float* channel_sum,
     data[index] /= channel_sum[n * $spatial_dim + s];
   }
 }
-__kernel void kernel_channel_dot(global const float* data_1,
-                                 global const float* data_2,
-    global float* channel_dot) {
-  if (get_global_id(0) < $outer_inner) {
-    int index = get_global_id(0);
-    int n = index / $spatial_dim;
-    int s = index % $spatial_dim;
-    float dot = 0;
-    for (int c = 0; c < $channels; ++c) {
-      dot += (data_1[(n * $channels + c) * $spatial_dim + s]
-          * data_2[(n * $channels + c) * $spatial_dim + s]);
-    }
-    channel_dot[index] = dot;
-  }
-}
 __kernel void SoftmaxLossForward(global const float* prob_data,
     global const float* label, global float* loss, global float* counts) {
-  if (get_global_id(0) < $outer_inner) {
+  if (get_global_id(0) < $count) {
     int index = get_global_id(0);
     const int n = index / $spatial_dim;
     const int s = index % $spatial_dim;
@@ -93,7 +78,7 @@ __kernel void SoftmaxLossForward(global const float* prob_data,
       counts[index] = 0;
     } else {
       loss[index] = -log(
-          max(prob_data[n * $channels + label_value * $spatial_dim + s],
+          max(prob_data[n * $dim + label_value * $spatial_dim + s],
               FLT_MIN));
       counts[index] = 1;
     }
@@ -129,14 +114,16 @@ class SoftMaxWithLossForward(DeviceLevel):
 
     def compile(self):
         num = self.bottom.shape[0]
-        # channels = self.bottom.shape[1]
-        channels = 1
-        spatial_dim = np.prod(self.bottom.shape[1:])
+        channels = self.bottom.shape[1]
+        # channels = 1
+        spatial_dim = int(np.prod(self.bottom.shape[2:]))
         count = np.prod(self.bottom.shape)
-        outer_inner = num * spatial_dim
+        num_times_spatial = num * spatial_dim
         kerns = kernels.substitute(channels=channels, spatial_dim=spatial_dim,
-                                   count=count, outer_inner=outer_inner,
-                                   has_ignore_label=False, ignore_label=0)
+                                   count=count, has_ignore_label=False,
+                                   ignore_label=0,
+                                   num_times_spatial=num_times_spatial,
+                                   dim=channels * spatial_dim)
         program = cl.clCreateProgramWithSource(context, kerns).build()
         copy_kern = program['kernel_copy']
         copy_kern.argtypes = (cl.cl_mem, cl.cl_mem)
@@ -161,13 +148,13 @@ class SoftMaxWithLossForward(DeviceLevel):
                 copy_kern(self.op.bottom.ocl_buf,
                           self.op.prob.ocl_buf).on(queue, (count, ))
                 max_kern(self.op.prob.ocl_buf,
-                         self.op.scale.ocl_buf).on(queue, (outer_inner, ))
+                         self.op.scale.ocl_buf).on(queue, (num_times_spatial, ))
                 sub_kern(self.op.scale.ocl_buf,
                          self.op.prob.ocl_buf).on(queue, (count, ))
                 exp_kern(self.op.prob.ocl_buf,
                          self.op.prob.ocl_buf).on(queue, (count, ))
                 sum_kern(self.op.prob.ocl_buf,
-                         self.op.scale.ocl_buf).on(queue, (outer_inner, ))
+                         self.op.scale.ocl_buf).on(queue, (num_times_spatial, ))
                 div_kern(self.op.scale.ocl_buf,
                          self.op.prob.ocl_buf).on(queue, (count, ))
 
@@ -177,7 +164,7 @@ class SoftMaxWithLossForward(DeviceLevel):
 
             def launch(self, env):
                 loss_forward(self.op.prob.ocl_buf, self.op.label.ocl_buf,
-                             self.op.loss.ocl_buf, self.op.counts.ocl_buf)
+                             self.op.loss.ocl_buf, self.op.counts.ocl_buf).on(queue, (count, ))
                 self.op.loss.sync_host(force=True)
                 self.op.counts.sync_host(force=True)
                 self.op.top[0] = np.sum(self.op.loss) / np.sum(self.op.counts)
@@ -219,12 +206,12 @@ class SoftMaxWithLossBackward(DeviceLevel):
 
     def compile(self):
         num = self.bottom_diff.shape[0]
-        # channels = self.bottom_diff.shape[1]
-        channels = 1
+        channels = self.bottom_diff.shape[1]
+        # channels = 1
         spatial_dim = int(np.prod(self.bottom_diff.shape[2:]))
         count = np.prod(self.bottom_diff.shape)
         outer_inner = num * spatial_dim
-        global_size = (outer_inner, )
+        global_size = (count, )
         kerns = Template(
             """
 // @begin=cl@
@@ -263,7 +250,7 @@ __kernel void SoftmaxLossBackwardGPU(global const float* label,
 // @end=cl@
             """
         ).substitute(
-            global_size=outer_inner,
+            global_size=count,
             spatial_dim=spatial_dim,
             channels=channels,
             dim=np.prod(self.bottom_diff.shape[1:]),
