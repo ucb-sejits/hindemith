@@ -4,7 +4,8 @@ from hindemith.types import NDArray
 from hindemith.core import hm
 from hindemith.operations.neural_net import ConvForward, ConvBackward
 
-def reference_conv(in_data, weights, out, stride, pad):
+
+def reference_conv(in_data, weights, bias, out, stride, pad):
     stride_h, stride_w = stride
     pad_h, pad_w = pad
     for n in range(out.shape[0]):
@@ -16,9 +17,16 @@ def reference_conv(in_data, weights, out, stride, pad):
                             for q in range(weights.shape[3]):
                                 in_y = y * stride_h - pad_h + p
                                 in_x = x * stride_w - pad_w + q
-                                if (in_y >= 0 and in_y < in_data.shape[2] and in_x >= 0 and in_x < in_data.shape[3]):
-                                    out[n, out_c, y, x] += in_data[n, in_c, in_y, in_x] \
-                                        * weights[out_c, in_c, p, q]
+                                if (in_y >= 0 and in_y < in_data.shape[2] and
+                                        in_x >= 0 and in_x < in_data.shape[3]):
+                                    out[n, out_c, y, x] += \
+                                        in_data[n, in_c, in_y, in_x] * \
+                                        weights[out_c, in_c, p, q]
+    for n in range(out.shape[0]):
+        for o in range(out.shape[1]):
+            for y in range(out.shape[2]):
+                for x in range(out.shape[3]):
+                    out[n, o, y, x] += bias[o]
 
 
 def reference_im2col(data, kernel_size, stride, padding):
@@ -73,29 +81,36 @@ def reference_col2im(data_col, kernel_size, stride, padding, shape):
 class TestConv(unittest.TestCase):
     def test_forward(self):
         @hm
-        def fn(a, weights, out):
-            out = ConvForward(a, weights, kernel_size=(11, 11), padding=(0, 0),
-                              stride=(4, 4))
+        def fn(a, weights, out, bias):
+            out = ConvForward(a, weights, bias, kernel_size=(11, 11),
+                              padding=(0, 0), stride=(4, 4))
             return out
 
         a = NDArray.rand((3, 3, 27, 27), np.float32) * 255
         a.sync_ocl(True)
         weights = NDArray.rand((12, 363), np.float32)
         out = NDArray.zeros((3, 12, 25), np.float32)
+        bias = NDArray((12, ), np.float32)
+        bias.fill(1)
+        bias.sync_ocl(True)
 
-        out = fn(a, weights, out)
+        out = fn(a, weights, out, bias)
 
         weights = weights.reshape(12, 3, 11, 11)
         expected = np.zeros((3, 12, 5, 5), np.float32)
-        reference_conv(a, weights, expected, (4, 4), (0, 0))
+        reference_conv(a, weights, bias, expected, (4, 4), (0, 0))
         out.sync_host(True)
         np.testing.assert_array_almost_equal(out, expected.reshape(3, 12, 25),
                                              decimal=2)
 
     def test_backward(self):
+        # TODO: Check bias diff
+
         @hm
-        def fn(top_diff, weights, bottom, bottom_diff, weights_diff):
+        def fn(top_diff, weights, bottom, bottom_diff, weights_diff,
+               bias_diff):
             bottom_diff = ConvBackward(bottom, top_diff, weights, weights_diff,
+                                       bias_diff,
                                        kernel_size=(11, 11), padding=(0, 0),
                                        stride=(4, 4))
             return bottom_diff
@@ -107,9 +122,10 @@ class TestConv(unittest.TestCase):
         weights = NDArray.rand((12, 363), np.float32)
 
         weights_diff = NDArray.zeros((12, 363), np.float32)
+        bias_diff = NDArray.zeros((12, ), np.float32)
         bottom_diff = NDArray.zeros((3, 3, 27, 27), np.float32)
 
-        fn(top_diff, weights, bottom, bottom_diff, weights_diff)
+        fn(top_diff, weights, bottom, bottom_diff, weights_diff, bias_diff)
 
         expected_weights_diff = np.zeros_like(weights)
         expected_bottom_diff = np.zeros_like(bottom_diff)

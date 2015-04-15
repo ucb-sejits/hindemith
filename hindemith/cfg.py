@@ -127,7 +127,7 @@ class CFGBuilder(ast.NodeVisitor):
                 old_target = self.curr_target
                 self.curr_target = ast.Name(self._gen_tmp(), ast.Store())
                 self.visit(operand)
-                operands += (ast.Name(self.curr_target.name, ast.Load()), )
+                operands += (ast.Name(self.curr_target.id, ast.Load()), )
                 self.curr_target = old_target
         node.right = operands[0]
         node.left = operands[1]
