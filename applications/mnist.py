@@ -129,9 +129,9 @@ class InnerProductLayer(object):
         N = self.num_output
         K = np.prod(self.bottom.shape[1:])
         M = self.bottom.shape[0]
-        sgemm(True, False, 1.0, self.top_diff, 0, N, self.bottom, 0, M, 1.0,
-              self.weights_diff, 0, M, N, K, M)
-        sgemv(True, M, N, 1.0, self.top_diff, 0, M, self.bias_multiplier, 0, 1,
+        sgemm(True, False, 1.0, self.top_diff, 0, N, self.bottom, 0, K, 0.0,
+              self.weights_diff, 0, K, N, K, M)
+        sgemv(True, M, N, 1.0, self.top_diff, 0, N, self.bias_multiplier, 0, 1,
               0.0, self.bias_diff, 0, 1)
 
 
@@ -182,7 +182,7 @@ class SoftmaxWithLossLayer(object):
         self.hm_backward(self.bottom_diff, self.top, self.label, self.prob)
 
 
-db_path = "/home/neubotech/denoise_caffe/examples/mnist/mnist_train_lmdb_clean"
+db_path = "data/mnist_train_lmdb_clean"
 env = lmdb.Environment(db_path, readonly=True, lock=False)
 
 PHASE = "train"

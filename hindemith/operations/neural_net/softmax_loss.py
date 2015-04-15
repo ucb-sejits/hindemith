@@ -219,7 +219,7 @@ class SoftMaxWithLossBackward(DeviceLevel):
     def compile(self):
         num = self.bottom_diff.shape[0]
         channels = self.bottom_diff.shape[1]
-        spatial_dim = np.prod(self.bottom_diff.shape[2:])
+        spatial_dim = int(np.prod(self.bottom_diff.shape[2:]))
         count = np.prod(self.bottom_diff.shape)
         outer_inner = num * spatial_dim
         global_size = (outer_inner, )
