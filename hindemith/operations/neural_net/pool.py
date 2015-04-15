@@ -96,14 +96,11 @@ class PoolBackward(ElementLevel):
         self.sources = [self.top_diff_name, self.mask_name]
         for keyword in statement.value.keywords:
             if keyword.arg == 'kernel_size':
-                self.kernel_h, self.kernel_w = tuple(
-                    elt.n for elt in keyword.value.elts)
+                self.kernel_h, self.kernel_w = eval_keyword(keyword.value.elts, symbol_table)
             elif keyword.arg == 'padding':
-                self.pad_h, self.pad_w = tuple(
-                    elt.n for elt in keyword.value.elts)
+                self.pad_h, self.pad_w = eval_keyword(keyword.value.elts, symbol_table)
             elif keyword.arg == 'stride':
-                self.stride_h, self.stride_w = tuple(
-                    elt.n for elt in keyword.value.elts)
+                self.stride_h, self.stride_w = eval_keyword(keyword.value.elts, symbol_table)
             else:
                 raise Exception("Unsupport keyword arg to Pool", keyword.arg)
 

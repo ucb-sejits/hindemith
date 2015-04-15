@@ -24,6 +24,17 @@ class ConvLayer(object):
                 self.bias.sync_ocl(True)
 
         @hm
+        def hm_backward(bottom_diff, bottom, top_diff, weights, weights_diff,
+                        bias_diff, kernel_size, padding, stride):
+            bottom_diff = ConvBackward(bottom, top_diff, weights, weights_diff,
+                                       bias_diff,
+                                       kernel_size=(kernel_size, kernel_size),
+                                       padding=(padding, padding),
+                                       stride=(stride, stride))
+            return bottom_diff
+        self.hm_backward = hm_backward
+
+        @hm
         def hm_forward(top, bottom, weights, bias, kernel_size, padding,
                        stride):
             top = ConvForward(bottom, weights, bias,
@@ -55,9 +66,20 @@ class ConvLayer(object):
         return self.top, self.top_diff
 
     def forward(self):
+        self.weights.sync_host(True)
         self.hm_forward(self.top, self.bottom, self.weights, self.bias,
                         self.kernel_size, self.padding, self.stride)
 
+    def backward(self):
+        self.hm_backward(self.bottom_diff, self.bottom, self.top_diff,
+                         self.weights, self.weights_diff, self.bias_diff,
+                         self.kernel_size, self.padding, self.stride)
+
+    def update_weights(self):
+        for buf, diff in [(self.weights, self.weights_diff), (self.bias, self.bias_diff)]:
+            diff.sync_host(True)
+            buf -= .1 * diff
+            buf.sync_ocl(True)
 
 class PoolingLayer(object):
     def __init__(self, kernel_size, stride=1, padding=0):
@@ -74,6 +96,16 @@ class PoolingLayer(object):
             return top
 
         self.hm_forward = hm_forward
+
+        @hm
+        def hm_backward(bottom_diff, top_diff, mask, kernel_size, padding, stride):
+            bottom_diff = PoolBackward(top_diff, mask,
+                                       kernel_size=(kernel_size, kernel_size),
+                                       padding=(padding, padding),
+                                       stride=(stride, stride))
+            return bottom_diff
+
+        self.hm_backward = hm_backward
 
     def set_up(self, bottom, bottom_diff):
         self.bottom = bottom
@@ -92,6 +124,10 @@ class PoolingLayer(object):
     def forward(self):
         self.hm_forward(self.top, self.bottom, self.mask, self.kernel_size,
                         self.padding, self.stride)
+
+    def backward(self):
+        self.hm_backward(self.bottom_diff, self.top_diff, self.mask,
+                         self.kernel_size, self.padding, self.stride)
 
 
 class InnerProductLayer(object):
@@ -120,10 +156,12 @@ class InnerProductLayer(object):
         N = self.num_output
         K = np.prod(self.bottom.shape[1:])
         M = self.bottom.shape[0]
-        sgemm(False, True, 1.0, self.bottom, 0, K, self.weights, 0, K, 1.0,
+        self.top.fill(0)
+        sgemm(False, True, 1.0, self.bottom, 0, K, self.weights, 0, K, 0.0,
               self.top, 0, N, M, N, K)
         sgemm(False, False, 1.0, self.bias_multiplier, 0, 1, self.bias, 0, N,
               1.0, self.top, 0, N, M, N, 1)
+        self.top.sync_host(True)
 
     def backward(self):
         N = self.num_output
@@ -133,6 +171,12 @@ class InnerProductLayer(object):
               self.weights_diff, 0, K, N, K, M)
         sgemv(True, M, N, 1.0, self.top_diff, 0, N, self.bias_multiplier, 0, 1,
               0.0, self.bias_diff, 0, 1)
+
+    def update_weights(self):
+        for buf, diff in [(self.weights, self.weights_diff), (self.bias, self.bias_diff)]:
+            diff.sync_host(True)
+            buf -= .1 * diff
+            buf.sync_ocl(True)
 
 
 class ReluLayer(object):
@@ -177,6 +221,7 @@ class SoftmaxWithLossLayer(object):
 
     def forward(self):
         self.hm_forward(self.top, self.bottom, self.label, self.prob)
+        self.prob.sync_host(True)
 
     def backward(self):
         self.hm_backward(self.bottom_diff, self.top, self.label, self.prob)
@@ -252,5 +297,21 @@ def backward_all():
     pool1_layer.backward()
     conv1_layer.backward()
 
-forward_all()
-backward_all()
+def update_weights():
+    ip2_layer.update_weights()
+    ip1_layer.update_weights()
+    conv2_layer.update_weights()
+    conv1_layer.update_weights()
+
+for i in range(5):
+    for i in range(batch_size):
+        datum.ParseFromString(next(cursor)[1])
+        unscaled = np.fromstring(
+            datum.data, dtype=np.uint8).astype(np.float32).reshape(1, 28, 28)
+        data[i] = unscaled * scale
+        label[i] = datum.label
+    forward_all()
+    backward_all()
+    update_weights()
+    print(loss)
+exit(1)
