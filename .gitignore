@@ -25,3 +25,4 @@ tags
 .caffemodel
 .venv
 docs/_build
+*.dylib
