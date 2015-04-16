@@ -34,6 +34,11 @@ class hmarray(np.ndarray):
 
     def sync_host(self):
         _, evt = cl.buffer_to_ndarray(queue, self.ocl_buf, self)
+        evt.wait()
+
+    def sync_ocl(self):
+        self.ocl_buf, evt = cl.buffer_from_ndarray(queue, self)
+        evt.wait()
 
     @staticmethod
     def random(shape, _range=(0, 1), dtype=np.float32):

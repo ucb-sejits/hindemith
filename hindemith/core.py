@@ -2,7 +2,7 @@ import ast
 import inspect
 import sys
 import textwrap
-from hindemith.operations import HMOperation
+from hindemith.operations import HMOperation, DeviceLevel
 from hindemith.cl import Kernel
 
 
@@ -68,16 +68,19 @@ class Compose(object):
             for op in block:
                 _sinks, _sources = self.get_sinks_and_sources(op)
                 launch_params = self.get_launch_params(op, _sources, _sinks)
-                kernels.append(Kernel(launch_params))
                 # if len(kernels) < 1 or \
                 #    kernels[-1].launch_paramaters != launch_params:
                 #    kernels.append(Kernel(launch_params))
                 # else:
                 #     raise NotImplementedError()
-                kernels[-1].append_body(
-                    self.get_emit(op, _sources, _sinks))
-                kernels[-1].sources |= set(_sources)
-                kernels[-1].sinks |= set(_sinks)
+                if self.is_not_device_level(op):
+                    kernels.append(Kernel(launch_params))
+                    kernels[-1].append_body(
+                        self.get_emit(op, _sources, _sinks))
+                    kernels[-1].sources |= set(_sources)
+                    kernels[-1].sinks |= set(_sinks)
+                else:
+                    raise NotImplementedError()
             for kernel in kernels:
                 kernel.compile()
                 kernel.launch(self.symbol_table)
@@ -98,6 +101,10 @@ class Compose(object):
         else:
             targets = [sinks[0]]
         return ast.Assign(targets, func)
+
+    def is_not_device_level(self, op):
+        func = self.eval_in_symbol_table(op.value.func)
+        return not issubclass(func, DeviceLevel)
 
     def get_keywords(self, operation):
         keywords = {}
