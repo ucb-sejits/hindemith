@@ -1,10 +1,9 @@
 import ast
 import inspect
+import sys
 import textwrap
 from hindemith.operations import HMOperation
-from hindemith.cl import context, queue
-from string import Template
-import pycl as cl
+from hindemith.cl import Kernel
 
 
 def get_ast(obj):
@@ -21,47 +20,6 @@ def get_ast(obj):
 
 class Block(list):
     pass
-
-
-class Kernel(object):
-    def __init__(self, launch_parameters):
-        self.launch_parameters = launch_parameters
-        self.body = ""
-        self.sources = set()
-        self.sinks = set()
-
-    def append_body(self, string):
-        self.body += string
-
-    def compile(self):
-        sources = set(src.id for src in self.sources)
-        sinks = set(src.id for src in self.sinks)
-        params = sources | sinks
-        self.params = list(params)
-        params_str = ", ".join(
-            "global float* {}".format(p) for p in self.params)
-        kernel = Template(
-            """
-            __kernel void fn($params) {
-              if (get_global_id(0) < $num_work_items) {
-                $body
-              }
-            }
-            """
-        ).substitute(params=params_str, body=self.body,
-                     num_work_items=self.launch_parameters[0])
-        kernel = cl.clCreateProgramWithSource(context, kernel).build()['fn']
-        kernel.argtypes = tuple(cl.cl_mem for _ in self.params)
-        self.kernel = kernel
-
-    def launch(self, symbol_table):
-        args = [symbol_table[p].ocl_buf for p in self.params]
-        global_size = self.launch_parameters[0]
-        if global_size % 32:
-            padded = (global_size + 31) & ~0x20
-        else:
-            padded = global_size
-        self.kernel(*args).on(queue, (padded,))
 
 
 class Compose(object):
@@ -110,12 +68,14 @@ class Compose(object):
             for op in block:
                 _sinks, _sources = self.get_sinks_and_sources(op)
                 launch_params = self.get_launch_params(op, _sources, _sinks)
-                if len(kernels) < 1 or \
-                   kernels[-1].launch_paramaters != launch_params:
-                    kernels.append(Kernel(launch_params))
-                else:
-                    raise NotImplementedError()
-                kernels[-1].append_body(self.get_emit(op, _sources, _sinks))
+                kernels.append(Kernel(launch_params))
+                # if len(kernels) < 1 or \
+                #    kernels[-1].launch_paramaters != launch_params:
+                #    kernels.append(Kernel(launch_params))
+                # else:
+                #     raise NotImplementedError()
+                kernels[-1].append_body(
+                    self.get_emit(op, _sources, _sinks))
                 kernels[-1].sources |= set(_sources)
                 kernels[-1].sinks |= set(_sinks)
             for kernel in kernels:
@@ -139,6 +99,17 @@ class Compose(object):
             targets = [sinks[0]]
         return ast.Assign(targets, func)
 
+    def get_keywords(self, operation):
+        keywords = {}
+        for keyword in operation.value.keywords:
+            value = keyword.value
+            if isinstance(value, ast.Tuple):
+                keywords[keyword.arg] = [
+                    self.eval_in_symbol_table(elt) for elt in value.elts]
+            else:
+                keywords[keyword.arg] = self.eval_in_symbol_table(value)
+        return keywords
+
     def get_sinks_and_sources(self, operation):
         if isinstance(operation.targets[0], ast.Name):
             sources = [operation.targets[0]]
@@ -154,7 +125,8 @@ class Compose(object):
         func = self.eval_in_symbol_table(operation.value.func)
         sources = [src.id for src in sources]
         sinks = [sink.id for sink in sinks]
-        return func.emit(sources, sinks)
+        keywords = self.get_keywords(operation)
+        return func.emit(sources, sinks, keywords, self.symbol_table)
 
     def get_launch_params(self, operation, sources, sinks):
         func = self.eval_in_symbol_table(operation.value.func)
@@ -162,10 +134,12 @@ class Compose(object):
         sinks = [self.eval_in_symbol_table(sink) for sink in sinks]
         return func.get_launch_parameters(sources, sinks)
 
-    def eval_in_symbol_table(self, func):
-        if isinstance(func, ast.Name):
-            return self.symbol_table[func.id]
-        elif isinstance(func, ast.Attribute):
+    def eval_in_symbol_table(self, val):
+        if isinstance(val, ast.Num):
+            return val.n
+        elif isinstance(val, ast.Name):
+            return self.symbol_table[val.id]
+        elif isinstance(val, ast.Attribute):
             raise NotImplementedError()
         else:
             raise NotImplementedError()
@@ -182,6 +156,7 @@ class Compose(object):
 
 
 def compose(fn):
+    tree = get_ast(fn)
     symbol_table = {}
     frame = inspect.stack()[1][0]
     while frame is not None:
@@ -190,5 +165,10 @@ def compose(fn):
         frame = frame.f_back
 
     def wrapped(*args, **kwargs):
+        for index, arg in enumerate(tree.body[0].args.args):
+            if sys.version_info < (3, 0):
+                symbol_table[arg.id] = args[index]
+            else:
+                symbol_table[arg.arg] = args[index]
         return Compose(fn, symbol_table)(*args, **kwargs)
     return wrapped
