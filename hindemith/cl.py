@@ -16,29 +16,30 @@ class Kernel(object):
         self.body = ""
         self.sources = set()
         self.sinks = set()
+        self.kernel = None
 
     def append_body(self, string):
         self.body += string
 
     def compile(self):
-        sources = set(src.id for src in self.sources)
-        sinks = set(src.id for src in self.sinks)
-        params = sources | sinks
-        self.params = list(params)
-        params_str = ", ".join(
-            "global float* {}".format(p) for p in self.params)
-        kernel = Template("""
-__kernel void fn($params) {
-  if (get_global_id(0) < $num_work_items) {
-    $body
-  }
-}
-""").substitute(params=params_str, body=self.body,
-                num_work_items=self.launch_parameters[0])
-        print(kernel)
-        kernel = cl.clCreateProgramWithSource(context, kernel).build()['fn']
-        kernel.argtypes = tuple(cl.cl_mem for _ in self.params)
-        self.kernel = kernel
+        if self.kernel is None:
+            sources = set(src.id for src in self.sources)
+            sinks = set(src.id for src in self.sinks)
+            params = sources | sinks
+            self.params = list(params)
+            params_str = ", ".join(
+                "global float* {}".format(p) for p in self.params)
+            kernel = Template("""
+    __kernel void fn($params) {
+    if (get_global_id(0) < $num_work_items) {
+        $body
+    }
+    }
+    """).substitute(params=params_str, body=self.body,
+                    num_work_items=self.launch_parameters[0])
+            kernel = cl.clCreateProgramWithSource(context, kernel).build()['fn']
+            kernel.argtypes = tuple(cl.cl_mem for _ in self.params)
+            self.kernel = kernel
 
     def launch(self, symbol_table):
         args = [symbol_table[p].ocl_buf for p in self.params]

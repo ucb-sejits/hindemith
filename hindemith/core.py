@@ -27,7 +27,11 @@ class Compose(object):
 
     def __init__(self, func, symbol_table):
         self.symbol_table = symbol_table
-        tree = get_ast(func)
+        self.tree = get_ast(func)
+        self.compiled = None
+
+    def compile(self):
+        tree = self.tree 
         func_def = tree.body[0]
         new_body = []
         for statement in func_def.body:
@@ -38,6 +42,7 @@ class Compose(object):
             else:
                 new_body.append(statement)
         processed = []
+
         for block_or_statement in new_body:
             if isinstance(block_or_statement, Block):
                 processed.append(self.gen_hm_func(block_or_statement))
@@ -49,9 +54,12 @@ class Compose(object):
         exec(compile(tree, filename="<nofile>", mode="exec"),
              self.symbol_table, self.symbol_table)
         self.func_name = func_def.name
+        self.compiled = self.symbol_table[func_def.name]
 
     def __call__(self, *args, **kwargs):
-        self.symbol_table[self.func_name](*args, **kwargs)
+        if not self.compiled:
+            self.compile()
+        self.compiled(*args, **kwargs)
 
     def gen_hm_func(self, block):
         sources = []
@@ -178,6 +186,7 @@ def compose(fn):
         symbol_table.update(frame.f_locals)
         symbol_table.update(frame.f_globals)
         frame = frame.f_back
+    composed = Compose(fn, symbol_table)
 
     def wrapped(*args, **kwargs):
         for index, arg in enumerate(tree.body[0].args.args):
@@ -185,5 +194,5 @@ def compose(fn):
                 symbol_table[arg.id] = args[index]
             else:
                 symbol_table[arg.arg] = args[index]
-        return Compose(fn, symbol_table)(*args, **kwargs)
+        return composed(*args, **kwargs)
     return wrapped
