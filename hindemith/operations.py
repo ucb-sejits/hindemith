@@ -174,8 +174,7 @@ class ConvForward(DeviceLevel):
         bias_multiplier.fill(1.0)
         bias_multiplier.sync_ocl()
 
-        weights = symbol_table[sources[1]]
-        im2col_global_size = weights.shape[1] * height_col * width_col
+        im2col_global_size = channels * height_col * width_col
 
         im2col = Template("""
 __kernel void im2col(global const float* data_im, global float* data_col,
@@ -228,7 +227,7 @@ __kernel void im2col(global const float* data_im, global float* data_col,
                 top_offset = np.prod(top.shape[1:])
                 for i in range(bottom.shape[0]):
                     im2col(bottom.ocl_buf, col_data.ocl_buf,
-                           i * bot_offset).on(queue, im2col_global_size)
+                           i * bot_offset).on(queue, (im2col_global_size, ))
                     m = weights.shape[0]
                     n = np.prod(top.shape[2:])
                     k = weights.shape[1]

@@ -67,20 +67,21 @@ class Compose(object):
             kernels = []
             for op in block:
                 _sinks, _sources = self.get_sinks_and_sources(op)
-                launch_params = self.get_launch_params(op, _sources, _sinks)
                 # if len(kernels) < 1 or \
                 #    kernels[-1].launch_paramaters != launch_params:
                 #    kernels.append(Kernel(launch_params))
                 # else:
                 #     raise NotImplementedError()
                 if self.is_not_device_level(op):
+                    launch_params = self.get_launch_params(
+                        op, _sources, _sinks)
                     kernels.append(Kernel(launch_params))
                     kernels[-1].append_body(
                         self.get_emit(op, _sources, _sinks))
                     kernels[-1].sources |= set(_sources)
                     kernels[-1].sinks |= set(_sinks)
                 else:
-                    raise NotImplementedError()
+                    kernels.append(self.get_launcher(op, _sources, _sinks))
             for kernel in kernels:
                 kernel.compile()
                 kernel.launch(self.symbol_table)
@@ -134,6 +135,13 @@ class Compose(object):
         sinks = [sink.id for sink in sinks]
         keywords = self.get_keywords(operation)
         return func.emit(sources, sinks, keywords, self.symbol_table)
+
+    def get_launcher(self, operation, sources, sinks):
+        func = self.eval_in_symbol_table(operation.value.func)
+        sources = [src.id for src in sources]
+        sinks = [sink.id for sink in sinks]
+        keywords = self.get_keywords(operation)
+        return func.get_launcher(sources, sinks, keywords, self.symbol_table)
 
     def get_launch_params(self, operation, sources, sinks):
         func = self.eval_in_symbol_table(operation.value.func)
