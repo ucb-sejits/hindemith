@@ -4,7 +4,7 @@ import pycl as cl
 from hindemith.cl import context, queue
 
 
-class Array(np.ndarray):
+class hmarray(np.ndarray):
     """Subclass of ndarray that has an OpenCL buffer associated with it"""
     def __new__(subtype, shape, dtype=np.float32, buffer=None, offset=0,
                 strides=None, order=None, info=None):
@@ -41,8 +41,8 @@ class Array(np.ndarray):
         length = _range[1] - _range[0]
         rand *= length
         rand += _range[0]
-        return rand.view(Array)
+        return rand.view(hmarray)
 
     @staticmethod
     def zeros(shape, dtype=np.float32):
-        return np.zeros(shape, dtype).view(Array)
+        return np.zeros(shape, dtype).view(hmarray)

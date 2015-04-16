@@ -38,7 +38,8 @@ class Kernel(object):
         sinks = set(src.id for src in self.sinks)
         params = sources | sinks
         self.params = list(params)
-        params_str = ", ".join("global float* {}".format(p) for p in self.params)
+        params_str = ", ".join(
+            "global float* {}".format(p) for p in self.params)
         kernel = Template(
             """
             __kernel void fn($params) {
