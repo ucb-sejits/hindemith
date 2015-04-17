@@ -3,8 +3,10 @@ from hindemith.core import compose
 from hindemith.operations.conv import ConvForward, ConvBackward
 from hindemith.operations.pool import PoolForward, PoolBackward
 from hindemith.operations.relu import Relu
+from hindemith.operations.lrn import LrnForward
 from hindemith.operations.core import SoftmaxWithLossForward, \
     SoftmaxWithLossBackward
+from hindemith.operations.softmax import SoftmaxForward
 from hindemith.clibs.clblas import sgemm, sgemv
 import numpy as np
 
@@ -221,3 +223,45 @@ class SoftmaxWithLossLayer(object):
 
     def backward(self):
         self.hm_backward(self.bottom_diff, self.top, self.label, self.prob)
+
+
+class SoftmaxLayer(object):
+    def __init__(self):
+        @compose
+        def hm_forward(top, bottom, label):
+            top = SoftmaxForward(bottom, label)
+            return top
+
+        self.hm_forward = hm_forward
+
+    def set_up(self, bottom, label):
+        self.bottom, self.label = bottom, label
+        self.top = hmarray.zeros(bottom.shape)
+        return self.top
+
+    def forward(self):
+        self.hm_forward(self.top, self.bottom, self.label)
+
+
+class LrnLayer(object):
+    def __init__(self, alpha=0.0001, beta=.75, local_size=5):
+        self.alpha = alpha
+        self.beta = beta
+        self.local_size = local_size
+        @compose
+        def hm_forward(top, scale, bottom, alph, beta, local_size):
+            top, scale = LrnForward(bottom, alpha=alpha, beta=beta,
+                                    local_size=local_size, k=1)
+
+        self.hm_forward = hm_forward
+
+    def set_up(self, bottom, bottom_diff):
+        self.bottom, self.bottom_diff = bottom, bottom_diff
+        self.top = hmarray.zeros(bottom.shape)
+        self.scale = hmarray.zeros(bottom.shape)
+        self.top_diff = hmarray.zeros(bottom.shape)
+        return self.top, self.top_diff
+
+    def forward(self):
+        self.hm_forward(self.top, self.scale, self.bottom, self.alpha,
+                        self.beta, self.local_size)
