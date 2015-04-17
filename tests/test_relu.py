@@ -1,7 +1,7 @@
 import unittest
 from hindemith.types import hmarray
 from hindemith.core import compose
-from hindemith.ops.relu import Relu
+from hindemith.operations.relu import Relu
 import numpy as np
 
 

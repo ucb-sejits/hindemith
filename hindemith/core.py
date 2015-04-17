@@ -2,7 +2,7 @@ import ast
 import inspect
 import sys
 import textwrap
-from hindemith.operations import HMOperation, DeviceLevel
+from hindemith.operations.core import HMOperation, DeviceLevel
 from hindemith.cl import Kernel
 
 

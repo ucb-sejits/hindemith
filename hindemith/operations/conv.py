@@ -1,4 +1,4 @@
-from hindemith.operations import DeviceLevel
+from hindemith.operations.core import DeviceLevel
 from hindemith.types import hmarray
 from hindemith.clibs.clblas import sgemm, sgemv
 from hindemith.cl import context, queue

@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from hindemith.core import compose
-from hindemith.ops.conv import ConvBackward, ConvForward
+from hindemith.operations.conv import ConvBackward, ConvForward
 from hindemith.types import hmarray
 
 

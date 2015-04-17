@@ -1,4 +1,4 @@
-from hindemith.operations import BlockLevel
+from hindemith.operations.core import BlockLevel
 import numpy as np
 from string import Template
 

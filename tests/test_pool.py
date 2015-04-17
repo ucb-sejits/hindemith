@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from hindemith.types import hmarray
-from hindemith.ops.pool import PoolForward, PoolBackward
+from hindemith.operations.pool import PoolForward, PoolBackward
 from hindemith.core import compose
 
 
