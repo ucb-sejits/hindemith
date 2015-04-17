@@ -37,7 +37,7 @@ class hmarray(np.ndarray):
         evt.wait()
 
     def sync_ocl(self):
-        self.ocl_buf, evt = cl.buffer_from_ndarray(queue, self)
+        _, evt = cl.buffer_from_ndarray(queue, self, self.ocl_buf)
         evt.wait()
 
     @staticmethod

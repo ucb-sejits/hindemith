@@ -8,6 +8,8 @@ import caffe_pb2 as pb
 import numpy as np
 import lmdb
 
+n = 0.01
+
 
 class ConvLayer(object):
     def __init__(self, num_output, kernel_size, stride=1, padding=0,
@@ -75,7 +77,7 @@ class ConvLayer(object):
     def update_weights(self):
         for buf, diff in [(self.weights, self.weights_diff), (self.bias, self.bias_diff)]:
             diff.sync_host()
-            buf -= .1 * diff
+            buf -= .01 * diff
             buf.sync_ocl()
 
 class PoolingLayer(object):
@@ -157,7 +159,6 @@ class InnerProductLayer(object):
               self.top, 0, N, M, N, K)
         sgemm(False, False, 1.0, self.bias_multiplier, 0, 1, self.bias, 0, N,
               1.0, self.top, 0, N, M, N, 1)
-        self.top.sync_host()
 
     def backward(self):
         N = self.num_output
@@ -173,7 +174,7 @@ class InnerProductLayer(object):
     def update_weights(self):
         for buf, diff in [(self.weights, self.weights_diff), (self.bias, self.bias_diff)]:
             diff.sync_host()
-            buf -= .1 * diff
+            buf -= .01 * diff
             buf.sync_ocl()
 
 
@@ -300,7 +301,7 @@ def update_weights():
     conv2_layer.update_weights()
     conv1_layer.update_weights()
 
-for i in range(10):
+for i in range(40):
     # for i in range(batch_size):
     #     datum.ParseFromString(next(cursor)[1])
     #     unscaled = np.fromstring(
@@ -308,9 +309,14 @@ for i in range(10):
     #     data[i] = unscaled * scale
     #     label[i] = datum.label
     forward_all()
-    backward_all()
+    # loss *= .01
     loss_layer.prob.sync_host()
-    print(loss_layer.prob[0])
-    print(loss_layer.label[0])
+    count = 0
+    for p, l in zip(loss_layer.prob, loss_layer.label):
+        if np.argmax(p) == int(l[0]):
+            count += 1
+    print(float(count) / batch_size)
+
+    backward_all()
     update_weights()
 exit(1)

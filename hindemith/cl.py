@@ -30,11 +30,11 @@ class Kernel(object):
             params_str = ", ".join(
                 "global float* {}".format(p) for p in self.params)
             kernel = Template("""
-    __kernel void fn($params) {
+__kernel void fn($params) {
     if (get_global_id(0) < $num_work_items) {
         $body
     }
-    }
+}
     """).substitute(params=params_str, body=self.body,
                     num_work_items=self.launch_parameters[0])
             kernel = cl.clCreateProgramWithSource(context, kernel).build()['fn']
@@ -44,8 +44,8 @@ class Kernel(object):
     def launch(self, symbol_table):
         args = [symbol_table[p].ocl_buf for p in self.params]
         global_size = self.launch_parameters[0]
-        if global_size % 32:
-            padded = (global_size + 31) & ~0x20
+        if global_size % 16:
+            padded = (global_size + 15) & (~15)
         else:
             padded = global_size
         self.kernel(*args).on(queue, (padded,))

@@ -439,10 +439,10 @@ class SoftmaxWithLossForward(DeviceLevel):
         bottom = symbol_table[sources[0]]
         num = bottom.shape[0]
         channels = bottom.shape[1]
-        loss = hmarray(bottom.shape)
         scale_shape = list(bottom.shape)
         scale_shape[1] = 1
         scale = hmarray(tuple(scale_shape))
+        loss = hmarray(scale_shape)
         spatial_dim = int(np.prod(bottom.shape[2:]))
         count = np.prod(bottom.shape)
 
@@ -506,7 +506,7 @@ __kernel void kernel_channel_div(global const float* channel_sum,
 }
 __kernel void SoftmaxLossForward(global const float* prob_data,
     global const float* label, global float* loss) {
-  if (get_global_id(0) < $count) {
+  if (get_global_id(0) < $num_times_spatial) {
     int index = get_global_id(0);
     const int n = index / $spatial_dim;
     const int s = index % $spatial_dim;
@@ -551,9 +551,9 @@ __kernel void SoftmaxLossForward(global const float* prob_data,
                 exp_kern(prob.ocl_buf, prob.ocl_buf).on(queue, (count, ))
                 sum_kern(prob.ocl_buf, scale.ocl_buf).on(queue, (num * spatial_dim, ))
                 div_kern(scale.ocl_buf, prob.ocl_buf).on(queue, (count, ))
-                loss_forward(prob.ocl_buf, label.ocl_buf, loss.ocl_buf).on(queue, (count, ))
+                loss_forward(prob.ocl_buf, label.ocl_buf, loss.ocl_buf).on(queue, (num * spatial_dim, ))
                 loss.sync_host()
-                top[0] = np.sum(loss) / count
+                top[0] = np.sum(loss) / np.float32(num)
 
         return SoftmaxLauncher()
 
@@ -565,8 +565,6 @@ class SoftmaxWithLossBackward(DeviceLevel):
     @classmethod
     def get_launcher(cls, sources, sinks, keywords, symbol_table):
         bottom_diff = symbol_table[sinks[0]]
-        label = symbol_table[sources[1]]
-        prob = symbol_table[sources[2]]
         count = np.prod(bottom_diff.shape)
         num = bottom_diff.shape[0]
         spatial_dim = int(np.prod(bottom_diff.shape[2:]))
@@ -617,8 +615,8 @@ __kernel void SoftmaxLossBackwardGPU(global const float* label,
                 copy(prob.ocl_buf, bottom_diff.ocl_buf).on(
                     queue, (np.prod(prob.shape),))
                 backward(label.ocl_buf, bottom_diff.ocl_buf).on(
-                    queue, num * spatial_dim)
+                    queue, (num * spatial_dim), )
                 loss_weight = top_diff[0]
-                scale(loss_weight / count, bottom_diff.ocl_buf).on(
+                scale(np.float32(loss_weight / float(count)), bottom_diff.ocl_buf).on(
                     queue, (np.prod(prob.shape), ))
         return Launcher()
