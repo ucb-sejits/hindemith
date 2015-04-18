@@ -10,7 +10,7 @@ install:
   - export PYTHON_VERSION=$(python -c 'import sys; print(sys.version_info[0:2])')
   - pip install -r requirements.txt
   - pip install coveralls coverage
-  - ./build_clBLAS.sh
+  - ./bin/build_clBLAS.sh
 script:
   - nosetests --verbose --with-coverage --cover-package=hindemith --cover-erase
 deploy:
