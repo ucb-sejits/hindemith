@@ -12,6 +12,6 @@ This project was started by Mike Anderson during his PhD at UC Berkeley
 Setup
 -----
 ```shell
-./build_clBLAS.sh
+./bin/build_clBLAS.sh
 pip install --user -r requirements.txt
 ```
