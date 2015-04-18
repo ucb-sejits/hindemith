@@ -192,3 +192,5 @@ for outer_i in range(1):
     prob.sync_host()
     print("Prediction", np.argmax(prob[0]))
     print("label", label[0])
+
+exit(1)
