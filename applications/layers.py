@@ -12,18 +12,23 @@ import numpy as np
 
 
 class ConvLayer(object):
-    def __init__(self, layer_param):
+    def __init__(self, layer_param, params):
         conv_param = layer_param.convolution_param
         self.num_output = conv_param.num_output
         self.kernel_size = conv_param.kernel_size
         self.stride = conv_param.stride
         self.padding = conv_param.pad
-        if conv_param.bias_filler == 'constant':
-            self.bias = hmarray.zeros((num_output,))
-            self.bias_diff = hmarray.zeros((num_output,))
-            if conv_param.bias_filler.value != 0:
-                self.bias.fill(conv_param.bias_filler.value)
-                self.bias.sync_ocl()
+        self.weights = params[0].data.view(hmarray)
+        self.weights.sync_ocl()
+        self.bias = params[1].data.view(hmarray)
+        self.bias.sync_ocl()
+        self.conv_param = conv_param
+        # if conv_param.bias_filler.type == 'constant':
+        #     self.bias = hmarray.zeros((self.num_output,))
+        #     self.bias_diff = hmarray.zeros((self.num_output,))
+        #     if conv_param.bias_filler.value != 0:
+        #         self.bias.fill(conv_param.bias_filler.value)
+        #         self.bias.sync_ocl()
 
         @compose
         def hm_backward(bottom_diff, bottom, top_diff, weights, weights_diff,
@@ -53,7 +58,16 @@ class ConvLayer(object):
         weights_shape = (self.num_output, channels * self.kernel_size *
                          self.kernel_size)
         scale = 1.0 / np.sqrt(self.num_output)
-        self.weights = hmarray.random(weights_shape, _range=(-scale, scale))
+        weights = hmarray(weights_shape)
+        if self.conv_param.group > 1:
+            reshaped = self.weights.reshape((weights_shape[0], weights_shape[1]
+                                             / 2))
+            weights[..., 0:weights_shape[1]/2] = reshaped
+            weights[..., weights_shape[1]/2:] = reshaped
+            self.weights = weights
+            self.weights.sync_ocl()
+        else:
+            self.weights = self.weights.reshape(weights_shape)
         self.weights_diff = hmarray.zeros(weights_shape)
 
         height_out = (height + 2 * self.padding - self.kernel_size) // \
@@ -130,17 +144,21 @@ class PoolingLayer(object):
 
 
 class InnerProductLayer(object):
-    def __init__(self, layer_param):
+    def __init__(self, layer_param, params):
         self.num_output = layer_param.inner_product_param.num_output
+        self.weights = params[0].data.view(hmarray)
+        self.weights.sync_ocl()
+        self.bias = params[1].data.view(hmarray)
+        self.bias.sync_ocl()
 
     def set_up(self, bottom, bottom_diff=None):
         self.bottom, self.bottom_diff = bottom, bottom_diff
         N = self.num_output
         K = np.prod(bottom.shape[1:])
         scale = 1.0 / np.sqrt(self.num_output)
-        self.weights = hmarray.random((N, K), _range=(-scale, scale))
+        # self.weights = hmarray.random((N, K), _range=(-scale, scale))
         self.weights_diff = hmarray.zeros((N, K))
-        self.bias = hmarray.zeros((self.num_output, ))
+        # self.bias = hmarray.zeros((self.num_output, ))
         self.bias_diff = hmarray.zeros((self.num_output, ))
         self.bias_multiplier = hmarray((1, self.bottom.shape[0]))
         self.bias_multiplier.fill(1)
@@ -230,19 +248,19 @@ class SoftmaxWithLossLayer(object):
 class SoftmaxLayer(object):
     def __init__(self, layer_param):
         @compose
-        def hm_forward(top, bottom, label):
-            top = SoftmaxForward(bottom, label)
+        def hm_forward(top, bottom):
+            top = SoftmaxForward(bottom)
             return top
 
         self.hm_forward = hm_forward
 
-    def set_up(self, bottom, label):
-        self.bottom, self.label = bottom, label
+    def set_up(self, bottom):
+        self.bottom = bottom
         self.top = hmarray.zeros(bottom.shape)
-        return self.top
+        return self.top, None
 
     def forward(self):
-        self.hm_forward(self.top, self.bottom, self.label)
+        self.hm_forward(self.top, self.bottom)
 
 
 class LrnLayer(object):
@@ -252,7 +270,7 @@ class LrnLayer(object):
         self.local_size = layer_param.lrn_param.local_size
 
         @compose
-        def hm_forward(top, scale, bottom, alph, beta, local_size):
+        def hm_forward(top, scale, bottom, alpha, beta, local_size):
             top, scale = LrnForward(bottom, alpha=alpha, beta=beta,
                                     local_size=local_size, k=1)
 

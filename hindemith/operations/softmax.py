@@ -7,7 +7,7 @@ from string import Template
 
 class SoftmaxForward(DeviceLevel):
     """
-    top = SoftmaxForward(bottom, label)
+    top = SoftmaxForward(bottom)
     """
     @classmethod
     def get_launcher(cls, sources, sinks, keywords, symbol_table):
@@ -102,7 +102,6 @@ __kernel void kernel_channel_div(global const float* channel_sum,
 
             def launch(self, symbol_table):
                 bottom = symbol_table[sources[0]]
-                label = symbol_table[sources[1]]
                 top = symbol_table[sinks[0]]
                 copy_kern(bottom.ocl_buf, top.ocl_buf).on(queue, (count, ))
                 max_kern(top.ocl_buf, scale.ocl_buf).on(queue, (num * spatial_dim, ))
