@@ -146,14 +146,10 @@ for layer_param in net.layer:  # Skip data layer
 for layer in layers:
     layer.forward()
 blobs['prob'].sync_host()
-print(np.argmax(blobs['prob'][0]))
-print(np.argmax(caffe_net.blobs['prob'].data[0]))
 for i in range(batch_size):
-    if np.argmax(blobs['prob'][i]) == np.argmax(caffe_net.blobs['prob'].data[i]):
-        print("SUCCESS")
-# np.testing.assert_array_almost_equal(blobs['conv1'][0],
-#                                      caffe_net.blobs['conv1'].data[0],
-#                                      decimal=3)
+    np.testing.assert_array_almost_equal(blobs['prob'][i],
+                                         caffe_net.blobs['prob'].data[i])
+print("SUCCESS")
 
 # blobs['conv1'].sync_host()
 # np.testing.assert_array_almost_equal(blobs['conv1'][0],
