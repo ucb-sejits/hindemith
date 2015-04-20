@@ -28,26 +28,6 @@ parser.add_argument(
 args = parser.parse_args()
 file_path = args.prototxt
 
-# batch_size = 10
-# scale = 1.0 / 256.0
-# data = hmarray((batch_size, 1, 28, 28))
-# txn = env.begin()
-# cursor = txn.cursor().iternext()
-# datum = pb.Datum()
-
-# for i in range(batch_size):
-#     datum.ParseFromString(next(cursor)[1])
-#     unscaled = np.fromstring(
-#         datum.data, dtype=np.uint8).astype(np.float32).reshape(1, 28, 28)
-#     data[i] = unscaled * scale
-# crop_size = 227
-# num_img = 64
-
-# Data layer
-# data = np.ndarray((num_img, 3, 277, 277), np.float32)
-# data = []
-# label = hmarray((num_img, 1))
-
 # txn = env.begin()
 # cursor = txn.cursor().iternext()
 # datum = pb.Datum()
@@ -73,9 +53,6 @@ file_path = args.prototxt
 #     # data[i] = uncropped[..., h_off:h_off + height, w_off:w_off + width]
 #     data.append(uncropped[..., h_off:h_off + height, w_off:w_off + width])
 #     label[i] = datum.label
-
-# data = np.array(data).view(hmarray)
-# label.sync_ocl()
 
 
 class Net(object):
