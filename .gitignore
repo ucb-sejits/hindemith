@@ -28,3 +28,4 @@ docs/_build
 *.dylib
 *.caffemodel
 mnist_train_lmdb_clean
+*_lmdb
