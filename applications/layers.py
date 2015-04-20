@@ -8,21 +8,27 @@ from hindemith.operations.core import SoftmaxWithLossForward, \
     SoftmaxWithLossBackward
 from hindemith.operations.softmax import SoftmaxForward
 from hindemith.clibs.clblas import sgemm, sgemv
+import lmdb
+import caffe_pb2 as pb
 import numpy as np
 
 
 class ConvLayer(object):
-    def __init__(self, layer_param, params):
+    def __init__(self, layer_param, params=None):
         conv_param = layer_param.convolution_param
         self.num_output = conv_param.num_output
         self.kernel_size = conv_param.kernel_size
         self.stride = conv_param.stride
         self.padding = conv_param.pad
-        self.weights = params[0].data.view(hmarray)
-        self.weights.sync_ocl()
-        self.bias = params[1].data.view(hmarray)
-        self.bias.sync_ocl()
         self.conv_param = conv_param
+        if params is not None:
+            self.weights = params[0].data.view(hmarray)
+            self.weights.sync_ocl()
+            self.bias = params[1].data.view(hmarray)
+            self.bias.sync_ocl()
+        else:
+            self.weights = None
+            self.bias = None
         # if conv_param.bias_filler.type == 'constant':
         #     self.bias = hmarray.zeros((self.num_output,))
         #     self.bias_diff = hmarray.zeros((self.num_output,))
@@ -57,17 +63,11 @@ class ConvLayer(object):
 
         weights_shape = (self.num_output, channels * self.kernel_size *
                          self.kernel_size)
-        scale = 1.0 / np.sqrt(self.num_output)
-        weights = hmarray(weights_shape)
-        if self.conv_param.group > 1:
-            reshaped = self.weights.reshape((weights_shape[0], weights_shape[1]
-                                             / 2))
-            weights[..., 0:weights_shape[1]/2] = reshaped
-            weights[..., weights_shape[1]/2:] = reshaped
-            self.weights = weights
-            self.weights.sync_ocl()
-        else:
+        if self.weights is not None:
             self.weights = self.weights.reshape(weights_shape)
+        else:
+            n = 1.0 / np.sqrt(self.num_output)
+            self.weights = hmarray.rand(weights_shape, _range=(-n, n))
         self.weights_diff = hmarray.zeros(weights_shape)
 
         height_out = (height + 2 * self.padding - self.kernel_size) // \
@@ -144,19 +144,23 @@ class PoolingLayer(object):
 
 
 class InnerProductLayer(object):
-    def __init__(self, layer_param, params):
+    def __init__(self, layer_param, params=None):
         self.num_output = layer_param.inner_product_param.num_output
-        self.weights = params[0].data.view(hmarray)
-        self.weights.sync_ocl()
-        self.bias = params[1].data.view(hmarray)
-        self.bias.sync_ocl()
+        if params is not None:
+            self.weights = params[0].data.view(hmarray)
+            self.weights.sync_ocl()
+            self.bias = params[1].data.view(hmarray)
+            self.bias.sync_ocl()
+        else:
+            self.weights = None
 
     def set_up(self, bottom, bottom_diff=None):
         self.bottom, self.bottom_diff = bottom, bottom_diff
         N = self.num_output
         K = np.prod(bottom.shape[1:])
         scale = 1.0 / np.sqrt(self.num_output)
-        # self.weights = hmarray.random((N, K), _range=(-scale, scale))
+        if self.weights is None:
+            self.weights = hmarray.random((N, K), _range=(-scale, scale))
         self.weights_diff = hmarray.zeros((N, K))
         # self.bias = hmarray.zeros((self.num_output, ))
         self.bias_diff = hmarray.zeros((self.num_output, ))
@@ -286,3 +290,32 @@ class LrnLayer(object):
     def forward(self):
         self.hm_forward(self.top, self.scale, self.bottom, self.alpha,
                         self.beta, self.local_size)
+
+
+class DataLayer(object):
+    def __init__(self, layer_param):
+        db_path = layer_param.data_param.source
+        env = lmdb.Environment(db_path, readonly=True, lock=False)
+
+        self.batch_size = layer_param.data_param.batch_size
+        self.scale = layer_param.transform_param.scale
+        txn = env.begin()
+        self.cursor = txn.cursor().iternext()
+
+    def setup(self):
+        datum = pb.Datum()
+        datum.ParseFromString(next(self.cursor)[1])
+        self.data = hmarray((self.batch_size, datum.channels, datum.height,
+                             datum.width))
+        return self.data, None
+
+    def forward(self):
+        datum = pb.Datum()
+        for i in range(self.batch_size):
+            self.data[i] = np.fromstring(
+                datum.data,
+                dtype=np.uint8).astype(np.float32).reshape(self.data[i].shape)
+            if self.scale != 1:
+                self.data[i] *= self.scale
+
+        self.data.sync_ocl()

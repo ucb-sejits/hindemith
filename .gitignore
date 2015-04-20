@@ -6,7 +6,7 @@ examples/*.xml
 examples/*.cl
 build
 dist
-teller.egg*
+hindemith.egg*
 *.dot
 *.avi
 *.xml

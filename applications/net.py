@@ -1,69 +1,45 @@
+"""
+python net.py --prototxt="models/alexnet-ng/deploy.prototxt" --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TEST'
+"""
+import argparse
 import caffe_pb2 as pb
+import caffe
 from google.protobuf import text_format
 from layers import ConvLayer, ReluLayer, PoolingLayer, InnerProductLayer, \
-    SoftmaxLayer, LrnLayer
-import lmdb
+    SoftmaxLayer, LrnLayer, DataLayer
 import numpy as np
-import random
-import math
 from hindemith.types import hmarray
+import time
 
 
-def caffemodel_to_net(file_path):
-    net = pb.NetParameter()
-    with open(file_path, "rb") as f:
-        net.ParseFromString(f.read())
-    return net
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    '--prototxt',
+    help="path to prototxt using Caffe's format for network description",
+    default="models/lenet/deploy.prototxt")
+parser.add_argument(
+    '--caffemodel',
+    help="path to .caffemodel to use for network initialization",
+    default='models/lenet/lenet_iter_5000.caffemodel')
+parser.add_argument(
+    '--phase',
+    help="TRAIN or TEST",
+    default='TEST')
+args = parser.parse_args()
+file_path = args.prototxt
 
-def prototxt_to_net(file_path):
-    net = pb.NetParameter()
-    with open(file_path, "rb") as f:
-        text_format.Merge(f.read(), net)
-    return net
+# batch_size = 10
+# scale = 1.0 / 256.0
+# data = hmarray((batch_size, 1, 28, 28))
+# txn = env.begin()
+# cursor = txn.cursor().iternext()
+# datum = pb.Datum()
 
-
-file_path = "models/lenet/deploy.prototxt"
-
-layer_map = {
-    pb.V1LayerParameter.CONVOLUTION: ConvLayer,
-    "Convolution": ConvLayer,
-    pb.V1LayerParameter.RELU: ReluLayer,
-    "ReLU": ReluLayer,
-    pb.V1LayerParameter.POOLING: PoolingLayer,
-    "Pooling": PoolingLayer,
-    pb.V1LayerParameter.SOFTMAX: SoftmaxLayer,
-    "Softmax": SoftmaxLayer,
-    pb.V1LayerParameter.SOFTMAX_LOSS: SoftmaxLayer,
-    pb.V1LayerParameter.INNER_PRODUCT: InnerProductLayer,
-    "InnerProduct": InnerProductLayer,
-    pb.V1LayerParameter.LRN: LrnLayer,
-    "LRN": LrnLayer
-}
-
-print("Reading in prototxt")
-net = prototxt_to_net(file_path)
-
-print("Initialing data")
-# db_path = "/storage2/datasets/ilsvrc2012_train_256x256_lmdb"
-# env = lmdb.Environment(db_path, readonly=True, lock=False)
-db_path = "data/mnist_train_lmdb_clean"
-env = lmdb.Environment(db_path, readonly=True, lock=False)
-
-PHASE = "train"
-batch_size = 10
-scale = 1.0 / 256.0
-data = hmarray((batch_size, 1, 28, 28))
-txn = env.begin()
-cursor = txn.cursor().iternext()
-datum = pb.Datum()
-
-for i in range(batch_size):
-    datum.ParseFromString(next(cursor)[1])
-    unscaled = np.fromstring(
-        datum.data, dtype=np.uint8).astype(np.float32).reshape(1, 28, 28)
-    data[i] = unscaled * scale
-    # label[i] = datum.label
-data.sync_ocl()
+# for i in range(batch_size):
+#     datum.ParseFromString(next(cursor)[1])
+#     unscaled = np.fromstring(
+#         datum.data, dtype=np.uint8).astype(np.float32).reshape(1, 28, 28)
+#     data[i] = unscaled * scale
 # crop_size = 227
 # num_img = 64
 
@@ -101,57 +77,106 @@ data.sync_ocl()
 # data = np.array(data).view(hmarray)
 # label.sync_ocl()
 
-# blobs = {
-#     "data": data,
-#     "label": label
-# }
 
-import caffe
-caffe_net = caffe.Net('models/lenet/deploy.prototxt',
-                      'models/lenet/lenet_iter_5000.caffemodel',
-                      caffe.TEST)
-# im = caffe.io.load_image('data/cat.jpg')
-# transformer = caffe.io.Transformer({'data': caffe_net.blobs['data'].data.shape})
-# transformer.set_mean('data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
-# transformer.set_transpose('data', (2,0,1))
-# transformer.set_channel_swap('data', (2,1,0))
-# transformer.set_raw_scale('data', 255.0)
+class Net(object):
+    layer_map = {
+        pb.V1LayerParameter.CONVOLUTION: ConvLayer,
+        "Convolution": ConvLayer,
+        pb.V1LayerParameter.RELU: ReluLayer,
+        "ReLU": ReluLayer,
+        pb.V1LayerParameter.POOLING: PoolingLayer,
+        "Pooling": PoolingLayer,
+        pb.V1LayerParameter.SOFTMAX: SoftmaxLayer,
+        "Softmax": SoftmaxLayer,
+        pb.V1LayerParameter.SOFTMAX_LOSS: SoftmaxLayer,
+        pb.V1LayerParameter.INNER_PRODUCT: InnerProductLayer,
+        "InnerProduct": InnerProductLayer,
+        pb.V1LayerParameter.LRN: LrnLayer,
+        "LRN": LrnLayer,
+        "Data": DataLayer
+    }
 
-blobs = {
-    "data": data.view(hmarray)
-}
+    def __init__(self, prototxt, caffemodel=None, phase='TEST'):
+        self.blobs = {}
+        self.layers = []
 
-out = caffe_net.forward_all(data=data)
+        net_param = pb.NetParameter()
+        with open(prototxt, "rb") as f:
+            text_format.Merge(f.read(), net_param)
 
-layers = []
-print("Initializing layers and blobs")
-for layer_param in net.layer:  # Skip data layer
-    print("Setting up layer {}".format(layer_param.name))
-    if layer_param.type in (pb.V1LayerParameter.DROPOUT, "Dropout"):
-        # Skip dropout layers
-        continue
-    if layer_param.name in caffe_net.params:
-        layer = layer_map[layer_param.type](layer_param,
-                                            caffe_net.params[layer_param.name])
-    else:
-        layer = layer_map[layer_param.type](layer_param)
-    layers.append(layer)
-    bottom = []
-    for blob in layer_param.bottom:
-        bottom.append(blobs[blob])
-    tops = layer.set_up(*bottom)
-    for top, top_name in zip(tops, layer_param.top):
-        blobs[top_name] = top
+        if phase == 'TEST':
+            self.caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
+            self.blobs['data'] = hmarray(net_param.input_dim, np.float32)
+            if len(net_param.layer) > 0:
+                layer_params = net_param.layer
+            else:
+                layer_params = net_param.layers
+            # Initialize layers
+            for layer_param in layer_params:
+                # Skip dropout layers for test
+                if layer_param.type in (pb.V1LayerParameter.DROPOUT,
+                                        "Dropout"):
+                    continue
+                layer_constructor = self.layer_map[layer_param.type]
+                if layer_param.name in self.caffe_net.params:
+                    layer = layer_constructor(
+                        layer_param, self.caffe_net.params[layer_param.name])
+                else:
+                    layer = layer_constructor(layer_param)
+                self.layers.append(layer)
+                bottom = []
+                for blob in layer_param.bottom:
+                    bottom.append(self.blobs[blob])
+                tops = layer.set_up(*bottom)
+                for top, top_name in zip(tops, layer_param.top):
+                    self.blobs[top_name] = top
+        elif phase == 'TRAIN':
+            layer_params = net_param.layer
+            for param in layer_params:
+                print("Setting up layer {}".format(param.name))
+                constructor = self.layer_map[param.type]
+                constructor(param)
+            print(layer_params)
+        else:
+            raise RuntimeError("Unsupported phase {}".format(phase))
 
-for layer in layers:
-    layer.forward()
-blobs['prob'].sync_host()
-for i in range(batch_size):
-    np.testing.assert_array_almost_equal(blobs['prob'][i],
-                                         caffe_net.blobs['prob'].data[i])
+    def forward_all(self, data=None):
+        if data is not None:
+            self.blobs['data'][...] = data
+            self.blobs['data'].sync_ocl()
+        for layer in self.layers:
+            layer.forward()
+
+net = Net(args.prototxt, args.caffemodel, args.phase)
+
+im = caffe.io.load_image('data/cat.jpg')
+transformer = caffe.io.Transformer(
+    {'data': net.caffe_net.blobs['data'].data.shape})
+transformer.set_mean(
+    'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
+transformer.set_transpose('data', (2, 0, 1))
+transformer.set_channel_swap('data', (2, 1, 0))
+transformer.set_raw_scale('data', 255.0)
+data = np.asarray([transformer.preprocess('data', im)]).view(hmarray)
+data.sync_ocl()
+
+print("HM forward")
+start = time.clock()
+net.forward_all(data)
+end = time.clock()
+print("Time:", end - start)
+print("Done")
+print("Caffe forward")
+start = time.clock()
+out = net.caffe_net.forward_all(data=data)
+end = time.clock()
+print("Time:", end - start)
+print("Done")
+
+for blob_name in net.blobs.keys():
+    print "Checking blob ", blob_name
+    blob = net.blobs[blob_name]
+    blob.sync_host()
+    np.testing.assert_array_almost_equal(
+        blob, net.caffe_net.blobs[blob_name].data, decimal=3)
 print("SUCCESS")
-
-# blobs['conv1'].sync_host()
-# np.testing.assert_array_almost_equal(blobs['conv1'][0],
-#                                      caffe_net.blobs['conv1'].data[0],
-#                                      decimal=3)

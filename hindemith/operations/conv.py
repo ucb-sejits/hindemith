@@ -227,6 +227,5 @@ __kernel void im2col(global const float* data_im, global float* data_col,
                           m, n, k)
                     col2im(col_data.ocl_buf,
                            bottom_diff.ocl_buf, i *
-                           bot_offset).on(queue, col2im_global_size)                    
+                           bot_offset).on(queue, col2im_global_size)
         return ConvLauncher()
-
