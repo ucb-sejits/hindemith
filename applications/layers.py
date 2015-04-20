@@ -7,14 +7,17 @@ from hindemith.operations.lrn import LrnForward
 from hindemith.operations.core import SoftmaxWithLossForward, \
     SoftmaxWithLossBackward
 from hindemith.operations.softmax import SoftmaxForward
+from hindemith.operations.dropout import Dropout
 from hindemith.clibs.clblas import sgemm, sgemv
-import lmdb
 import caffe_pb2 as pb
 import numpy as np
+import lmdb
+import random
 
 
 class ConvLayer(object):
-    def __init__(self, layer_param, params=None):
+    def __init__(self, layer_param, phase, params=None):
+        self.phase = phase
         conv_param = layer_param.convolution_param
         self.num_output = conv_param.num_output
         self.kernel_size = conv_param.kernel_size
@@ -42,7 +45,8 @@ class ConvLayer(object):
             bottom_diff, weights_diff, bias_diff = \
                 ConvBackward(bottom, top_diff, weights,
                              kernel_size=(kernel_size, kernel_size),
-                             stride=(stride, stride), padding=(padding, padding))
+                             stride=(stride, stride),
+                             padding=(padding, padding))
             return bottom_diff, weights_diff, bias_diff
         self.hm_backward = hm_backward
 
@@ -56,7 +60,7 @@ class ConvLayer(object):
             return top
         self.hm_forward = hm_forward
 
-    def set_up(self, bottom, bottom_diff=None):
+    def set_up(self, bottom, bottom_diff):
         self.bottom = bottom
         self.bottom_diff = bottom_diff
         num, channels, height, width = bottom.shape
@@ -77,7 +81,7 @@ class ConvLayer(object):
         top_shape = (num, self.num_output, height_out, width_out)
         self.top = hmarray.zeros(top_shape)
         self.top_diff = hmarray.zeros(top_shape)
-        return self.top, self.top_diff
+        return [(self.top, self.top_diff)]
 
     def forward(self):
         self.hm_forward(self.top, self.bottom, self.weights, self.bias,
@@ -89,16 +93,19 @@ class ConvLayer(object):
                          self.kernel_size, self.padding, self.stride)
 
     def update_weights(self):
-        for buf, diff in [(self.weights, self.weights_diff), (self.bias, self.bias_diff)]:
+        for buf, diff in [(self.weights, self.weights_diff),
+                          (self.bias, self.bias_diff)]:
             diff.sync_host()
             buf -= .01 * diff
             buf.sync_ocl()
 
+
 class PoolingLayer(object):
-    def __init__(self, layer_param):
+    def __init__(self, layer_param, phase):
         self.kernel_size = layer_param.pooling_param.kernel_size
         self.stride = layer_param.pooling_param.stride
         self.padding = layer_param.pooling_param.pad
+        self.phase = phase
 
         @compose
         def hm_forward(top, bottom, mask, kernel_size, padding, stride):
@@ -111,7 +118,8 @@ class PoolingLayer(object):
         self.hm_forward = hm_forward
 
         @compose
-        def hm_backward(bottom_diff, top_diff, mask, kernel_size, padding, stride):
+        def hm_backward(bottom_diff, top_diff, mask, kernel_size, padding,
+                        stride):
             bottom_diff = PoolBackward(top_diff, mask,
                                        kernel_size=(kernel_size, kernel_size),
                                        padding=(padding, padding),
@@ -120,7 +128,7 @@ class PoolingLayer(object):
 
         self.hm_backward = hm_backward
 
-    def set_up(self, bottom, bottom_diff=None):
+    def set_up(self, bottom, bottom_diff):
         self.bottom = bottom
         self.bottom_diff = bottom_diff
         num, channels, height, width = bottom.shape
@@ -132,7 +140,7 @@ class PoolingLayer(object):
         self.mask = hmarray.zeros(top_shape)
         self.top = hmarray.zeros(top_shape)
         self.top_diff = hmarray.zeros(top_shape)
-        return self.top, self.top_diff
+        return [(self.top, self.top_diff)]
 
     def forward(self):
         self.hm_forward(self.top, self.bottom, self.mask, self.kernel_size,
@@ -144,7 +152,8 @@ class PoolingLayer(object):
 
 
 class InnerProductLayer(object):
-    def __init__(self, layer_param, params=None):
+    def __init__(self, layer_param, phase, params=None):
+        self.phase = phase
         self.num_output = layer_param.inner_product_param.num_output
         if params is not None:
             self.weights = params[0].data.view(hmarray)
@@ -154,7 +163,7 @@ class InnerProductLayer(object):
         else:
             self.weights = None
 
-    def set_up(self, bottom, bottom_diff=None):
+    def set_up(self, bottom, bottom_diff):
         self.bottom, self.bottom_diff = bottom, bottom_diff
         N = self.num_output
         K = np.prod(bottom.shape[1:])
@@ -170,7 +179,7 @@ class InnerProductLayer(object):
         top_shape = (bottom.shape[0], N)
         self.top = hmarray.zeros(top_shape)
         self.top_diff = hmarray.zeros(top_shape)
-        return self.top, self.top_diff
+        return [(self.top, self.top_diff)]
 
     def forward(self):
         N = self.num_output
@@ -194,14 +203,17 @@ class InnerProductLayer(object):
               K, 0.0, self.bottom_diff, 0, K, M, K, N)
 
     def update_weights(self):
-        for buf, diff in [(self.weights, self.weights_diff), (self.bias, self.bias_diff)]:
+        for buf, diff in [(self.weights, self.weights_diff),
+                          (self.bias, self.bias_diff)]:
             diff.sync_host()
             buf -= .01 * diff
             buf.sync_ocl()
 
 
 class ReluLayer(object):
-    def __init__(self, layer_param):
+    def __init__(self, layer_param, phase):
+        self.phase = phase
+
         @compose
         def hm_relu(bottom):
             bottom = Relu(bottom)
@@ -209,9 +221,9 @@ class ReluLayer(object):
 
         self.hm_relu = hm_relu
 
-    def set_up(self, bottom, bottom_diff=None):
+    def set_up(self, bottom, bottom_diff):
         self.bottom, self.bottom_diff = bottom, bottom_diff
-        return bottom, self.bottom_diff
+        return [(self.bottom, self.bottom_diff)]
 
     def forward(self):
         self.hm_relu(self.bottom)
@@ -221,7 +233,9 @@ class ReluLayer(object):
 
 
 class SoftmaxWithLossLayer(object):
-    def __init__(self):
+    def __init__(self, layer_param, phase):
+        self.phase = phase
+
         @compose
         def hm_forward(loss, bottom, label, prob):
             loss = SoftmaxWithLossForward(bottom, label, prob)
@@ -236,11 +250,11 @@ class SoftmaxWithLossLayer(object):
 
         self.hm_backward = hm_backward
 
-    def set_up(self, bottom, bottom_diff, label):
+    def set_up(self, bottom, bottom_diff, label, label_diff):
         self.bottom, self.bottom_diff, self.label = bottom, bottom_diff, label
         self.top = hmarray.zeros((1, ))
         self.prob = hmarray.zeros(bottom.shape)
-        return self.top
+        return [(self.top, None)]
 
     def forward(self):
         self.hm_forward(self.top, self.bottom, self.label, self.prob)
@@ -250,7 +264,9 @@ class SoftmaxWithLossLayer(object):
 
 
 class SoftmaxLayer(object):
-    def __init__(self, layer_param):
+    def __init__(self, layer_param, phase):
+        self.phase = phase
+
         @compose
         def hm_forward(top, bottom):
             top = SoftmaxForward(bottom)
@@ -258,17 +274,18 @@ class SoftmaxLayer(object):
 
         self.hm_forward = hm_forward
 
-    def set_up(self, bottom):
+    def set_up(self, bottom, bottom_diff):
         self.bottom = bottom
         self.top = hmarray.zeros(bottom.shape)
-        return self.top, None
+        return [(self.top, None)]
 
     def forward(self):
         self.hm_forward(self.top, self.bottom)
 
 
 class LrnLayer(object):
-    def __init__(self, layer_param):
+    def __init__(self, layer_param, phase):
+        self.phase = phase
         self.alpha = layer_param.lrn_param.alpha
         self.beta = layer_param.lrn_param.beta
         self.local_size = layer_param.lrn_param.local_size
@@ -280,12 +297,12 @@ class LrnLayer(object):
 
         self.hm_forward = hm_forward
 
-    def set_up(self, bottom, bottom_diff=None):
+    def set_up(self, bottom, bottom_diff):
         self.bottom, self.bottom_diff = bottom, bottom_diff
         self.top = hmarray.zeros(bottom.shape)
         self.scale = hmarray.zeros(bottom.shape)
         self.top_diff = hmarray.zeros(bottom.shape)
-        return self.top, self.top_diff
+        return [(self.top, self.top_diff)]
 
     def forward(self):
         self.hm_forward(self.top, self.scale, self.bottom, self.alpha,
@@ -293,29 +310,93 @@ class LrnLayer(object):
 
 
 class DataLayer(object):
-    def __init__(self, layer_param):
+    def __init__(self, layer_param, phase):
+        self.phase = phase
         db_path = layer_param.data_param.source
         env = lmdb.Environment(db_path, readonly=True, lock=False)
 
         self.batch_size = layer_param.data_param.batch_size
         self.scale = layer_param.transform_param.scale
+        self.crop_size = layer_param.transform_param.crop_size
         txn = env.begin()
         self.cursor = txn.cursor().iternext()
 
-    def setup(self):
+    def set_up(self):
         datum = pb.Datum()
         datum.ParseFromString(next(self.cursor)[1])
-        self.data = hmarray((self.batch_size, datum.channels, datum.height,
-                             datum.width))
-        return self.data, None
+        height, width = datum.height, datum.width
+        if self.crop_size:
+            height, width = self.crop_size, self.crop_size
+        self.data = hmarray((self.batch_size, datum.channels, height, width))
+        self.data_diff = hmarray((self.batch_size, datum.channels, height,
+                                  width))
+        self.label = hmarray((self.batch_size, ))
+        return [(self.data, self.data_diff), (self.label, None)]
 
     def forward(self):
         datum = pb.Datum()
+        crop_size = self.crop_size
         for i in range(self.batch_size):
-            self.data[i] = np.fromstring(
-                datum.data,
-                dtype=np.uint8).astype(np.float32).reshape(self.data[i].shape)
-            if self.scale != 1:
-                self.data[i] *= self.scale
-
+            datum.ParseFromString(next(self.cursor)[1])
+            channels, datum_height, datum_width = datum.channels, \
+                datum.height, datum.width
+            height = datum_height
+            width = datum_width
+            height = crop_size
+            width = crop_size
+            h_off = random.randrange(datum_height - crop_size + 1)
+            w_off = random.randrange(datum_width - crop_size + 1)
+            # h_off = (datum_height - crop_size) / 2
+            # w_off = (datum_width - crop_size) / 2
+            uncropped = np.fromstring(
+                datum.data, dtype=np.uint8
+            ).astype(np.float32).reshape(channels, datum_height, datum_width)
+            for c in range(channels):
+                uncropped[c] = np.fliplr(uncropped[c])
+            self.data[i] = uncropped[
+                ..., h_off:h_off + height, w_off:w_off + width]
+            self.label[i] = datum.label
         self.data.sync_ocl()
+        self.label.sync_ocl()
+
+
+class DropoutLayer(object):
+    def __init__(self, layer_param, phase):
+        self.phase = phase
+        self.threshold = layer_param.dropout_param.dropout_ratio
+
+        @compose
+        def hm_dropout(top, bottom, mask, threshold):
+            top = Dropout(bottom, mask, threshold=threshold)
+            return top
+
+        self.hm_dropout = hm_dropout
+
+    def set_up(self, bottom, bottom_diff, params=None):
+        self.bottom = bottom
+        self.bottom_diff = bottom_diff
+        self.top = hmarray.zeros(bottom.shape)
+        self.mask = hmarray.random(bottom.shape)
+        if self.phase == 'TRAIN':
+            self.top_diff = hmarray.zeros(bottom.shape)
+        else:
+            self.top_diff = None
+        return [(self.top, self.top_diff)]
+
+    def forward(self):
+        self.hm_dropout(self.top, self.bottom, self.mask, self.threshold)
+
+
+class AccuracyLayer(object):
+    def __init__(self, layer_param, phase):
+        self.phase = phase
+
+    def set_up(self, bottom, bottom_diff, label, label_diff):
+        self.bottom = bottom
+        self.bottom_diff = bottom_diff
+        self.top = hmarray.zeros(bottom.shape)
+        if self.phase == 'TRAIN':
+            self.top_diff = hmarray.zeros(bottom.shape)
+        else:
+            self.top_diff = None
+        return [(self.top, self.top_diff)]

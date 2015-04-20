@@ -1,15 +1,19 @@
 """
-python net.py --prototxt="models/alexnet-ng/deploy.prototxt" --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TEST'
+python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
+    --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TEST'
 """
 import argparse
 import caffe_pb2 as pb
 import caffe
 from google.protobuf import text_format
 from layers import ConvLayer, ReluLayer, PoolingLayer, InnerProductLayer, \
-    SoftmaxLayer, LrnLayer, DataLayer
+    SoftmaxLayer, LrnLayer, DataLayer, DropoutLayer, AccuracyLayer, \
+    SoftmaxWithLossLayer
 import numpy as np
 from hindemith.types import hmarray
 import time
+import lmdb
+import random
 
 
 parser = argparse.ArgumentParser()
@@ -28,32 +32,6 @@ parser.add_argument(
 args = parser.parse_args()
 file_path = args.prototxt
 
-# txn = env.begin()
-# cursor = txn.cursor().iternext()
-# datum = pb.Datum()
-# for i in range(num_img):
-#     datum.ParseFromString(next(cursor)[1])
-#     channels, datum_height, datum_width = datum.channels, datum.height, \
-#         datum.width
-#     height = datum_height
-#     width = datum_width
-#     height = crop_size
-#     width = crop_size
-#     if PHASE == "train":
-#         h_off = random.randrange(datum_height - crop_size + 1)
-#         w_off = random.randrange(datum_width - crop_size + 1)
-#     else:
-#         h_off = (datum_height - crop_size) / 2
-#         w_off = (datum_width - crop_size) / 2
-#     uncropped = np.fromstring(
-#         datum.data, dtype=np.uint8
-#     ).astype(np.float32).reshape(channels, datum_height, datum_width)
-#     for c in range(channels):
-#         uncropped[c] = np.fliplr(uncropped[c])
-#     # data[i] = uncropped[..., h_off:h_off + height, w_off:w_off + width]
-#     data.append(uncropped[..., h_off:h_off + height, w_off:w_off + width])
-#     label[i] = datum.label
-
 
 class Net(object):
     layer_map = {
@@ -65,95 +43,105 @@ class Net(object):
         "Pooling": PoolingLayer,
         pb.V1LayerParameter.SOFTMAX: SoftmaxLayer,
         "Softmax": SoftmaxLayer,
-        pb.V1LayerParameter.SOFTMAX_LOSS: SoftmaxLayer,
+        pb.V1LayerParameter.SOFTMAX_LOSS: SoftmaxWithLossLayer,
         pb.V1LayerParameter.INNER_PRODUCT: InnerProductLayer,
         "InnerProduct": InnerProductLayer,
         pb.V1LayerParameter.LRN: LrnLayer,
         "LRN": LrnLayer,
+        pb.V1LayerParameter.DROPOUT: DropoutLayer,
+        pb.V1LayerParameter.ACCURACY: AccuracyLayer,
+        pb.V1LayerParameter.DATA: DataLayer,
         "Data": DataLayer
     }
 
-    def __init__(self, prototxt, caffemodel=None, phase='TEST'):
+    def __init__(self, prototxt, params=None, phase='TEST'):
         self.blobs = {}
         self.layers = []
 
-        net_param = pb.NetParameter()
+        self.net_param = pb.NetParameter()
         with open(prototxt, "rb") as f:
-            text_format.Merge(f.read(), net_param)
+            text_format.Merge(f.read(), self.net_param)
 
         if phase == 'TEST':
-            self.caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
-            self.blobs['data'] = hmarray(net_param.input_dim, np.float32)
-            if len(net_param.layer) > 0:
-                layer_params = net_param.layer
-            else:
-                layer_params = net_param.layers
-            # Initialize layers
-            for layer_param in layer_params:
-                # Skip dropout layers for test
-                if layer_param.type in (pb.V1LayerParameter.DROPOUT,
-                                        "Dropout"):
-                    continue
-                layer_constructor = self.layer_map[layer_param.type]
-                if layer_param.name in self.caffe_net.params:
-                    layer = layer_constructor(
-                        layer_param, self.caffe_net.params[layer_param.name])
-                else:
-                    layer = layer_constructor(layer_param)
-                self.layers.append(layer)
-                bottom = []
-                for blob in layer_param.bottom:
-                    bottom.append(self.blobs[blob])
-                tops = layer.set_up(*bottom)
-                for top, top_name in zip(tops, layer_param.top):
-                    self.blobs[top_name] = top
-        elif phase == 'TRAIN':
-            layer_params = net_param.layer
-            for param in layer_params:
-                print("Setting up layer {}".format(param.name))
-                constructor = self.layer_map[param.type]
-                constructor(param)
-            print(layer_params)
+            self.blobs['data'] = hmarray(self.net_param.input_dim, np.float32)
+            self.blobs['data_diff'] = \
+                hmarray(self.net_param.input_dim, np.float32)
+        if len(self.net_param.layer) > 0:
+            layer_params = self.net_param.layer
         else:
-            raise RuntimeError("Unsupported phase {}".format(phase))
+            layer_params = self.net_param.layers
+        # Initialize layers
+        for layer_param in layer_params:
+            if len(layer_param.include) > 0 and \
+                    layer_param.include[0].phase != getattr(caffe, phase):
+                continue
+            print("Initializing layer {}".format(layer_param.name))
+            # Skip dropout layers for test
+            if layer_param.type in (pb.V1LayerParameter.DROPOUT, "Dropout") \
+                    and phase == 'TEST':
+                continue
+            layer_constructor = self.layer_map[layer_param.type]
+            if layer_param.name in params:
+                layer = layer_constructor(
+                    layer_param, phase,
+                    params[layer_param.name])
+            else:
+                layer = layer_constructor(layer_param, phase)
+            self.layers.append(layer)
+            bottom = []
+            for blob in layer_param.bottom:
+                bottom.append(self.blobs[blob])
+                bottom.append(self.blobs["{}_diff".format(blob)])
+            tops = layer.set_up(*bottom)
+            for top, top_name in zip(tops, layer_param.top):
+                self.blobs[top_name] = top[0]
+                self.blobs["{}_diff".format(top_name)] = top[1]
 
-    def forward_all(self, data=None):
-        if data is not None:
-            self.blobs['data'][...] = data
-            self.blobs['data'].sync_ocl()
+    def forward_all(self, **kwargs):
+        for key, value in kwargs.iteritems():
+            self.blobs[key][...] = value
+            self.blobs[key].sync_ocl()
         for layer in self.layers:
             layer.forward()
 
-net = Net(args.prototxt, args.caffemodel, args.phase)
+caffe_net = caffe.Net(args.prototxt, args.caffemodel,
+                      getattr(caffe, args.phase))
+net = Net(args.prototxt, caffe_net.params, args.phase)
 
-im = caffe.io.load_image('data/cat.jpg')
-transformer = caffe.io.Transformer(
-    {'data': net.caffe_net.blobs['data'].data.shape})
-transformer.set_mean(
-    'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
-transformer.set_transpose('data', (2, 0, 1))
-transformer.set_channel_swap('data', (2, 1, 0))
-transformer.set_raw_scale('data', 255.0)
-data = np.asarray([transformer.preprocess('data', im)]).view(hmarray)
-data.sync_ocl()
+if args.phase == 'TEST':
+    im = caffe.io.load_image('data/cat.jpg')
+    transformer = caffe.io.Transformer(
+        {'data': caffe_net.blobs['data'].data.shape})
+    transformer.set_mean(
+        'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
+    transformer.set_transpose('data', (2, 0, 1))
+    transformer.set_channel_swap('data', (2, 1, 0))
+    transformer.set_raw_scale('data', 255.0)
+    data = np.asarray([transformer.preprocess('data', im)]).view(hmarray)
+    data.sync_ocl()
 
-print("HM forward")
-start = time.clock()
-net.forward_all(data)
-end = time.clock()
-print("Time:", end - start)
-print("Done")
-print("Caffe forward")
-start = time.clock()
-out = net.caffe_net.forward_all(data=data)
-end = time.clock()
-print("Time:", end - start)
-print("Done")
+    print("HM forward")
+    start = time.clock()
+    net.forward_all(data=data)
+    end = time.clock()
+    print("Time:", end - start)
+    print("Done")
+    print("Caffe forward")
+    start = time.clock()
+    out = caffe_net.forward_all(data=data)
+    end = time.clock()
+    print("Time:", end - start)
+    print("Done")
+else:
+    net.forward_all()
+    caffe_net.forward()
 
 for blob_name in net.blobs.keys():
+    if "_diff" in blob_name:
+        continue
     print "Checking blob ", blob_name
     blob = net.blobs[blob_name]
     blob.sync_host()
     np.testing.assert_array_almost_equal(
-        blob, net.caffe_net.blobs[blob_name].data, decimal=3)
+        blob, caffe_net.blobs[blob_name].data, decimal=3)
 print("SUCCESS")
