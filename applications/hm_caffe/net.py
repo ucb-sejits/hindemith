@@ -125,18 +125,8 @@ def main():
         data = np.asarray([transformer.preprocess('data', im)]).view(hmarray)
         data.sync_ocl()
 
-        print("HM forward")
-        start = time.clock()
         net.forward_all(data=data)
-        end = time.clock()
-        print("Time:", end - start)
-        print("Done")
-        print("Caffe forward")
-        start = time.clock()
         caffe_net.forward_all(data=data)
-        end = time.clock()
-        print("Time:", end - start)
-        print("Done")
     else:
         net.forward_all()
         caffe_net.forward_all()
