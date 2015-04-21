@@ -3,8 +3,9 @@ python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
     --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TEST'
 python net.py --prototxt="models/alexnet-ng/trainval.prototxt" --phase='TRAIN'
 """
+import layers.caffe_pb2 as pb
+
 import argparse
-import caffe_pb2 as pb
 import caffe
 from google.protobuf import text_format
 from layers import ConvLayer, ReluLayer, PoolingLayer, InnerProductLayer, \
