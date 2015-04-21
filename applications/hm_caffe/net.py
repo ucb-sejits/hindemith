@@ -16,23 +16,6 @@ from hindemith.types import hmarray
 import time
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    '--prototxt',
-    help="path to prototxt using Caffe's format for network description",
-    default="models/lenet/deploy.prototxt")
-parser.add_argument(
-    '--caffemodel',
-    help="path to .caffemodel to use for network initialization",
-    default=None)
-parser.add_argument(
-    '--phase',
-    help="TRAIN or TEST",
-    default='TEST')
-args = parser.parse_args()
-file_path = args.prototxt
-
-
 class Net(object):
     layer_map = {
         pb.V1LayerParameter.CONVOLUTION: ConvLayer,
@@ -104,49 +87,69 @@ class Net(object):
         for layer in self.layers:
             layer.forward()
 
-caffe.set_mode_gpu()
-if args.phase == 'TEST':
-    caffe_net = caffe.Net(args.prototxt, args.caffemodel,
-                          getattr(caffe, args.phase))
-else:
-    solver = caffe.SGDSolver(args.prototxt)
-    caffe_net = solver.net
-net = Net(args.prototxt, caffe_net.params, args.phase)
 
-if args.phase == 'TEST':
-    im = caffe.io.load_image('data/cat.jpg')
-    transformer = caffe.io.Transformer(
-        {'data': caffe_net.blobs['data'].data.shape})
-    transformer.set_mean(
-        'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
-    transformer.set_transpose('data', (2, 0, 1))
-    transformer.set_channel_swap('data', (2, 1, 0))
-    transformer.set_raw_scale('data', 255.0)
-    data = np.asarray([transformer.preprocess('data', im)]).view(hmarray)
-    data.sync_ocl()
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--prototxt',
+        help="path to prototxt using Caffe's format for network description",
+        default="models/lenet/deploy.prototxt")
+    parser.add_argument(
+        '--caffemodel',
+        help="path to .caffemodel to use for network initialization",
+        default=None)
+    parser.add_argument(
+        '--phase',
+        help="TRAIN or TEST",
+        default='TEST')
+    args = parser.parse_args()
 
-    print("HM forward")
-    start = time.clock()
-    net.forward_all(data=data)
-    end = time.clock()
-    print("Time:", end - start)
-    print("Done")
-    print("Caffe forward")
-    start = time.clock()
-    out = caffe_net.forward_all(data=data)
-    end = time.clock()
-    print("Time:", end - start)
-    print("Done")
-else:
-    net.forward_all()
-    caffe_net.forward_all()
+    caffe.set_mode_gpu()
+    if args.phase == 'TEST':
+        caffe_net = caffe.Net(args.prototxt, args.caffemodel,
+                              getattr(caffe, args.phase))
+    else:
+        solver = caffe.SGDSolver(args.prototxt)
+        caffe_net = solver.net
+    net = Net(args.prototxt, caffe_net.params, args.phase)
 
-for blob_name in net.blobs.keys():
-    if "_diff" in blob_name:
-        continue
-    print "Checking blob ", blob_name
-    blob = net.blobs[blob_name]
-    blob.sync_host()
-    np.testing.assert_array_almost_equal(
-        blob, caffe_net.blobs[blob_name].data, decimal=3)
-print("SUCCESS")
+    if args.phase == 'TEST':
+        im = caffe.io.load_image('data/cat.jpg')
+        transformer = caffe.io.Transformer(
+            {'data': caffe_net.blobs['data'].data.shape})
+        transformer.set_mean(
+            'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
+        transformer.set_transpose('data', (2, 0, 1))
+        transformer.set_channel_swap('data', (2, 1, 0))
+        transformer.set_raw_scale('data', 255.0)
+        data = np.asarray([transformer.preprocess('data', im)]).view(hmarray)
+        data.sync_ocl()
+
+        print("HM forward")
+        start = time.clock()
+        net.forward_all(data=data)
+        end = time.clock()
+        print("Time:", end - start)
+        print("Done")
+        print("Caffe forward")
+        start = time.clock()
+        caffe_net.forward_all(data=data)
+        end = time.clock()
+        print("Time:", end - start)
+        print("Done")
+    else:
+        net.forward_all()
+        caffe_net.forward_all()
+
+    for blob_name in net.blobs.keys():
+        if "_diff" in blob_name:
+            continue
+        print "Checking blob ", blob_name
+        blob = net.blobs[blob_name]
+        blob.sync_host()
+        np.testing.assert_array_almost_equal(
+            blob, caffe_net.blobs[blob_name].data, decimal=3)
+    print("SUCCESS")
+
+if __name__ == '__main__':
+    main()
