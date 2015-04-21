@@ -60,7 +60,7 @@ class ConvLayer(object):
             self.weights = self.weights.reshape(weights_shape)
         else:
             n = 1.0 / np.sqrt(self.num_output)
-            self.weights = hmarray.rand(weights_shape, _range=(-n, n))
+            self.weights = hmarray.random(weights_shape, _range=(-n, n))
         self.weights_diff = hmarray.zeros(weights_shape)
 
         height_out = (height + 2 * self.padding - self.kernel_size) // \

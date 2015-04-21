@@ -13,7 +13,6 @@ from layers import ConvLayer, ReluLayer, PoolingLayer, InnerProductLayer, \
     SoftmaxWithLossLayer
 import numpy as np
 from hindemith.types import hmarray
-import time
 
 
 class Net(object):
@@ -37,15 +36,13 @@ class Net(object):
         "Data": DataLayer
     }
 
-    def __init__(self, prototxt, params=None, phase='TEST'):
+    def __init__(self, net_param, params=None):
         self.blobs = {}
         self.layers = []
 
-        self.net_param = pb.NetParameter()
-        with open(prototxt, "rb") as f:
-            text_format.Merge(f.read(), self.net_param)
+        self.net_param = net_param
 
-        if phase == 'TEST':
+        if self.net_param.state.phase == pb.TEST:
             self.blobs['data'] = hmarray(self.net_param.input_dim, np.float32)
             self.blobs['data_diff'] = \
                 hmarray(self.net_param.input_dim, np.float32)
@@ -56,20 +53,20 @@ class Net(object):
         # Initialize layers
         for layer_param in layer_params:
             if len(layer_param.include) > 0 and \
-                    layer_param.include[0].phase != getattr(caffe, phase):
+                    layer_param.include[0].phase != net_param.state.phase:
                 continue
             print("Initializing layer {}".format(layer_param.name))
             # Skip dropout layers for test
             if layer_param.type in (pb.V1LayerParameter.DROPOUT, "Dropout") \
-                    and phase == 'TEST':
+                    and net_param.state.phase == pb.TEST:
                 continue
             layer_constructor = self.layer_map[layer_param.type]
-            if layer_param.name in params:
+            if params is not None and layer_param.name in params:
                 layer = layer_constructor(
-                    layer_param, phase,
+                    layer_param, net_param.state.phase,
                     params[layer_param.name])
             else:
-                layer = layer_constructor(layer_param, phase)
+                layer = layer_constructor(layer_param, net_param.state.phase)
             self.layers.append(layer)
             bottom = []
             for blob in layer_param.bottom:
@@ -106,12 +103,15 @@ def main():
 
     caffe.set_mode_gpu()
     if args.phase == 'TEST':
-        caffe_net = caffe.Net(args.prototxt, args.caffemodel,
+        net_param = pb.NetParameter()
+        with open(args.prototxt, "rb") as f:
+            text_format.Merge(f.read(), net_param)
+        caffe_net = caffe.Net(net_param, args.caffemodel,
                               getattr(caffe, args.phase))
     else:
         solver = caffe.SGDSolver(args.prototxt)
         caffe_net = solver.net
-    net = Net(args.prototxt, caffe_net.params, args.phase)
+    net = Net(args.prototxt, caffe_net.params)
 
     if args.phase == 'TEST':
         im = caffe.io.load_image('data/cat.jpg')
