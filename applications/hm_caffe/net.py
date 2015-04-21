@@ -1,6 +1,7 @@
 """
 python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
     --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TEST'
+python net.py --prototxt="models/alexnet-ng/trainval.prototxt" --phase='TRAIN'
 """
 import argparse
 import caffe_pb2 as pb
@@ -12,8 +13,6 @@ from layers import ConvLayer, ReluLayer, PoolingLayer, InnerProductLayer, \
 import numpy as np
 from hindemith.types import hmarray
 import time
-import lmdb
-import random
 
 
 parser = argparse.ArgumentParser()
@@ -24,7 +23,7 @@ parser.add_argument(
 parser.add_argument(
     '--caffemodel',
     help="path to .caffemodel to use for network initialization",
-    default='models/lenet/lenet_iter_5000.caffemodel')
+    default=None)
 parser.add_argument(
     '--phase',
     help="TRAIN or TEST",
@@ -104,8 +103,13 @@ class Net(object):
         for layer in self.layers:
             layer.forward()
 
-caffe_net = caffe.Net(args.prototxt, args.caffemodel,
-                      getattr(caffe, args.phase))
+caffe.set_mode_gpu()
+if args.phase == 'TEST':
+    caffe_net = caffe.Net(args.prototxt, args.caffemodel,
+                          getattr(caffe, args.phase))
+else:
+    solver = caffe.SGDSolver(args.prototxt)
+    caffe_net = solver.net
 net = Net(args.prototxt, caffe_net.params, args.phase)
 
 if args.phase == 'TEST':
@@ -134,7 +138,7 @@ if args.phase == 'TEST':
     print("Done")
 else:
     net.forward_all()
-    caffe_net.forward()
+    caffe_net.forward_all()
 
 for blob_name in net.blobs.keys():
     if "_diff" in blob_name:
