@@ -20,13 +20,11 @@ class ConvLayer(object):
             self.bias.sync_ocl()
         else:
             self.weights = None
-            self.bias = None
-        # if conv_param.bias_filler.type == 'constant':
-        #     self.bias = hmarray.zeros((self.num_output,))
-        #     self.bias_diff = hmarray.zeros((self.num_output,))
-        #     if conv_param.bias_filler.value != 0:
-        #         self.bias.fill(conv_param.bias_filler.value)
-        #         self.bias.sync_ocl()
+            self.bias = hmarray.zeros((self.num_output,))
+            self.bias_diff = hmarray.zeros((self.num_output,))
+            if conv_param.bias_filler.value != 0:
+                self.bias.fill(conv_param.bias_filler.value)
+                self.bias.sync_ocl()
 
         @compose
         def hm_backward(bottom_diff, bottom, top_diff, weights, weights_diff,

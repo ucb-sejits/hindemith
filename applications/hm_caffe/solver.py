@@ -9,8 +9,8 @@ class Solver(object):
 
     def __init__(self, param):
         """TODO: to be defined1. """
+        self.param = param
         self.init_train_net(param)
-        self.init_test_nets(param)
 
     def init_train_net(self, param):
         net_param = pb.NetParameter()
@@ -24,15 +24,19 @@ class Solver(object):
         net_param.state.CopyFrom(net_state)
         self.train_net = Net(net_param)
 
-    def init_test_nets(self, param):
-        pass
+    def step(self, iters):
+        avg_loss = self.param.average_loss
+        for i in range(iters):
+            self.train_net.forward_backward()
+
 
 
 def main():
     param = pb.SolverParameter()
     with open("./models/alexnet-ng/solver.prototxt", "rb") as f:
         text_format.Merge(f.read(), param)
-    Solver(param)
+    solver = Solver(param)
+    solver.step(10)
 
 
 if __name__ == '__main__':

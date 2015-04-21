@@ -95,7 +95,7 @@ class PoolBackward(BlockLevel):
         }
       }
     }
-    $bottom_diff[index] = gradient;        
+    $bottom_diff[index] = gradient;
 """).substitute(bottom_diff=sinks[0], mask=sources[1], top_diff=sources[0],
                 pooled_height=pooled_height, pooled_width=pooled_width,
                 channels=channels, stride_h=stride_h,

@@ -27,6 +27,7 @@ class hmarray(np.ndarray):
             self.ocl_dirty = obj.ocl_dirty
         else:
             buf, evt = cl.buffer_from_ndarray(queue, obj)
+            evt.wait()
             self.ocl_buf = buf
             self.host_dirty = False
             self.ocl_dirty = False

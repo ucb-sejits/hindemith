@@ -43,9 +43,10 @@ class Net(object):
         self.net_param = net_param
 
         if self.net_param.state.phase == pb.TEST:
-            self.blobs['data'] = hmarray(self.net_param.input_dim, np.float32)
-            self.blobs['data_diff'] = \
-                hmarray(self.net_param.input_dim, np.float32)
+            if len(self.net_param.input_dim) > 0:
+                self.blobs['data'] = hmarray(self.net_param.input_dim)
+                self.blobs['data_diff'] = \
+                    hmarray(self.net_param.input_dim)
         if len(self.net_param.layer) > 0:
             layer_params = self.net_param.layer
         else:
@@ -56,6 +57,8 @@ class Net(object):
                     layer_param.include[0].phase != net_param.state.phase:
                 continue
             print("Initializing layer {}".format(layer_param.name))
+            print("  Bottom : " + ", ".join(layer_param.bottom))
+            print("  Top    : " + ", ".join(layer_param.top))
             # Skip dropout layers for test
             if layer_param.type in (pb.V1LayerParameter.DROPOUT, "Dropout") \
                     and net_param.state.phase == pb.TEST:
@@ -84,6 +87,12 @@ class Net(object):
         for layer in self.layers:
             layer.forward()
 
+    def forward_backward(self,):
+        for layer in self.layers:
+            layer.forward()
+        for layer in self.layers:
+            layer.backward()
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -103,15 +112,15 @@ def main():
 
     caffe.set_mode_gpu()
     if args.phase == 'TEST':
-        net_param = pb.NetParameter()
-        with open(args.prototxt, "rb") as f:
-            text_format.Merge(f.read(), net_param)
-        caffe_net = caffe.Net(net_param, args.caffemodel,
+        caffe_net = caffe.Net(args.prototxt, args.caffemodel,
                               getattr(caffe, args.phase))
     else:
         solver = caffe.SGDSolver(args.prototxt)
         caffe_net = solver.net
-    net = Net(args.prototxt, caffe_net.params)
+    net_param = pb.NetParameter()
+    with open(args.prototxt, "rb") as f:
+        text_format.Merge(f.read(), net_param)
+    net = Net(net_param, caffe_net.params)
 
     if args.phase == 'TEST':
         im = caffe.io.load_image('data/cat.jpg')
@@ -132,13 +141,18 @@ def main():
         caffe_net.forward_all()
 
     for blob_name in net.blobs.keys():
+        print("Checking blob " + blob_name)
         if "_diff" in blob_name:
-            continue
-        print "Checking blob ", blob_name
-        blob = net.blobs[blob_name]
-        blob.sync_host()
-        np.testing.assert_array_almost_equal(
-            blob, caffe_net.blobs[blob_name].data, decimal=3)
+            if args.phase == 'TRAIN':
+                blob = net.blobs[blob_name]
+                blob.sync_host()
+                np.testing.assert_array_almost_equal(
+                    blob, caffe_net.blobs[blob_name].diff, decimal=3)
+        else:
+            blob = net.blobs[blob_name]
+            blob.sync_host()
+            np.testing.assert_array_almost_equal(
+                blob, caffe_net.blobs[blob_name].data, decimal=3)
     print("SUCCESS")
 
 if __name__ == '__main__':
