@@ -3,6 +3,8 @@ python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
     --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TEST'
 python net.py --prototxt="models/alexnet-ng/trainval.prototxt" \
     --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TRAIN'
+python net.py --prototxt="models/alexnet-ng/trainval-nodropout.prototxt" \
+    --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TRAIN'
 """
 import layers.caffe_pb2 as pb
 
