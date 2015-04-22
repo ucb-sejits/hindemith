@@ -151,13 +151,12 @@ if __name__ == '__main__':
 
     if args.phase == 'TRAIN':
         caffe_net.forward()
-        for blob_name in net.blobs.keys():
-            if "_diff" in blob_name:
-                continue
-            blob = net.blobs[blob_name]
-            caffe_blob = caffe_net.blobs[blob_name].data
-            blob[:] = caffe_blob
-            blob.sync_ocl()
+        # Skip Data Layer forward and initialize with Caffe's batch
+        net.layers[0].data[:] = caffe_net.blobs['data'].data
+        net.layers[0].data.sync_ocl()
+        net.layers[0].label[:] = caffe_net.blobs['label'].data
+        net.layers[0].label.sync_ocl()
+        net.forward(1)  # skip first (data) layer
         caffe_net.backward()
         net.backward()
     else:
