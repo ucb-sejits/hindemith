@@ -1,4 +1,4 @@
-from hindemith.operations.core import SoftmaxWithLossForward, \
+from hindemith.operations.softmax_with_loss import SoftmaxWithLossForward, \
     SoftmaxWithLossBackward
 from hindemith.types import hmarray
 from hindemith.core import compose

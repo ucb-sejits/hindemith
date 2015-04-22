@@ -116,7 +116,7 @@ class Net(object):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="""Example usage:
-python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \\
+python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
 --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TEST'"""
     )
     parser.add_argument(
