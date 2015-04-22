@@ -13,6 +13,7 @@ class ConvLayer(object):
         self.stride = conv_param.stride
         self.padding = conv_param.pad
         self.conv_param = conv_param
+        self.bias_diff = hmarray.zeros((self.num_output,))
         if params is not None:
             self.weights = params[0].data.view(hmarray)
             self.weights.sync_ocl()
@@ -21,7 +22,6 @@ class ConvLayer(object):
         else:
             self.weights = None
             self.bias = hmarray.zeros((self.num_output,))
-            self.bias_diff = hmarray.zeros((self.num_output,))
             if conv_param.bias_filler.value != 0:
                 self.bias.fill(conv_param.bias_filler.value)
                 self.bias.sync_ocl()

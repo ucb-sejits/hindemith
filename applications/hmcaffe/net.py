@@ -1,7 +1,8 @@
 """
 python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
     --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TEST'
-python net.py --prototxt="models/alexnet-ng/trainval.prototxt" --phase='TRAIN'
+python net.py --prototxt="models/alexnet-ng/trainval.prototxt" \
+    --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TRAIN'
 """
 import layers.caffe_pb2 as pb
 
@@ -87,6 +88,15 @@ class Net(object):
         for layer in self.layers:
             layer.forward()
 
+    def forward_backward_all(self, **kwargs):
+        for key, value in kwargs.iteritems():
+            self.blobs[key][...] = value
+            self.blobs[key].sync_ocl()
+        for layer in self.layers:
+            layer.forward()
+        for layer in self.layers:
+            layer.backward()
+
     def forward_backward(self,):
         for layer in self.layers:
             layer.forward()
@@ -111,34 +121,26 @@ def main():
     args = parser.parse_args()
 
     caffe.set_mode_gpu()
-    if args.phase == 'TEST':
-        caffe_net = caffe.Net(args.prototxt, args.caffemodel,
-                              getattr(caffe, args.phase))
-    else:
-        solver = caffe.SGDSolver(args.prototxt)
-        caffe_net = solver.net
+    caffe_net = caffe.Net(args.prototxt, args.caffemodel,
+                          getattr(caffe, args.phase))
     net_param = pb.NetParameter()
     with open(args.prototxt, "rb") as f:
         text_format.Merge(f.read(), net_param)
     net = Net(net_param, caffe_net.params)
 
-    if args.phase == 'TEST':
-        im = caffe.io.load_image('data/cat.jpg')
-        transformer = caffe.io.Transformer(
-            {'data': caffe_net.blobs['data'].data.shape})
-        transformer.set_mean(
-            'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
-        transformer.set_transpose('data', (2, 0, 1))
-        transformer.set_channel_swap('data', (2, 1, 0))
-        transformer.set_raw_scale('data', 255.0)
-        data = np.asarray([transformer.preprocess('data', im)]).view(hmarray)
-        data.sync_ocl()
+    im = caffe.io.load_image('data/cat.jpg')
+    transformer = caffe.io.Transformer(
+        {'data': caffe_net.blobs['data'].data.shape})
+    transformer.set_mean(
+        'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
+    transformer.set_transpose('data', (2, 0, 1))
+    transformer.set_channel_swap('data', (2, 1, 0))
+    transformer.set_raw_scale('data', 255.0)
+    data = np.asarray([transformer.preprocess('data', im)]).view(hmarray)
+    data.sync_ocl()
 
-        net.forward_all(data=data)
-        caffe_net.forward_all(data=data)
-    else:
-        net.forward_all()
-        caffe_net.forward_all()
+    net.forward_backward_all(data=data)
+    caffe_net.forward_backward_all(data=data)
 
     for blob_name in net.blobs.keys():
         print("Checking blob " + blob_name)
