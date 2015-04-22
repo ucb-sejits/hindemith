@@ -6,7 +6,7 @@ python net.py --prototxt="models/alexnet-ng/trainval.prototxt" \
 python net.py --prototxt="models/alexnet-ng/trainval-nodropout.prototxt" \
     --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TRAIN'
 """
-import layers.caffe_pb2 as pb
+import hmcaffe.proto.caffe_pb2 as pb
 
 import argparse
 import caffe

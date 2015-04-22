@@ -1,7 +1,7 @@
 import lmdb
 import random
 import numpy as np
-import caffe_pb2 as pb
+import hmcaffe.proto.caffe_pb2 as pb
 from hindemith.types import hmarray
 
 

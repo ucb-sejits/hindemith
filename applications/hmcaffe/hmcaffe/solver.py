@@ -1,5 +1,5 @@
 from net import Net
-import layers.caffe_pb2 as pb
+import hmcaffe.proto.caffe_pb2 as pb
 from google.protobuf import text_format
 
 
