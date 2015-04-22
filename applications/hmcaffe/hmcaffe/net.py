@@ -1,9 +1,10 @@
 """
-python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
+python hmcaffe/net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
     --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TEST'
-python net.py --prototxt="models/alexnet-ng/trainval.prototxt" \
+python hmcaffe/net.py --prototxt="models/alexnet-ng/trainval.prototxt" \
     --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TRAIN'
-python net.py --prototxt="models/alexnet-ng/trainval-nodropout.prototxt" \
+python hmcaffe/net.py \
+    --prototxt="models/alexnet-ng/trainval-nodropout.prototxt" \
     --caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TRAIN'
 """
 import hmcaffe.proto.caffe_pb2 as pb
@@ -181,13 +182,14 @@ python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
             continue
         blob.sync_host()
         print("Checking blob " + blob_name)
-        if "_diff" in blob_name:
-            caffe_blob = caffe_net.blobs[blob_name[:-5]].diff
-        else:
-            caffe_blob = caffe_net.blobs[blob_name].data
         try:
-            np.testing.assert_array_almost_equal(
-                blob, caffe_blob, decimal=3)
+            if "_diff" in blob_name:
+                caffe_blob = caffe_net.blobs[blob_name[:-5]].diff
+                np.testing.assert_array_almost_equal_nulp(blob, caffe_blob)
+            else:
+                caffe_blob = caffe_net.blobs[blob_name].data
+                np.testing.assert_array_almost_equal(blob, caffe_blob,
+                                                     decimal=4)
         except AssertionError as e:
             print(e)
             failed = True

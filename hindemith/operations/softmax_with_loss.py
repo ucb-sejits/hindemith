@@ -135,6 +135,7 @@ __kernel void SoftmaxLossForward(global const float* prob_data,
                              loss.ocl_buf).on(queue, (num * spatial_dim, ))
                 loss.sync_host()
                 top[0] = np.sum(loss) / np.float32(num)
+                top.sync_ocl()
 
         return SoftmaxLauncher()
 
@@ -190,14 +191,14 @@ __kernel void SoftmaxLossBackwardGPU(global const float* label,
 
             def launch(self, symbol_table):
                 bottom_diff = symbol_table[sinks[0]]
-                top_diff = symbol_table[sources[0]]
+                # top_diff = symbol_table[sources[0]]
                 label = symbol_table[sources[1]]
                 prob = symbol_table[sources[2]]
                 copy(prob.ocl_buf, bottom_diff.ocl_buf).on(
                     queue, (np.prod(prob.shape),))
                 backward(label.ocl_buf, bottom_diff.ocl_buf).on(
                     queue, (num * spatial_dim), )
-                loss_weight = top_diff[0]
-                scale(np.float32(loss_weight / float(count)),
+                loss_weight = 1.0
+                scale(np.float32(loss_weight / float(num)),
                       bottom_diff.ocl_buf).on(queue, (np.prod(prob.shape), ))
         return Launcher()

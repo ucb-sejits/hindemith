@@ -54,3 +54,6 @@ class DataLayer(object):
             self.label[i] = datum.label
         self.data.sync_ocl()
         self.label.sync_ocl()
+
+    def backward(self):
+        pass
