@@ -114,7 +114,11 @@ class Net(object):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="""Example usage:
+python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \\
+--caffemodel="models/alexnet-ng/alexnet-ng.caffemodel" --phase='TEST'"""
+    )
     parser.add_argument(
         '--prototxt',
         help="path to prototxt using Caffe's format for network description",
