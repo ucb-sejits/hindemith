@@ -139,12 +139,9 @@ def main():
     data.sync_ocl()
 
     if args.phase == 'TRAIN':
-        # caffe_net.forward_backward_all(data=data)
         caffe_net.forward()
-        print(caffe_net.blobs['fc8'].data)
         caffe_net.backward()
-        print(caffe_net.blobs['fc8'].diff)
-        net.forward_backward_all(data=data)
+        net.forward_backward()
     else:
         net.forward_all(data=data)
         caffe_net.forward_all(data=data)
