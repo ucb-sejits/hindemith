@@ -127,7 +127,6 @@ def main():
     with open(args.prototxt, "rb") as f:
         text_format.Merge(f.read(), net_param)
     net = Net(net_param, caffe_net.params)
-
     im = caffe.io.load_image('data/cat.jpg')
     transformer = caffe.io.Transformer(
         {'data': caffe_net.blobs['data'].data.shape})
@@ -139,8 +138,16 @@ def main():
     data = np.asarray([transformer.preprocess('data', im)]).view(hmarray)
     data.sync_ocl()
 
-    net.forward_backward_all(data=data)
-    caffe_net.forward_backward_all(data=data)
+    if args.phase == 'TRAIN':
+        # caffe_net.forward_backward_all(data=data)
+        caffe_net.forward()
+        print(caffe_net.blobs['fc8'].data)
+        caffe_net.backward()
+        print(caffe_net.blobs['fc8'].diff)
+        net.forward_backward_all(data=data)
+    else:
+        net.forward_all(data=data)
+        caffe_net.forward_all(data=data)
 
     for blob_name in net.blobs.keys():
         print("Checking blob " + blob_name)
