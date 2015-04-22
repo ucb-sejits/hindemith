@@ -29,6 +29,6 @@ docs/_build
 *.caffemodel
 mnist_train_lmdb_clean
 *_lmdb
-applications/hm_caffe/data/**/*.txt
+applications/hmcaffe/data/**/*.txt
 *.binaryproto
 *.bet.pickle
