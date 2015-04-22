@@ -147,16 +147,6 @@ python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
     if args.phase == 'TRAIN':
         net_param.state.phase = pb.TRAIN
     net = Net(net_param, caffe_net.params)
-    im = caffe.io.load_image('data/cat.jpg')
-    transformer = caffe.io.Transformer(
-        {'data': caffe_net.blobs['data'].data.shape})
-    transformer.set_mean(
-        'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
-    transformer.set_transpose('data', (2, 0, 1))
-    transformer.set_channel_swap('data', (2, 1, 0))
-    transformer.set_raw_scale('data', 255.0)
-    data = np.asarray([transformer.preprocess('data', im)]).view(hmarray)
-    data.sync_ocl()
 
     if args.phase == 'TRAIN':
         caffe_net.forward()
@@ -169,6 +159,18 @@ python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
         caffe_net.backward()
         net.backward()
     else:
+        if net_param.name == "AlexNet":
+            im = caffe.io.load_image('data/cat.jpg')
+            transformer = caffe.io.Transformer(
+                {'data': caffe_net.blobs['data'].data.shape})
+            transformer.set_mean(
+                'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
+            transformer.set_transpose('data', (2, 0, 1))
+            transformer.set_channel_swap('data', (2, 1, 0))
+            transformer.set_raw_scale('data', 255.0)
+            data = np.asarray(
+                [transformer.preprocess('data', im)]).view(hmarray)
+            data.sync_ocl()
         net.forward_all(data=data)
         caffe_net.forward_all(data=data)
 
