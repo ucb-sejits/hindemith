@@ -118,15 +118,18 @@ if __name__ == '__main__':
     parser.add_argument(
         '--prototxt',
         help="path to prototxt using Caffe's format for network description",
-        default="models/lenet/deploy.prototxt")
+        required=True
+    )
     parser.add_argument(
         '--caffemodel',
         help="path to .caffemodel to use for network initialization",
-        default=None)
+        required=True
+    )
     parser.add_argument(
         '--phase',
         help="TRAIN or TEST",
-        default='TEST')
+        default='TEST'
+    )
     args = parser.parse_args()
 
     caffe.set_mode_gpu()
