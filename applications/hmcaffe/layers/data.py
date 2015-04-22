@@ -24,8 +24,8 @@ class DataLayer(object):
         if self.crop_size:
             height, width = self.crop_size, self.crop_size
         self.data = hmarray((self.batch_size, datum.channels, height, width))
-        self.data_diff = hmarray((self.batch_size, datum.channels, height,
-                                  width))
+        self.data_diff = hmarray.zeros((self.batch_size, datum.channels,
+                                        height, width))
         self.label = hmarray((self.batch_size, ))
         return [(self.data, self.data_diff), (self.label, None)]
 

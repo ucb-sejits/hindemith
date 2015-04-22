@@ -14,6 +14,7 @@ class InnerProductLayer(object):
             self.bias.sync_ocl()
         else:
             self.weights = None
+            self.bias = hmarray.zeros((self.num_output, ))
 
     def set_up(self, bottom, bottom_diff):
         self.bottom, self.bottom_diff = bottom, bottom_diff
@@ -23,7 +24,6 @@ class InnerProductLayer(object):
         if self.weights is None:
             self.weights = hmarray.random((N, K), _range=(-scale, scale))
         self.weights_diff = hmarray.zeros((N, K))
-        # self.bias = hmarray.zeros((self.num_output, ))
         self.bias_diff = hmarray.zeros((self.num_output, ))
         self.bias_multiplier = hmarray((1, self.bottom.shape[0]))
         self.bias_multiplier.fill(1)
@@ -37,7 +37,6 @@ class InnerProductLayer(object):
         N = self.num_output
         K = np.prod(self.bottom.shape[1:])
         M = self.bottom.shape[0]
-        self.top.fill(0)
         sgemm(False, True, 1.0, self.bottom, 0, K, self.weights, 0, K, 0.0,
               self.top, 0, N, M, N, K)
         sgemm(False, False, 1.0, self.bias_multiplier, 0, 1, self.bias, 0, N,

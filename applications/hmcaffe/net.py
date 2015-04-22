@@ -45,9 +45,8 @@ class Net(object):
 
         if self.net_param.state.phase == pb.TEST:
             if len(self.net_param.input_dim) > 0:
-                self.blobs['data'] = hmarray(self.net_param.input_dim)
-                self.blobs['data_diff'] = \
-                    hmarray(self.net_param.input_dim)
+                self.blobs['data'] = hmarray.zeros(self.net_param.input_dim)
+                self.blobs['data_diff'] = None
         if len(self.net_param.layer) > 0:
             layer_params = self.net_param.layer
         else:
@@ -81,6 +80,16 @@ class Net(object):
                 self.blobs[top_name] = top[0]
                 self.blobs["{}_diff".format(top_name)] = top[1]
 
+    def forward(self, _from=0, to=None):
+        if to is None:
+            to = len(self.layers)
+        for layer in self.layers[_from:to]:
+            layer.forward()
+
+    def backward(self):
+        for layer in reversed(self.layers):
+            layer.backward()
+
     def forward_all(self, **kwargs):
         for key, value in kwargs.iteritems():
             self.blobs[key][...] = value
@@ -94,17 +103,17 @@ class Net(object):
             self.blobs[key].sync_ocl()
         for layer in self.layers:
             layer.forward()
-        for layer in self.layers:
+        for layer in reversed(self.layers):
             layer.backward()
 
-    def forward_backward(self,):
+    def forward_backward(self):
         for layer in self.layers:
             layer.forward()
-        for layer in self.layers:
+        for layer in reversed(self.layers):
             layer.backward()
 
 
-def main():
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--prototxt',
@@ -126,6 +135,8 @@ def main():
     net_param = pb.NetParameter()
     with open(args.prototxt, "rb") as f:
         text_format.Merge(f.read(), net_param)
+    if args.phase == 'TRAIN':
+        net_param.state.phase = pb.TRAIN
     net = Net(net_param, caffe_net.params)
     im = caffe.io.load_image('data/cat.jpg')
     transformer = caffe.io.Transformer(
@@ -140,26 +151,38 @@ def main():
 
     if args.phase == 'TRAIN':
         caffe_net.forward()
+        for blob_name in net.blobs.keys():
+            if "_diff" in blob_name:
+                continue
+            blob = net.blobs[blob_name]
+            caffe_blob = caffe_net.blobs[blob_name].data
+            blob[:] = caffe_blob
+            blob.sync_ocl()
         caffe_net.backward()
-        net.forward_backward()
+        net.backward()
     else:
         net.forward_all(data=data)
         caffe_net.forward_all(data=data)
 
+    failed = False
     for blob_name in net.blobs.keys():
+        blob = net.blobs[blob_name]
+        if blob is None:
+            continue
+        blob.sync_host()
         print("Checking blob " + blob_name)
         if "_diff" in blob_name:
-            if args.phase == 'TRAIN':
-                blob = net.blobs[blob_name]
-                blob.sync_host()
-                np.testing.assert_array_almost_equal(
-                    blob, caffe_net.blobs[blob_name].diff, decimal=3)
+            caffe_blob = caffe_net.blobs[blob_name[:-5]].diff
         else:
-            blob = net.blobs[blob_name]
-            blob.sync_host()
+            caffe_blob = caffe_net.blobs[blob_name].data
+        try:
             np.testing.assert_array_almost_equal(
-                blob, caffe_net.blobs[blob_name].data, decimal=3)
-    print("SUCCESS")
+                blob, caffe_blob, decimal=3)
+        except AssertionError as e:
+            print(e)
+            failed = True
 
-if __name__ == '__main__':
-    main()
+    if failed:
+        print("FAILED")
+    else:
+        print("SUCCESS")
