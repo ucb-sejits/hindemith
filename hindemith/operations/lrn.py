@@ -164,7 +164,7 @@ class LrnBackward(ElementLevel):
     }
 // @end=cl@
 """).substitute(channels=channels, height=height, width=width,
-                cache_ratio=2 * alpha * beta / local_size,
+                cache_ratio=2.0 * alpha * beta / local_size,
                 negative_beta=-beta, size=local_size,
                 bottom_data=sources[0], top_data=sources[1], scale=sources[2],
                 top_diff=sources[3], bottom_diff=sinks[0])

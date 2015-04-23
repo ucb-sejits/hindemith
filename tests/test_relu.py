@@ -1,7 +1,7 @@
 import unittest
 from hindemith.types import hmarray
 from hindemith.core import compose
-from hindemith.operations.relu import Relu
+from hindemith.operations.relu import ReluForward, ReluBackward
 import numpy as np
 
 
@@ -15,7 +15,7 @@ class TestRelu(unittest.TestCase):
 
         @compose
         def fn(bottom, top):
-            top = Relu(bottom)
+            top = ReluForward(bottom)
             return top
 
         fn(bottom, top)
@@ -24,3 +24,18 @@ class TestRelu(unittest.TestCase):
         expected = np.copy(bottom)
         expected[expected < 0] = 0
         self._check(top, expected)
+
+        top_diff = hmarray.random(top.shape)
+        bottom_diff = hmarray(top.shape)
+
+        @compose
+        def fn(top_diff, bottom, bottom_diff):
+            bottom_diff = ReluBackward(bottom, top_diff)
+            return bottom_diff
+
+        fn(top_diff, bottom, bottom_diff)
+        bottom_diff.sync_host()
+
+        expected = np.copy(top_diff)
+        expected[bottom < 0] = 0
+        self._check(bottom_diff, expected)

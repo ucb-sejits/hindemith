@@ -1,4 +1,4 @@
-from hindemith.operations.relu import Relu
+from hindemith.operations.relu import ReluForward, ReluBackward
 from hindemith.core import compose
 
 
@@ -7,18 +7,25 @@ class ReluLayer(object):
         self.phase = phase
 
         @compose
-        def hm_relu(bottom):
-            bottom = Relu(bottom)
+        def hm_forward(bottom):
+            bottom = ReluForward(bottom)
             return bottom
 
-        self.hm_relu = hm_relu
+        self.hm_forward = hm_forward
+
+        @compose
+        def hm_backward(bottom, bottom_diff):
+            bottom_diff = ReluBackward(bottom, bottom_diff)
+            return bottom_diff
+
+        self.hm_backward = hm_backward
 
     def set_up(self, bottom, bottom_diff):
         self.bottom, self.bottom_diff = bottom, bottom_diff
         return [(self.bottom, self.bottom_diff)]
 
     def forward(self):
-        self.hm_relu(self.bottom)
+        self.hm_forward(self.bottom)
 
     def backward(self):
-        self.hm_relu(self.bottom_diff)
+        self.hm_backward(self.bottom, self.bottom_diff)

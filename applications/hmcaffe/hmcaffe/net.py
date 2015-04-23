@@ -185,16 +185,21 @@ python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
         try:
             if "_diff" in blob_name:
                 caffe_blob = caffe_net.blobs[blob_name[:-5]].diff
-                np.testing.assert_array_almost_equal_nulp(blob, caffe_blob)
+                scale = np.max(caffe_blob)
+                if scale > 0:
+                    caffe_blob /= scale
+                    blob /= scale
             else:
                 caffe_blob = caffe_net.blobs[blob_name].data
-                np.testing.assert_array_almost_equal(blob, caffe_blob,
-                                                     decimal=4)
+            np.testing.assert_array_almost_equal(blob, caffe_blob,
+                                                 decimal=4)
         except AssertionError as e:
             print(e)
             failed = True
 
     if failed:
         print("FAILED")
+        from IPython import embed
+        embed()
     else:
         print("SUCCESS")
