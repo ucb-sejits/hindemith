@@ -1,10 +1,12 @@
+from hmcaffe.layers.base_layer import Layer
 from hindemith.types import hmarray
 from hindemith.clibs.clblas import sgemm, sgemv
 import numpy as np
 
 
-class InnerProductLayer(object):
+class InnerProductLayer(Layer):
     def __init__(self, layer_param, phase, params=None):
+        self.layer_param = layer_param
         self.phase = phase
         self.num_output = layer_param.inner_product_param.num_output
         if params is not None:
@@ -24,7 +26,9 @@ class InnerProductLayer(object):
         if self.weights is None:
             self.weights = hmarray.random((N, K), _range=(-scale, scale))
         self.weights_diff = hmarray.zeros((N, K))
+        self.weights_history = hmarray.zeros((N, K))
         self.bias_diff = hmarray.zeros((self.num_output, ))
+        self.bias_history = hmarray.zeros((self.num_output, ))
         self.bias_multiplier = hmarray((1, self.bottom.shape[0]))
         self.bias_multiplier.fill(1)
         self.bias_multiplier.sync_ocl()
@@ -53,9 +57,29 @@ class InnerProductLayer(object):
         sgemm(False, False, 1.0, self.top_diff, 0, N, self.weights, 0,
               K, 0.0, self.bottom_diff, 0, K, M, K, N)
 
-    def update_weights(self):
-        for buf, diff in [(self.weights, self.weights_diff),
-                          (self.bias, self.bias_diff)]:
-            diff.sync_host()
-            buf -= .01 * diff
-            buf.sync_ocl()
+    def update_params(self, rate, weight_decay, momentum):
+        weights_lr = rate * self.layer_param.blobs_lr[0]
+        weights_decay = weight_decay * self.layer_param.weight_decay[0]
+        self.weights.sync_host()
+        self.weights_diff.sync_host()
+        if weights_decay:
+            self.weights_diff += weights_decay * self.weights
+        self.weights_history[:] = weights_lr * self.weights_diff + \
+            momentum * self.weights_history
+        self.weights_diff[:] = self.weights_history[:]
+        self.weights -= self.weights_diff
+        self.weights.sync_ocl()
+
+        bias_lr = rate * self.layer_param.blobs_lr[1]
+        bias_decay = weight_decay * self.layer_param.weight_decay[1]
+        self.bias.sync_host()
+        self.bias_diff.sync_host()
+        if bias_decay:
+            self.bias_diff += bias_decay * self.bias
+        self.bias_history[:] = bias_lr * self.bias_diff + \
+            momentum * self.bias_history
+        self.bias_diff[:] = self.bias_history[:]
+
+        self.bias -= self.bias_diff
+        self.bias.sync_ocl()
+        self.bias_diff.sync_ocl()

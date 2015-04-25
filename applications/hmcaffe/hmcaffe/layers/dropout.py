@@ -1,9 +1,10 @@
+from hmcaffe.layers.base_layer import Layer
 from hindemith.operations.dropout import Dropout
 from hindemith.types import hmarray
 from hindemith.core import compose
 
 
-class DropoutLayer(object):
+class DropoutLayer(Layer):
     def __init__(self, layer_param, phase):
         self.phase = phase
         self.threshold = layer_param.dropout_param.dropout_ratio
@@ -20,11 +21,12 @@ class DropoutLayer(object):
         self.bottom_diff = bottom_diff
         self.top = hmarray.zeros(bottom.shape)
         self.mask = hmarray.random(bottom.shape)
-        if self.phase == 'TRAIN':
-            self.top_diff = hmarray.zeros(bottom.shape)
-        else:
-            self.top_diff = None
+        self.top_diff = hmarray.zeros(bottom.shape)
         return [(self.top, self.top_diff)]
 
     def forward(self):
         self.hm_dropout(self.top, self.bottom, self.mask, self.threshold)
+
+    def backward(self):
+        self.hm_dropout(self.bottom_diff, self.top_diff, self.mask,
+                        self.threshold)

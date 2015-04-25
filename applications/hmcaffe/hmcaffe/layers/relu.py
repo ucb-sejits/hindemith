@@ -1,8 +1,9 @@
+from hmcaffe.layers.base_layer import Layer
 from hindemith.operations.relu import ReluForward, ReluBackward
 from hindemith.core import compose
 
 
-class ReluLayer(object):
+class ReluLayer(Layer):
     def __init__(self, layer_param, phase):
         self.phase = phase
 

@@ -1,8 +1,9 @@
+from hmcaffe.layers.base_layer import Layer
 from hindemith.types import hmarray
 import numpy as np
 
 
-class AccuracyLayer(object):
+class AccuracyLayer(Layer):
     def __init__(self, layer_param, phase):
         self.phase = phase
         self.top_k = layer_param.accuracy_param.top_k

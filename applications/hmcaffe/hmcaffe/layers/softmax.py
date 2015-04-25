@@ -1,9 +1,10 @@
+from hmcaffe.layers.base_layer import Layer
 from hindemith.operations.softmax import SoftmaxForward
 from hindemith.types import hmarray
 from hindemith.core import compose
 
 
-class SoftmaxLayer(object):
+class SoftmaxLayer(Layer):
     def __init__(self, layer_param, phase):
         self.phase = phase
 

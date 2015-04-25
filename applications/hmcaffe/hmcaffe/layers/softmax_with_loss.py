@@ -1,10 +1,11 @@
+from hmcaffe.layers.base_layer import Layer
 from hindemith.operations.softmax_with_loss import SoftmaxWithLossForward, \
     SoftmaxWithLossBackward
 from hindemith.types import hmarray
 from hindemith.core import compose
 
 
-class SoftmaxWithLossLayer(object):
+class SoftmaxWithLossLayer(Layer):
     def __init__(self, layer_param, phase):
         self.phase = phase
 

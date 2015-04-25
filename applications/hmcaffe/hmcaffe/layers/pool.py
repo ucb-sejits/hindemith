@@ -1,9 +1,10 @@
+from hmcaffe.layers.base_layer import Layer
 from hindemith.types import hmarray
 from hindemith.core import compose
 from hindemith.operations.pool import PoolForward, PoolBackward
 
 
-class PoolingLayer(object):
+class PoolingLayer(Layer):
     def __init__(self, layer_param, phase):
         self.kernel_size = layer_param.pooling_param.kernel_size
         self.stride = layer_param.pooling_param.stride

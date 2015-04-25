@@ -1,12 +1,14 @@
+from hmcaffe.layers.base_layer import Layer
 from hindemith.operations.conv import ConvForward, ConvBackward
 from hindemith.types import hmarray
 from hindemith.core import compose
 import numpy as np
 
 
-class ConvLayer(object):
+class ConvLayer(Layer):
     def __init__(self, layer_param, phase, params=None):
         self.phase = phase
+        self.layer_param = layer_param
         conv_param = layer_param.convolution_param
         self.num_output = conv_param.num_output
         self.kernel_size = conv_param.kernel_size
@@ -14,6 +16,7 @@ class ConvLayer(object):
         self.padding = conv_param.pad
         self.conv_param = conv_param
         self.bias_diff = hmarray.zeros((self.num_output,))
+        self.bias_history = hmarray.zeros((self.num_output,))
         if params is not None:
             self.weights = params[0].data.view(hmarray)
             self.weights.sync_ocl()
@@ -60,6 +63,7 @@ class ConvLayer(object):
             n = 1.0 / np.sqrt(self.num_output)
             self.weights = hmarray.random(weights_shape, _range=(-n, n))
         self.weights_diff = hmarray.zeros(weights_shape)
+        self.weights_history = hmarray.zeros(weights_shape)
 
         height_out = (height + 2 * self.padding - self.kernel_size) // \
             self.stride + 1
@@ -75,13 +79,35 @@ class ConvLayer(object):
                         self.kernel_size, self.padding, self.stride)
 
     def backward(self):
-        self.hm_backward(self.bottom_diff, self.bottom, self.top_diff,
-                         self.weights, self.weights_diff, self.bias_diff,
-                         self.kernel_size, self.padding, self.stride)
+        if self.bottom_diff is not None:
+            self.hm_backward(self.bottom_diff, self.bottom, self.top_diff,
+                             self.weights, self.weights_diff, self.bias_diff,
+                             self.kernel_size, self.padding, self.stride)
 
-    def update_weights(self):
-        for buf, diff in [(self.weights, self.weights_diff),
-                          (self.bias, self.bias_diff)]:
-            diff.sync_host()
-            buf -= .01 * diff
-            buf.sync_ocl()
+    def update_params(self, rate, weight_decay, momentum):
+        weights_lr = rate * self.layer_param.blobs_lr[0]
+        weights_decay = weight_decay * self.layer_param.weight_decay[0]
+        self.weights_diff.sync_host()
+        self.weights.sync_host()
+        if weights_decay:
+            self.weights_diff += weights_decay * self.weights
+        self.weights_history[:] = weights_lr * self.weights_diff + \
+            momentum * self.weights_history
+        self.weights_diff[:] = self.weights_history[:]
+        self.weights -= self.weights_diff
+        self.weights.sync_ocl()
+        self.weights_diff.sync_ocl()
+
+        bias_lr = rate * self.layer_param.blobs_lr[1]
+        bias_decay = weight_decay * self.layer_param.weight_decay[1]
+        self.bias_diff.sync_host()
+        self.bias.sync_host()
+        if bias_decay:
+            self.bias_diff += bias_decay * self.bias
+        self.bias_history[:] = bias_lr * self.bias_diff + \
+            momentum * self.bias_history
+        self.bias_diff[:] = self.bias_history[:]
+
+        self.bias -= self.bias_diff
+        self.bias.sync_ocl()
+        self.bias_diff.sync_ocl()

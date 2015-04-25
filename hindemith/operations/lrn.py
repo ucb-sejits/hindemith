@@ -144,10 +144,9 @@ class LrnBackward(ElementLevel):
         accum_ratio -= $top_diff[(head - $size) * step] *
             $top_data[(head - $size) * step] / $scale[(head - $size) * step];
       }
-      $bottom_diff[(head - post_pad) * step] = \
-          $top_diff[(head - post_pad) * step] *
-          pow($scale[(head - post_pad) * step], $negative_beta) -
-          $cache_ratio * $bottom_data[(head - post_pad) * step] * accum_ratio;
+      $bottom_diff[(head - post_pad) * step] = $top_diff[(head - post_pad) * step]
+          * pow($scale[(head - post_pad) * step], (float)$negative_beta) - (float)$cache_ratio *
+          $bottom_data[(head - post_pad) * step] * accum_ratio;
       ++head;
     }
     // subtract only
@@ -156,10 +155,9 @@ class LrnBackward(ElementLevel):
         accum_ratio -= $top_diff[(head - $size) * step] *
             $top_data[(head - $size) * step] / $scale[(head - $size) * step];
       }
-      $bottom_diff[(head - post_pad) * step] = \
-          $top_diff[(head - post_pad) * step] *
-          pow($scale[(head - post_pad) * step], $negative_beta) -
-          $cache_ratio * $bottom_data[(head - post_pad) * step] * accum_ratio;
+      $bottom_diff[(head - post_pad) * step] = $top_diff[(head - post_pad) * step]
+          * pow($scale[(head - post_pad) * step], (float)$negative_beta) - (float)$cache_ratio *
+          $bottom_data[(head - post_pad) * step] * accum_ratio;
       ++head;
     }
 // @end=cl@

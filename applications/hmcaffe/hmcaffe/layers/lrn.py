@@ -1,9 +1,10 @@
+from hmcaffe.layers.base_layer import Layer
 from hindemith.operations.lrn import LrnForward, LrnBackward
 from hindemith.types import hmarray
 from hindemith.core import compose
 
 
-class LrnLayer(object):
+class LrnLayer(Layer):
     def __init__(self, layer_param, phase):
         self.phase = phase
         self.alpha = layer_param.lrn_param.alpha

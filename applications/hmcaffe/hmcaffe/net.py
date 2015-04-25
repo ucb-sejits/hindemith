@@ -17,6 +17,9 @@ from layers import ConvLayer, ReluLayer, PoolingLayer, InnerProductLayer, \
     SoftmaxWithLossLayer
 import numpy as np
 from hindemith.types import hmarray
+import logging
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger("hmcaffe")
 
 
 class Net(object):
@@ -59,9 +62,9 @@ class Net(object):
             if len(layer_param.include) > 0 and \
                     layer_param.include[0].phase != net_param.state.phase:
                 continue
-            print("Initializing layer {}".format(layer_param.name))
-            print("  Bottom : " + ", ".join(layer_param.bottom))
-            print("  Top    : " + ", ".join(layer_param.top))
+            log.info("Initializing layer %s", layer_param.name)
+            log.debug("  Bottom : %s", ", ".join(layer_param.bottom))
+            log.debug("  Top    : %s", ", ".join(layer_param.top))
             # Skip dropout layers for test
             if layer_param.type in (pb.V1LayerParameter.DROPOUT, "Dropout") \
                     and net_param.state.phase == pb.TEST:
@@ -110,10 +113,16 @@ class Net(object):
             layer.backward()
 
     def forward_backward(self):
+        loss = 0
         for layer in self.layers:
-            layer.forward()
+            loss += layer.forward_with_loss()
         for layer in reversed(self.layers):
             layer.backward()
+        return loss
+
+    def update_params(self, rate, weight_decay, momentum):
+        for layer in self.layers:
+            layer.update_params(rate, weight_decay, momentum)
 
 
 if __name__ == '__main__':
@@ -157,6 +166,7 @@ python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
         net.layers[0].label[:] = caffe_net.blobs['label'].data
         net.layers[0].label.sync_ocl()
         net.forward(1)  # skip first (data) layer
+        caffe_net.blobs['loss'].diff[...] = 100.0
         caffe_net.backward()
         net.backward()
     else:
@@ -185,10 +195,10 @@ python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
         try:
             if "_diff" in blob_name:
                 caffe_blob = caffe_net.blobs[blob_name[:-5]].diff
-                scale = np.max(caffe_blob)
-                if scale > 0:
-                    caffe_blob /= scale
-                    blob /= scale
+                # scale = np.max(caffe_blob)
+                # if scale > 0:
+                #     caffe_blob /= scale
+                #     blob /= scale
             else:
                 caffe_blob = caffe_net.blobs[blob_name].data
             np.testing.assert_array_almost_equal(blob, caffe_blob,

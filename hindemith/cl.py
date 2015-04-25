@@ -6,7 +6,7 @@ try:
     devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
 except cl.DeviceNotFoundError:
     devices = cl.clGetDeviceIDs()
-context = cl.clCreateContext(devices)
+context = cl.clCreateContext([devices[-1]])
 queue = cl.clCreateCommandQueue(context)
 
 
@@ -37,7 +37,8 @@ __kernel void fn($params) {
 }
     """).substitute(params=params_str, body=self.body,
                     num_work_items=self.launch_parameters[0])
-            kernel = cl.clCreateProgramWithSource(context, kernel).build()['fn']
+            kernel = cl.clCreateProgramWithSource(
+                context, kernel).build()['fn']
             kernel.argtypes = tuple(cl.cl_mem for _ in self.params)
             self.kernel = kernel
 
