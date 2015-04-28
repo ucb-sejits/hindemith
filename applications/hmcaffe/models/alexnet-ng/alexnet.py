@@ -7,8 +7,6 @@ from hindemith.operations.softmax import SoftmaxForward
 from hindemith.core import compose
 from hindemith.clibs.clblas import sgemm
 import caffe
-import hmcaffe.proto.caffe_pb2 as pb
-from google.protobuf import text_format
 import numpy as np
 
 
@@ -17,10 +15,6 @@ caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
 # caffe.set_mode_gpu()
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
-net_param = pb.NetParameter()
-
-with open(prototxt, "rb") as f:
-    text_format.Merge(f.read(), net_param)
 
 conv1_filters = caffe_net.params['conv1'][0].data.view(hmarray)
 conv1_bias = caffe_net.params['conv1'][1].data.view(hmarray)

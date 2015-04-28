@@ -33,7 +33,7 @@ class ConvForward(ElementLevel):
       int out_y = (index / $width_out) % $height_out;
       int out_c = (index / $width_out / $height_out) % $channels_out;
       int n = index / $width_out / $height_out / $channels_out;
-      float tmp = 0;
+      float tmp = 0.0f;
       for (int in_c = 0; in_c < $channels_in; in_c++) {
         for (int i = 0; i < $kernel_h; i++) {
           for (int j = 0; j < $kernel_w; j++) {

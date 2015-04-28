@@ -51,6 +51,11 @@ __kernel void fn($params) {
 
     def launch(self, symbol_table):
         args = [symbol_table[p].ocl_buf for p in self.params]
+        for sink in self.sinks:
+            if sink.id == 'conv2':
+                for p in self.params:
+                    symbol_table[p].sync_host()
+                    print(symbol_table[p])
         global_size = self.launch_parameters[0]
         if global_size % 16:
             padded = (global_size + 15) & (~15)
