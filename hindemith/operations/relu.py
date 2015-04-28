@@ -15,8 +15,8 @@ class ReluForward(ElementLevel):
     @classmethod
     def emit(cls, sources, sinks, keywords, symbol_table):
         return Template(
-            "$target[get_global_id(0)] = $operand[get_global_id(0)] > 0 ? "
-            "$operand[get_global_id(0)] : 0;"
+            "$target[index] = $operand[index] > 0 ? "
+            "$operand[index] : 0;"
         ).substitute(target=sinks[0], operand=sources[0])
 
 

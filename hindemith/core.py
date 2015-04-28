@@ -83,9 +83,14 @@ class Compose(object):
                 if self.is_not_device_level(op):
                     launch_params = self.get_launch_params(
                         op, _sources, _sinks)
-                    kernels.append(Kernel(launch_params))
+                    if len(kernels) == 0 or \
+                            not isinstance(kernels[-1], Kernel) or \
+                            kernels[-1].launch_parameters[0] != launch_params[0] \
+                            or len(launch_params) > 1 and launch_params[1]:
+                        kernels.append(Kernel(launch_params))
                     kernels[-1].append_body(
-                        self.get_emit(op, _sources, _sinks))
+                        self.get_emit(op, _sources, _sinks)
+                    )
                     kernels[-1].sources |= set(_sources)
                     kernels[-1].sinks |= set(_sinks)
                 else:

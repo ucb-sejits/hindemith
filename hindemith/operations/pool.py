@@ -21,7 +21,6 @@ class PoolForward(BlockLevel):
         pooled_height = ((height + 2 * pad_h - kernel_h) // stride_h) + 1
         pooled_width = ((width + 2 * pad_w - kernel_w) // stride_w) + 1
         return Template("""
-    int index = get_global_id(0);
     int pw = index % $pooled_w;
     int ph = (index / $pooled_w) % $pooled_h;
     int c = (index / $pooled_w / $pooled_h) % $channels;

@@ -8,12 +8,13 @@ from hindemith.core import compose
 from hindemith.clibs.clblas import sgemm
 import caffe
 import numpy as np
-
+import time
 
 prototxt = "models/alexnet-ng/deploy.prototxt"
 caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
-# caffe.set_mode_gpu()
+caffe.set_mode_gpu()
+caffe.set_device(2)
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 
 conv1_filters = caffe_net.params['conv1'][0].data.view(hmarray)
@@ -146,28 +147,38 @@ def forward(data):
     prob = SoftmaxForward(fc8)
     return prob
 
-
-if __name__ == '__main__':
-    im = caffe.io.load_image('data/cat.jpg')
-    transformer = caffe.io.Transformer(
-        {'data': caffe_net.blobs['data'].data.shape})
-    transformer.set_mean(
-        'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
-    transformer.set_transpose('data', (2, 0, 1))
-    transformer.set_channel_swap('data', (2, 1, 0))
-    transformer.set_raw_scale('data', 255.0)
-
+im = caffe.io.load_image('data/cat.jpg')
+transformer = caffe.io.Transformer(
+    {'data': caffe_net.blobs['data'].data.shape})
+transformer.set_mean(
+    'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
+transformer.set_transpose('data', (2, 0, 1))
+transformer.set_channel_swap('data', (2, 1, 0))
+transformer.set_raw_scale('data', 255.0)
+num_trials = 20
+hm_time = 0
+caffe_time = 0
+for i in range(num_trials):
     data = np.asarray(
         [transformer.preprocess('data', im)]).view(hmarray)
+    data *= hmarray.random((1, 3, 227, 227), _range=(0, 2))
+    data -= hmarray.random((1, 3, 227, 227), _range=(-20, +20))
     data.sync_ocl()
-    caffe_net.forward_all(data=data)
+    start = time.clock()
     forward(data)
-    # print(np.argmax(prob[0]))
-    # print(np.argmax(caffe_net.blobs['prob'].data[0]))
-    for blob in caffe_net.blobs.keys():
-        print("Checking blob {}".format(blob))
-        caffe_blob = caffe_net.blobs[blob].data
-        blob = globals()[blob]
+    hm_time += time.clock() - start
+    start = time.clock()
+    caffe_net.forward_all(data=data)
+    caffe_time += time.clock() - start
+
+    for blob_name in caffe_net.blobs.keys():
+        blob = globals()[blob_name]
         blob.sync_host()
-        np.testing.assert_array_almost_equal(blob, caffe_blob,
-                                             decimal=3)
+        if "_diff" in blob_name:
+            continue
+        caffe_blob = caffe_net.blobs[blob_name].data
+        np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=4)
+print("HM TIME    : {}".format(hm_time / num_trials))
+print("Caffe TIME : {}".format(caffe_time / num_trials))
+print("Speedup    : {}".format(caffe_time / hm_time))
+print "SUCCESS"

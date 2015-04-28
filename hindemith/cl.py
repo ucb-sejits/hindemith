@@ -37,13 +37,13 @@ class Kernel(object):
             params_str = ", ".join(params)
             kernel = Template("""
 __kernel void fn($params) {
-    if (get_global_id(0) < $num_work_items) {
+    int index = get_global_id(0);
+    if (index < $num_work_items) {
         $body
     }
 }
     """).substitute(params=params_str, body=self.body,
                     num_work_items=self.launch_parameters[0])
-            print(kernel)
             kernel = cl.clCreateProgramWithSource(
                 context, kernel).build()['fn']
             kernel.argtypes = tuple(cl.cl_mem for _ in self.params)
@@ -51,14 +51,10 @@ __kernel void fn($params) {
 
     def launch(self, symbol_table):
         args = [symbol_table[p].ocl_buf for p in self.params]
-        for sink in self.sinks:
-            if sink.id == 'conv2':
-                for p in self.params:
-                    symbol_table[p].sync_host()
-                    print(symbol_table[p])
         global_size = self.launch_parameters[0]
-        if global_size % 16:
-            padded = (global_size + 15) & (~15)
+        local_size = 16
+        if global_size % local_size:
+            padded = (global_size + (local_size - 1)) & (~(local_size - 1))
         else:
             padded = global_size
         self.kernel(*args).on(queue, (padded,))

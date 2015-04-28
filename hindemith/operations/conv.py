@@ -15,7 +15,7 @@ class ConvForward(ElementLevel):
     @classmethod
     def get_launch_parameters(cls, sources, sinks):
         num_work_items = np.prod(sinks[0].shape)
-        return (num_work_items, )
+        return (num_work_items, True)
 
     @classmethod
     def emit(cls, sources, sinks, keywords, symbol_table):
@@ -28,13 +28,20 @@ class ConvForward(ElementLevel):
         out_channels = symbol_table[sinks[0]].shape[1]
         num_work_items = num * out_channels * out_height * out_width
         return Template("""
-      int index = get_global_id(0);
       int out_x = index % $width_out;
       int out_y = (index / $width_out) % $height_out;
       int out_c = (index / $width_out / $height_out) % $channels_out;
       int n = index / $width_out / $height_out / $channels_out;
       float tmp = 0.0f;
       for (int in_c = 0; in_c < $channels_in; in_c++) {
+        // for (int in_y = 0; in_y < $height_in; in_y++) {
+        //   for (int in_x = 0; in_x < $width_in; in_x++) {
+        //      if ((in_y * $width_in + in_x) % get_local_id(0)) {
+        //        buf[in_y * $width_in + in_x] = $in_data[((n * $channels_in +
+        //                 in_c) * $height_in + in_y) * $width_in + in_x];
+        //      }
+        //   }
+        // }
         for (int i = 0; i < $kernel_h; i++) {
           for (int j = 0; j < $kernel_w; j++) {
             int in_y = out_y * $stride_h - $pad_h + i;
