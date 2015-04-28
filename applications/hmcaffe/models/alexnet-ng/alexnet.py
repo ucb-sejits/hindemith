@@ -130,19 +130,19 @@ def forward(data):
     N = fc7.shape[1]
     K = np.prod(fc6.shape[1:])
     M = fc6.shape[0]
-    # sgemm(False, True, 1.0, fc6, 0, K, fc7_filters, 0, K, 0.0,
-    #       fc7, 0, N, M, N, K)
-    # sgemm(False, False, 1.0, fc7_bias_multiplier, 0, 1, fc7_bias, 0, N,
-    #       1.0, fc7, 0, N, M, N, 1)
+    sgemm(False, True, 1.0, fc6, 0, K, fc7_filters, 0, K, 0.0,
+          fc7, 0, N, M, N, K)
+    sgemm(False, False, 1.0, fc7_bias_multiplier, 0, 1, fc7_bias, 0, N,
+          1.0, fc7, 0, N, M, N, 1)
     fc7 = ReluForward(fc7)
 
     N = fc8.shape[1]
     K = np.prod(fc7.shape[1:])
     M = fc7.shape[0]
-    # sgemm(False, True, 1.0, fc7, 0, K, fc8_filters, 0, K, 0.0,
-    #       fc8, 0, N, M, N, K)
-    # sgemm(False, False, 1.0, fc8_bias_multiplier, 0, 1, fc8_bias, 0, N,
-    #       1.0, fc8, 0, N, M, N, 1)
+    sgemm(False, True, 1.0, fc7, 0, K, fc8_filters, 0, K, 0.0,
+          fc8, 0, N, M, N, K)
+    sgemm(False, False, 1.0, fc8_bias_multiplier, 0, 1, fc8_bias, 0, N,
+          1.0, fc8, 0, N, M, N, 1)
     prob = SoftmaxForward(fc8)
     return prob
 
