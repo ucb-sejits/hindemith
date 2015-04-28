@@ -155,15 +155,33 @@ transformer.set_mean(
 transformer.set_transpose('data', (2, 0, 1))
 transformer.set_channel_swap('data', (2, 1, 0))
 transformer.set_raw_scale('data', 255.0)
-num_trials = 20
+
+
+def get_data():
+    data = np.asarray([
+        transformer.preprocess('data', im),
+        transformer.preprocess('data', im),
+        transformer.preprocess('data', im),
+        transformer.preprocess('data', im),
+        transformer.preprocess('data', im)
+    ]).view(hmarray)
+    data *= hmarray.random((5, 3, 227, 227), _range=(0, 2))
+    data -= hmarray.random((5, 3, 227, 227), _range=(-20, +20))
+    data.sync_ocl()
+    return data
+
+num_trials = 100
 hm_time = 0
 caffe_time = 0
+
+# warmup
+for _ in range(5):
+    data = get_data()
+    forward(data)
+    caffe_net.forward_all(data=data)
+
 for i in range(num_trials):
-    data = np.asarray(
-        [transformer.preprocess('data', im)]).view(hmarray)
-    data *= hmarray.random((1, 3, 227, 227), _range=(0, 2))
-    data -= hmarray.random((1, 3, 227, 227), _range=(-20, +20))
-    data.sync_ocl()
+    data = get_data()
     start = time.clock()
     forward(data)
     hm_time += time.clock() - start
@@ -178,7 +196,9 @@ for i in range(num_trials):
             continue
         caffe_blob = caffe_net.blobs[blob_name].data
         np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=4)
-print("HM TIME    : {}".format(hm_time / num_trials))
-print("Caffe TIME : {}".format(caffe_time / num_trials))
-print("Speedup    : {}".format(caffe_time / hm_time))
+    print(np.argmax(prob))
+    print(np.argmax(caffe_net.blobs['prob'].data))
+print("Hindemith AVG        : {}".format(hm_time / num_trials))
+print("Caffe AVG            : {}".format(caffe_time / num_trials))
+print("Speedup (CAFFE / HM) : {}".format(caffe_time / hm_time))
 print "SUCCESS"

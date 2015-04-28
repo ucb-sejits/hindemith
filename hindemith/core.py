@@ -3,7 +3,8 @@ import inspect
 import sys
 import textwrap
 from hindemith.operations.core import HMOperation, DeviceLevel
-from hindemith.cl import Kernel
+from hindemith.cl import Kernel, queue
+import pycl as cl
 
 
 def get_ast(obj):
@@ -69,35 +70,39 @@ class Compose(object):
             sinks.extend(_sinks)
             sources.extend(_sources)
 
+        kernels = []
+
         def fn(*args, **kwargs):
             for source, arg in zip(sources, args):
                 self.symbol_table[source.id] = arg
-            kernels = []
-            for op in block:
-                _sinks, _sources = self.get_sinks_and_sources(op)
-                # if len(kernels) < 1 or \
-                #    kernels[-1].launch_paramaters != launch_params:
-                #    kernels.append(Kernel(launch_params))
-                # else:
-                #     raise NotImplementedError()
-                if self.is_not_device_level(op):
-                    launch_params = self.get_launch_params(
-                        op, _sources, _sinks)
-                    if len(kernels) == 0 or \
-                            not isinstance(kernels[-1], Kernel) or \
-                            kernels[-1].launch_parameters[0] != launch_params[0] \
-                            or len(launch_params) > 1 and launch_params[1]:
-                        kernels.append(Kernel(launch_params))
-                    kernels[-1].append_body(
-                        self.get_emit(op, _sources, _sinks)
-                    )
-                    kernels[-1].sources |= set(_sources)
-                    kernels[-1].sinks |= set(_sinks)
-                else:
-                    kernels.append(self.get_launcher(op, _sources, _sinks))
+            if len(kernels) == 0:
+                for op in block:
+                    _sinks, _sources = self.get_sinks_and_sources(op)
+                    # if len(kernels) < 1 or \
+                    #    kernels[-1].launch_paramaters != launch_params:
+                    #    kernels.append(Kernel(launch_params))
+                    # else:
+                    #     raise NotImplementedError()
+                    if self.is_not_device_level(op):
+                        launch_params = self.get_launch_params(
+                            op, _sources, _sinks)
+                        if len(kernels) == 0 or \
+                                not isinstance(kernels[-1], Kernel) or \
+                                kernels[-1].launch_parameters[0] != launch_params[0] \
+                                or len(launch_params) > 1 and launch_params[1]:
+                            kernels.append(Kernel(launch_params))
+                        kernels[-1].append_body(
+                            self.get_emit(op, _sources, _sinks)
+                        )
+                        kernels[-1].sources |= set(_sources)
+                        kernels[-1].sinks |= set(_sinks)
+                    else:
+                        kernels.append(self.get_launcher(op, _sources, _sinks))
+                for kernel in kernels:
+                    kernel.compile()
             for kernel in kernels:
-                kernel.compile()
                 kernel.launch(self.symbol_table)
+                # cl.clFinish(queue)
             # ret = tuple(self.symbol_table[sink.id] for sink in sinks)
             # if len(ret) == 1:
             #     return ret[0]
