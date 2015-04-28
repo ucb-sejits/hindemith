@@ -31,7 +31,7 @@ class Compose(object):
         self.compiled = None
 
     def compile(self):
-        tree = self.tree 
+        tree = self.tree
         func_def = tree.body[0]
         new_body = []
         for statement in func_def.body:
@@ -93,14 +93,17 @@ class Compose(object):
             for kernel in kernels:
                 kernel.compile()
                 kernel.launch(self.symbol_table)
-            return (self.symbol_table[sink.id] for sink in sinks)
+            # ret = tuple(self.symbol_table[sink.id] for sink in sinks)
+            # if len(ret) == 1:
+            #     return ret[0]
+            # return ret
 
         self.unique_id += 1
         name = "_f{}".format(self.unique_id)
         self.symbol_table[name] = fn
         func = ast.Call(
             ast.Name(name, ast.Load()),
-            sources,
+            [],
             [],
             None,
             None,
@@ -109,7 +112,8 @@ class Compose(object):
             targets = [ast.Tuple(sinks, ast.Store())]
         else:
             targets = [sinks[0]]
-        return ast.Assign(targets, func)
+        # return ast.Assign(targets, func)
+        return ast.Expr(func)
 
     def is_not_device_level(self, op):
         func = self.eval_in_symbol_table(op.value.func)
@@ -163,7 +167,7 @@ class Compose(object):
         elif isinstance(val, ast.Name):
             return self.symbol_table[val.id]
         elif isinstance(val, ast.Attribute):
-            raise NotImplementedError()
+            return getattr(self.eval_in_symbol_table(val.value), val.attr)
         else:
             raise NotImplementedError()
 
@@ -173,7 +177,9 @@ class Compose(object):
         value = statement.value
         if isinstance(value, ast.Call):
             func = self.eval_in_symbol_table(value.func)
-            if issubclass(func, HMOperation):
+            if not inspect.isclass(func):
+                return False
+            elif issubclass(func, HMOperation):
                 return True
         return False
 

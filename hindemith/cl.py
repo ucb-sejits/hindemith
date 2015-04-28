@@ -6,7 +6,7 @@ try:
     devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
 except cl.DeviceNotFoundError:
     devices = cl.clGetDeviceIDs()
-context = cl.clCreateContext([devices[-1]])
+context = cl.clCreateContext([devices[-3]])
 queue = cl.clCreateCommandQueue(context)
 
 
@@ -27,8 +27,14 @@ class Kernel(object):
             sinks = set(src.id for src in self.sinks)
             params = sources | sinks
             self.params = list(params)
-            params_str = ", ".join(
-                "global float* {}".format(p) for p in self.params)
+            params = []
+            for param in self.params:
+                if param in sinks:
+                    str = "global float* {}".format(param)
+                else:
+                    str = "global const float* {}".format(param)
+                params.append(str)
+            params_str = ", ".join(params)
             kernel = Template("""
 __kernel void fn($params) {
     if (get_global_id(0) < $num_work_items) {
@@ -37,6 +43,7 @@ __kernel void fn($params) {
 }
     """).substitute(params=params_str, body=self.body,
                     num_work_items=self.launch_parameters[0])
+            print(kernel)
             kernel = cl.clCreateProgramWithSource(
                 context, kernel).build()['fn']
             kernel.argtypes = tuple(cl.cl_mem for _ in self.params)

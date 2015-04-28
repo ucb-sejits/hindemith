@@ -103,11 +103,25 @@ __kernel void kernel_channel_div(global const float* channel_sum,
             def launch(self, symbol_table):
                 bottom = symbol_table[sources[0]]
                 top = symbol_table[sinks[0]]
-                copy_kern(bottom.ocl_buf, top.ocl_buf).on(queue, (count, ))
-                max_kern(top.ocl_buf, scale.ocl_buf).on(queue, (num * spatial_dim, ))
-                sub_kern(scale.ocl_buf, top.ocl_buf).on(queue, (count, ))
-                exp_kern(top.ocl_buf, top.ocl_buf).on(queue, (count, ))
-                sum_kern(top.ocl_buf, scale.ocl_buf).on(queue, (num * spatial_dim, ))
-                div_kern(scale.ocl_buf, top.ocl_buf).on(queue, (count, ))
+                if count % 16:
+                    padded_count = (count + 15) & (~15)
+                else:
+                    padded_count = count
+                num_times_spatial = num * spatial_dim
+                if num_times_spatial % 16:
+                    padded_num_times_spatial = (num_times_spatial + 15) & (~15)
+                else:
+                    padded_num_times_spatial = num_times_spatial
+                copy_kern(bottom.ocl_buf, top.ocl_buf).on(queue,
+                                                          (padded_count,))
+                max_kern(top.ocl_buf, scale.ocl_buf).on(
+                    queue, (padded_num_times_spatial, ))
+                sub_kern(scale.ocl_buf, top.ocl_buf).on(queue,
+                                                        (padded_count, ))
+                exp_kern(top.ocl_buf, top.ocl_buf).on(queue, (padded_count, ))
+                sum_kern(top.ocl_buf, scale.ocl_buf).on(
+                    queue, (padded_num_times_spatial, ))
+                div_kern(scale.ocl_buf, top.ocl_buf).on(queue,
+                                                        (padded_count, ))
 
         return SoftmaxLauncher()

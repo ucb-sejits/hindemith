@@ -6,6 +6,7 @@ from hindemith.core import compose
 
 class LrnLayer(Layer):
     def __init__(self, layer_param, phase):
+        self.layer_param = layer_param
         self.phase = phase
         self.alpha = layer_param.lrn_param.alpha
         self.beta = layer_param.lrn_param.beta

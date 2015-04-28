@@ -14,9 +14,10 @@ import caffe
 from google.protobuf import text_format
 from layers import ConvLayer, ReluLayer, PoolingLayer, InnerProductLayer, \
     SoftmaxLayer, LrnLayer, DataLayer, DropoutLayer, AccuracyLayer, \
-    SoftmaxWithLossLayer
+    SoftmaxWithLossLayer, ConcatLayer
 import numpy as np
 from hindemith.types import hmarray
+import time
 import logging
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("hmcaffe")
@@ -37,6 +38,7 @@ class Net(object):
         "InnerProduct": InnerProductLayer,
         pb.V1LayerParameter.LRN: LrnLayer,
         "LRN": LrnLayer,
+        "Concat": ConcatLayer,
         pb.V1LayerParameter.DROPOUT: DropoutLayer,
         pb.V1LayerParameter.ACCURACY: AccuracyLayer,
         pb.V1LayerParameter.DATA: DataLayer,
@@ -101,7 +103,9 @@ class Net(object):
             self.blobs[key][...] = value
             self.blobs[key].sync_ocl()
         for layer in self.layers:
+            # start = time.time()
             layer.forward()
+            # print("{} forward {}".format(layer.layer_param.name, time.time() - start))
 
     def forward_backward_all(self, **kwargs):
         for key, value in kwargs.iteritems():
@@ -199,6 +203,8 @@ python net.py --prototxt="models/alexnet-ng/deploy.prototxt" \
                 # if scale > 0:
                 #     caffe_blob /= scale
                 #     blob /= scale
+                if args.phase == 'TEST':
+                    continue
             else:
                 caffe_blob = caffe_net.blobs[blob_name].data
             np.testing.assert_array_almost_equal(blob, caffe_blob,

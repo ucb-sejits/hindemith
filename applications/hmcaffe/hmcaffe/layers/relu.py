@@ -6,6 +6,7 @@ from hindemith.core import compose
 class ReluLayer(Layer):
     def __init__(self, layer_param, phase):
         self.phase = phase
+        self.layer_param = layer_param
 
         @compose
         def hm_forward(bottom):

@@ -8,3 +8,4 @@ from softmax_with_loss import SoftmaxWithLossLayer
 from lrn import LrnLayer
 from data import DataLayer
 from dropout import DropoutLayer
+from concat import ConcatLayer

@@ -1,4 +1,4 @@
-from hindemith.operations.core import DeviceLevel
+from hindemith.operations.core import DeviceLevel, ElementLevel
 from hindemith.types import hmarray
 from hindemith.clibs.clblas import sgemm, sgemv
 from hindemith.cl import context, queue
@@ -7,7 +7,56 @@ import pycl as cl
 from string import Template
 
 
-class ConvForward(DeviceLevel):
+class ConvForward(ElementLevel):
+    """
+    top = ConvForward(bottom, weights, bias, kernel_size=(11, 11),
+                      stride=(1, 1), padding=(0, 0))
+    """
+    @classmethod
+    def get_launch_parameters(cls, sources, sinks):
+        num_work_items = np.prod(sinks[0].shape)
+        return (num_work_items, )
+
+    @classmethod
+    def emit(cls, sources, sinks, keywords, symbol_table):
+        kernel_h, kernel_w = keywords['kernel_size']
+        pad_h, pad_w = keywords['padding']
+        stride_h, stride_w = keywords['stride']
+        num, in_channels, in_height, in_width = symbol_table[sources[0]].shape
+        out_height = (in_height + 2 * pad_h - kernel_h) // stride_h + 1
+        out_width = (in_width + 2 * pad_w - kernel_w) // stride_w + 1
+        out_channels = symbol_table[sinks[0]].shape[1]
+        num_work_items = num * out_channels * out_height * out_width
+        return Template("""
+      int index = get_global_id(0);
+      int out_x = index % $width_out;
+      int out_y = (index / $width_out) % $height_out;
+      int out_c = (index / $width_out / $height_out) % $channels_out;
+      int n = index / $width_out / $height_out / $channels_out;
+      float tmp = 0;
+      for (int in_c = 0; in_c < $channels_in; in_c++) {
+        for (int i = 0; i < $kernel_h; i++) {
+          for (int j = 0; j < $kernel_w; j++) {
+            int in_y = out_y * $stride_h - $pad_h + i;
+            int in_x = out_x * $stride_w - $pad_w + j;
+            if (in_y >= 0 && in_y < $height_in && in_x >= 0 && in_x < $width_in)
+              tmp += $in_data[((n * $channels_in + in_c) * $height_in + in_y) *
+                        $width_in + in_x] * $weights[((out_c * $channels_in + in_c) * $kernel_h + i) * $kernel_w + j];
+          }
+        }
+      }
+      $out[index] = tmp; // + $bias[out_c];
+""").substitute(kernel_h=kernel_h, kernel_w=kernel_w,
+                pad_h=pad_h, pad_w=pad_w,
+                stride_h=stride_h, stride_w=stride_w,
+                channels_in=in_channels, height_in=in_height,
+                width_in=in_width, channels_out=out_channels,
+                height_out=out_height, width_out=out_width,
+                out=sinks[0], in_data=sources[0], weights=sources[1],
+                bias=sources[2], global_size=num_work_items)
+
+
+class ConvForwardGEMM(DeviceLevel):
     """
     top = ConvForward(bottom, weights, bias, kernel_size=(11, 11),
                       stride=(1, 1), padding=(0, 0))
@@ -78,12 +127,17 @@ __kernel void im2col(global const float* data_im, global float* data_col,
                 bias = symbol_table[sources[2]]
                 top = symbol_table[sinks[0]]
                 top_offset = np.prod(top.shape[1:])
+
+                if im2col_global_size % 16:
+                    padded = (im2col_global_size + 15) & (~15)
+                else:
+                    padded = im2col_global_size
                 for i in range(bottom.shape[0]):
                     im2col(bottom.ocl_buf, col_data.ocl_buf,
-                           i * bot_offset).on(queue, (im2col_global_size, ))
+                           i * bot_offset).on(queue, (padded, ))
                     m = weights.shape[0]
                     n = np.prod(top.shape[2:])
-                    k = weights.shape[1]
+                    k = np.prod(weights.shape[1:])
                     sgemm(False, False, 1.0, weights, 0, k, col_data,
                           0, n, 0.0, top, i * top_offset, n, m, n, k)
                     sgemm(False, False, 1.0, bias, 0, 1,

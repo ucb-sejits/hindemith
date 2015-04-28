@@ -89,9 +89,17 @@ __kernel void LRNComputeOutput(global const float* in,
                 bottom = symbol_table[sources[0]]
                 top = symbol_table[sinks[0]]
                 scale = symbol_table[sinks[1]]
-                fill_kern(bottom.ocl_buf, scale.ocl_buf).on(queue, fill_global)
+                if fill_global[0] % 16:
+                    padded = (fill_global[0] + 15) & (~15)
+                else:
+                    padded = fill_global[0]
+                fill_kern(bottom.ocl_buf, scale.ocl_buf).on(queue, (padded,))
+                if compute_global[0] % 16:
+                    padded = (compute_global[0] + 15) & (~15)
+                else:
+                    padded = compute_global[0]
                 compute_kern(bottom.ocl_buf, scale.ocl_buf,
-                             top.ocl_buf).on(queue, compute_global)
+                             top.ocl_buf).on(queue, (padded,))
         return LrnLauncher()
 
 

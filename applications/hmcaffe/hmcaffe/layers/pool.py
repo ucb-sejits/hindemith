@@ -6,6 +6,7 @@ from hindemith.operations.pool import PoolForward, PoolBackward
 
 class PoolingLayer(Layer):
     def __init__(self, layer_param, phase):
+        self.layer_param = layer_param
         self.kernel_size = layer_param.pooling_param.kernel_size
         self.stride = layer_param.pooling_param.stride
         self.padding = layer_param.pooling_param.pad

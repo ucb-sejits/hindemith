@@ -6,6 +6,7 @@ from hindemith.core import compose
 
 class SoftmaxLayer(Layer):
     def __init__(self, layer_param, phase):
+        self.layer_param = layer_param
         self.phase = phase
 
         @compose

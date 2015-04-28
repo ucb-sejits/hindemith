@@ -69,6 +69,7 @@ class InnerProductLayer(Layer):
         self.weights_diff[:] = self.weights_history[:]
         self.weights -= self.weights_diff
         self.weights.sync_ocl()
+        self.weights_diff.sync_ocl()
 
         bias_lr = rate * self.layer_param.blobs_lr[1]
         bias_decay = weight_decay * self.layer_param.weight_decay[1]
