@@ -5,7 +5,7 @@ from hindemith.operations.pool import PoolForward
 from hindemith.operations.lrn import LrnForward
 from hindemith.operations.softmax import SoftmaxForward
 from hindemith.core import compose
-from hindemith.clibs.clblas import sgemm
+# from hindemith.clibs.clblas import sgemm
 import caffe
 import hmcaffe.proto.caffe_pb2 as pb
 from google.protobuf import text_format
@@ -15,7 +15,7 @@ import numpy as np
 prototxt = "models/alexnet-ng/deploy.prototxt"
 caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
-caffe.set_mode_gpu()
+# caffe.set_mode_gpu()
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 net_param = pb.NetParameter()
 
@@ -123,34 +123,34 @@ def forward(data):
     pool5, pool5_mask = PoolForward(conv5, kernel_size=(3, 3),
                                     padding=(0, 0), stride=(2, 2))
 
-    N = fc6.shape[1]
-    K = np.prod(pool5.shape[1:])
-    M = pool5.shape[0]
-    sgemm(False, True, 1.0, pool5, 0, K, fc6_filters, 0, K, 0.0,
-          fc6, 0, N, M, N, K)
-    sgemm(False, False, 1.0, fc6_bias_multiplier, 0, 1, fc6_bias, 0, N,
-          1.0, fc6, 0, N, M, N, 1)
+    # N = fc6.shape[1]
+    # K = np.prod(pool5.shape[1:])
+    # M = pool5.shape[0]
+    # sgemm(False, True, 1.0, pool5, 0, K, fc6_filters, 0, K, 0.0,
+    #       fc6, 0, N, M, N, K)
+    # sgemm(False, False, 1.0, fc6_bias_multiplier, 0, 1, fc6_bias, 0, N,
+    #       1.0, fc6, 0, N, M, N, 1)
 
-    fc6 = ReluForward(fc6)
+    # fc6 = ReluForward(fc6)
 
-    N = fc7.shape[1]
-    K = np.prod(fc6.shape[1:])
-    M = fc6.shape[0]
-    sgemm(False, True, 1.0, fc6, 0, K, fc7_filters, 0, K, 0.0,
-          fc7, 0, N, M, N, K)
-    sgemm(False, False, 1.0, fc7_bias_multiplier, 0, 1, fc7_bias, 0, N,
-          1.0, fc7, 0, N, M, N, 1)
-    fc7 = ReluForward(fc7)
+    # N = fc7.shape[1]
+    # K = np.prod(fc6.shape[1:])
+    # M = fc6.shape[0]
+    # # sgemm(False, True, 1.0, fc6, 0, K, fc7_filters, 0, K, 0.0,
+    # #       fc7, 0, N, M, N, K)
+    # # sgemm(False, False, 1.0, fc7_bias_multiplier, 0, 1, fc7_bias, 0, N,
+    # #       1.0, fc7, 0, N, M, N, 1)
+    # fc7 = ReluForward(fc7)
 
-    N = fc8.shape[1]
-    K = np.prod(fc7.shape[1:])
-    M = fc7.shape[0]
-    sgemm(False, True, 1.0, fc7, 0, K, fc8_filters, 0, K, 0.0,
-          fc8, 0, N, M, N, K)
-    sgemm(False, False, 1.0, fc8_bias_multiplier, 0, 1, fc8_bias, 0, N,
-          1.0, fc8, 0, N, M, N, 1)
-    prob = SoftmaxForward(fc8)
-    return prob
+    # N = fc8.shape[1]
+    # K = np.prod(fc7.shape[1:])
+    # M = fc7.shape[0]
+    # # sgemm(False, True, 1.0, fc7, 0, K, fc8_filters, 0, K, 0.0,
+    # #       fc8, 0, N, M, N, K)
+    # # sgemm(False, False, 1.0, fc8_bias_multiplier, 0, 1, fc8_bias, 0, N,
+    # #       1.0, fc8, 0, N, M, N, 1)
+    # prob = SoftmaxForward(fc8)
+    # return prob
 
 
 im = caffe.io.load_image('data/cat.jpg')
@@ -167,14 +167,13 @@ data = np.asarray(
 data.sync_ocl()
 caffe_net.forward_all(data=data)
 forward(data)
-prob.sync_host()
 # print(np.argmax(prob[0]))
 # print(np.argmax(caffe_net.blobs['prob'].data[0]))
-# for blob in caffe_net.blobs.keys():
-for blob in ['conv2']:
+for blob in caffe_net.blobs.keys():
+# for blob in ['conv2']:
     print("Checking blob {}".format(blob))
     caffe_blob = caffe_net.blobs[blob].data
     blob = globals()[blob]
     blob.sync_host()
     np.testing.assert_array_almost_equal(blob, caffe_blob,
-                                         decimal=4)
+                                         decimal=3)

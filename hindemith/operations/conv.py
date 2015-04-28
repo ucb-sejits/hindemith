@@ -40,12 +40,11 @@ class ConvForward(ElementLevel):
             int in_y = out_y * $stride_h - $pad_h + i;
             int in_x = out_x * $stride_w - $pad_w + j;
             if (in_y >= 0 && in_y < $height_in && in_x >= 0 && in_x < $width_in)
-              tmp += $in_data[((n * $channels_in + in_c) * $height_in + in_y) *
-                        $width_in + in_x] * $weights[((out_c * $channels_in + in_c) * $kernel_h + i) * $kernel_w + j];
+              tmp += $in_data[((n * $channels_in + in_c) * $height_in + in_y) * $width_in + in_x] * $weights[((out_c * $channels_in + in_c) * $kernel_h + i) * $kernel_w + j];
           }
         }
       }
-      $out[index] = tmp; // + $bias[out_c];
+      $out[index] = tmp + $bias[out_c];
 """).substitute(kernel_h=kernel_h, kernel_w=kernel_w,
                 pad_h=pad_h, pad_w=pad_w,
                 stride_h=stride_h, stride_w=stride_w,
