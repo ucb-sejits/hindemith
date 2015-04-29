@@ -54,7 +54,7 @@ class ConvForward(ElementLevel):
                 bias=sources[2], global_size=num_work_items)
 
 
-class ConvForwardGEMM(DeviceLevel):
+class ConvForward(DeviceLevel):
     """
     top = ConvForward(bottom, weights, bias, kernel_size=(11, 11),
                       stride=(1, 1), padding=(0, 0))
