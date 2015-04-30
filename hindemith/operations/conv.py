@@ -82,10 +82,10 @@ __kernel void im2col(global const float* data_im, global float* data_col,
                      int bot_offset) {
   if (get_global_id(0) < $global_size) {
     int index = get_global_id(0);
-    int w_out = index % $width_col;
     int h_index = index / $width_col;
-    int h_out = h_index % $height_col;
+    int w_out = index - h_index * $width_col;
     int channel_in = h_index / $height_col;
+    int h_out = h_index - channel_in * $height_col;
     int channel_out = channel_in * $kernel_h * $kernel_w;
     int h_in = h_out * $stride_h - $pad_h;
     int w_in = w_out * $stride_w - $pad_w;
