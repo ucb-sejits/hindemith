@@ -245,6 +245,7 @@ __kernel void im2col(global const float* data_im, global float* data_col,
                 pass
 
             def launch(self, symbol_table):
+                queue = queues[0]
                 bottom = symbol_table[sources[0]]
                 bot_offset = np.prod(bottom.shape[1:])
                 top_diff = symbol_table[sources[1]]
