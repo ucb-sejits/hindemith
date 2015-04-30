@@ -15,9 +15,9 @@ import time
 prototxt = "models/alexnet-ng/deploy.prototxt"
 caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
-# caffe.set_mode_gpu()
-caffe.set_mode_cpu()
-# caffe.set_device(2)
+caffe.set_mode_gpu()
+# caffe.set_mode_cpu()
+caffe.set_device(2)
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 
 conv1_filters = caffe_net.params['conv1'][0].data.view(hmarray)
@@ -164,7 +164,7 @@ def get_data():
     # data = np.asarray([
     #     transformer.preprocess('data', im),
     # ]).view(hmarray)
-    data = hmarray.random((5, 3, 227, 227), _range=(0, 255))
+    data = hmarray.random((128, 3, 227, 227), _range=(0, 255))
 
     # data *= hmarray.random((5, 3, 227, 227), _range=(0, 2))
     # data -= hmarray.random((5, 3, 227, 227), _range=(-20, +20))
@@ -197,8 +197,9 @@ for i in range(num_trials):
     #     blob.sync_host()
     #     if "_diff" in blob_name:
     #         continue
-    #    caffe_blob = caffe_net.blobs[blob_name].data
-    #    np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=3)
+    #     print("Checking blob {}".format(blob_name))
+    #     caffe_blob = caffe_net.blobs[blob_name].data
+    #     np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=3)
     caffe_prob = caffe_net.blobs['prob'].data
     prob.sync_host()
     np.testing.assert_array_almost_equal(prob, caffe_prob, decimal=3)

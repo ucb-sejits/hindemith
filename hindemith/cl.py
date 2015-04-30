@@ -3,13 +3,14 @@ import pycl as cl
 
 
 try:
-    platforms = cl.clGetPlatformIDs()
-    # devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
-    devices = cl.clGetDeviceIDs(platforms[-1])
+    # platforms = cl.clGetPlatformIDs()
+    # devices = cl.clGetDeviceIDs(platforms[0])
+    devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
 except cl.DeviceNotFoundError:
     devices = cl.clGetDeviceIDs()
-context = cl.clCreateContext(devices)
-queue = cl.clCreateCommandQueue(context)
+context = cl.clCreateContext(devices[-1:])
+queues = [cl.clCreateCommandQueue(context) for _ in range(32)]
+queue = queues[0]
 
 
 class Kernel(object):

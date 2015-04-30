@@ -1,7 +1,7 @@
 from hindemith.operations.core import DeviceLevel, ElementLevel
 from hindemith.types import hmarray
 from hindemith.clibs.clblas import sgemm, sgemv
-from hindemith.cl import context, queue
+from hindemith.cl import context, queues
 import numpy as np
 import pycl as cl
 from string import Template
@@ -68,7 +68,8 @@ class ConvForward(DeviceLevel):
         channels_col = channels * kernel_h * kernel_w
         height_col = (height + 2 * pad_h - kernel_h) // stride_h + 1
         width_col = (width + 2 * pad_w - kernel_w) // stride_w + 1
-        col_data = hmarray((channels_col, height_col * width_col))
+        col_datas = [hmarray((channels_col, height_col * width_col))
+                     for _ in range(len(queues))]
         bias_multiplier = hmarray(
             (1, np.prod(symbol_table[sinks[0]].shape[2:])))
         bias_multiplier.fill(1.0)
@@ -133,14 +134,17 @@ __kernel void im2col(global const float* data_im, global float* data_col,
                 m = weights.shape[0]
                 n = np.prod(top.shape[2:])
                 k = np.prod(weights.shape[1:])
+                cl.clFinish(queues[0])
                 for i in range(bottom.shape[0]):
-                    im2col(bottom.ocl_buf, col_data.ocl_buf,
-                           i * bot_offset).on(queue, (padded, ))
-                    sgemm(False, False, 1.0, weights, 0, k, col_data,
-                          0, n, 0.0, top, i * top_offset, n, m, n, k)
+                    im2col(bottom.ocl_buf, col_datas[i % len(queues)].ocl_buf,
+                           i * bot_offset).on(queues[i % len(queues)], (padded, ))
+                    sgemm(False, False, 1.0, weights, 0, k, col_datas[i % len(queues)],
+                          0, n, 0.0, top, i * top_offset, n, m, n, k, queues[i % len(queues)])
                     sgemm(False, False, 1.0, bias, 0, 1,
                           bias_multiplier, 0, n, 1.0, top, i *
-                          top_offset, n, m, n, 1)
+                          top_offset, n, m, n, 1, queues[i % len(queues)])
+                for q in queues:
+                    cl.clFinish(q)
         return ConvLauncher()
 
 

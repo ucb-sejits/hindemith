@@ -29,7 +29,9 @@ _clblaslib.clblasSgemm.argtypes = (
 
 
 def sgemm(transA, transB, alpha, A, A_offset, lda, B, B_offset, ldb, beta, C,
-          C_offset, ldc, m, n, k):
+          C_offset, ldc, m, n, k, _queue=None):
+    if _queue is None:
+        _queue = queue
     cblas_row_major = ct.c_int(0)
     transA = ct.c_int(1 if transA else 0)
     transB = ct.c_int(1 if transB else 0)
@@ -45,7 +47,7 @@ def sgemm(transA, transB, alpha, A, A_offset, lda, B, B_offset, ldb, beta, C,
                                  alpha, A.ocl_buf, ct.c_size_t(A_offset), lda,
                                  B.ocl_buf, ct.c_size_t(B_offset), ldb, beta,
                                  C.ocl_buf, ct.c_size_t(C_offset), ldc,
-                                 ct.c_size_t(1), ct.byref(queue),
+                                 ct.c_size_t(1), ct.byref(_queue),
                                  ct.c_size_t(0), None, None)
     if err:
         raise Exception("clBLAS sgemm returned error code {}".format(err))
