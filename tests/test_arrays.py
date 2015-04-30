@@ -59,7 +59,7 @@ class TestArrays(unittest.TestCase):
         a, b, c = self.a, self.b, self.c
         c = fn(a, b, c)
         c.sync_host()
-        self._check(c, a / b)
+        np.testing.assert_array_almost_equal(c, a / b, decimal=2)
 
     def test_square(self):
         @compose
@@ -142,7 +142,7 @@ class TestArrays(unittest.TestCase):
         a, b, c = self.a, self.b, self.c
         c = fn(a, b, c)
         c.sync_host()
-        self._check(c, a / ((a + b) * b))
+        np.testing.assert_array_almost_equal(c, a / ((a + b) * b), decimal=4)
 
 
 class TestArrayUnpacker(unittest.TestCase):

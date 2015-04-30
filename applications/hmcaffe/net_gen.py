@@ -8,7 +8,7 @@ def gen_conv_buffers(layer_param):
     return Template("""
 ${name}_filters = caffe_net.params['${name}'][0].data.view(hmarray)
 ${name}_bias = caffe_net.params['${name}'][1].data.view(hmarray)
-${name} = hmarray.zeros(caffe_net.blobs['{$name}'].data.shape)
+${name} = hmarray.zeros(caffe_net.blobs['${name}'].data.shape)
     """).substitute(name=name)
 
 
@@ -97,7 +97,7 @@ def gen_fc_forward(layer_param):
 def gen_softmax_buffers(layer_param):
     top = layer_param.top[0]
     return Template("""
-    $top = hmarray.zeros(caffe_net.blobs['${top}'].data.shape)
+$top = hmarray.zeros(caffe_net.blobs['${top}'].data.shape)
     """).substitute(top=top)
 
 
@@ -117,7 +117,31 @@ def gen_relu_forward(layer_param):
     """).substitute(top=top, bottom=bottom)
 
 
-prototxt = "models/alexnet-ng/deploy.prototxt"
+def gen_concat_buffers(layer_param):
+    top = layer_param.top[0]
+    bottoms = layer_param.bottom
+    concat_axis = layer_param.concat_param.axis
+    incr = " + ".join(bottom + ".shape[{}]".format(concat_axis) for bottom in bottoms[1:])
+    
+    return Template("""
+_shape = ${bottom0}.shape
+_shape[${concat_axis}] = $incr
+$top = hmarray.zeros(_shape)
+    """).substitute(top=top, bottom0=bottoms[0], incr=incr, concat_axis=concat_axis)
+
+
+def gen_concat_forward(layer_param):
+    top = layer_param.top[0]
+    bottoms = layer_param.bottom
+    return Template("""
+$top = ConcatForward($bottoms)
+    """).substitute(top=top, bottoms=", ".join(bottoms))
+
+
+prototxt = "models/googlenet/deploy.prototxt"
+caffemodel = "models/googlenet/bvlc_googlenet.caffemodel"
+# prototxt = "models/alexnet-ng/deploy.prototxt"
+# caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
 net_param = pb.NetParameter()
 
@@ -131,19 +155,38 @@ else:
 
 layer_get_buf_map = {
     pb.V1LayerParameter.CONVOLUTION: gen_conv_buffers,
+    "Convolution": gen_conv_buffers,
     pb.V1LayerParameter.POOLING: gen_pool_buffers,
+    "Pooling": gen_pool_buffers,
     pb.V1LayerParameter.SOFTMAX: gen_softmax_buffers,
+    "Softmax": gen_softmax_buffers,
     pb.V1LayerParameter.INNER_PRODUCT: gen_fc_buffers,
+    "InnerProduct": gen_fc_buffers,
     pb.V1LayerParameter.LRN: gen_lrn_buffers,
+    "LRN": gen_lrn_buffers,
+    "Concat": gen_concat_buffers,
+    pb.V1LayerParameter.RELU: lambda x: "",
+    "ReLU": lambda x: "",
+    pb.V1LayerParameter.DROPOUT: lambda x: "",
+    "Dropout": lambda x: "",
 }
 
 layer_forward_map = {
     pb.V1LayerParameter.CONVOLUTION: gen_conv_forward,
+    "Convolution": gen_conv_forward,
     pb.V1LayerParameter.POOLING: gen_pool_forward,
+    "Pooling": gen_pool_forward,
     pb.V1LayerParameter.SOFTMAX: gen_softmax_forward,
+    "Softmax": gen_softmax_forward,
     pb.V1LayerParameter.INNER_PRODUCT: gen_fc_forward,
+    "InnerProduct": gen_fc_forward,
     pb.V1LayerParameter.LRN: gen_lrn_forward,
+    "LRN": gen_lrn_forward,
     pb.V1LayerParameter.RELU: gen_relu_forward,
+    "ReLU": gen_relu_forward,
+    "Concat": gen_concat_forward,
+    pb.V1LayerParameter.DROPOUT: lambda x: "",
+    "Dropout": lambda x: "",
 }
 
 output = Template("""
@@ -153,6 +196,7 @@ from hindemith.operations.relu import ReluForward
 from hindemith.operations.pool import PoolForward
 from hindemith.operations.lrn import LrnForward
 from hindemith.operations.softmax import SoftmaxForward
+from hindemith.operations.concat import ConcatForward
 from hindemith.core import compose
 from hindemith.cl import queue
 from hindemith.clibs.clblas import sgemm
@@ -161,21 +205,19 @@ import caffe
 import numpy as np
 
 prototxt = "${prototxt}"
-caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
+caffemodel = "${caffemodel}"
 
 caffe.set_mode_gpu()
 caffe.set_device(2)
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 
-""").substitute(prototxt=prototxt)
+""").substitute(prototxt=prototxt, caffemodel=caffemodel)
 for layer_param in layer_params:
-    if layer_param.type in layer_get_buf_map:
-        output += layer_get_buf_map[layer_param.type](layer_param)
+    output += layer_get_buf_map[layer_param.type](layer_param)
 output += """
 def forward(data):
 """
 for layer_param in layer_params:
-    if layer_param.type in layer_forward_map:
-        output += layer_forward_map[layer_param.type](layer_param)
+    output += layer_forward_map[layer_param.type](layer_param)
 
 print(output)
