@@ -53,7 +53,7 @@ conv5_bias = caffe_net.params['conv5'][1].data.view(hmarray)
 conv5 = hmarray.zeros(caffe_net.blobs['conv5'].data.shape)
 
 pool5 = hmarray.zeros(caffe_net.blobs['pool5'].data.shape)
-pool5_mask = hmarray.zeros(pool2.shape)
+pool5_mask = hmarray.zeros(pool5.shape)
 
 fc6_filters = caffe_net.params['fc6'][0].data.view(hmarray)
 fc6_bias = caffe_net.params['fc6'][1].data.view(hmarray)

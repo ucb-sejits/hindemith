@@ -17,7 +17,6 @@ from layers import ConvLayer, ReluLayer, PoolingLayer, InnerProductLayer, \
     SoftmaxWithLossLayer, ConcatLayer
 import numpy as np
 from hindemith.types import hmarray
-import time
 import logging
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("hmcaffe")
