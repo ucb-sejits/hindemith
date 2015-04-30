@@ -1,5 +1,6 @@
 from string import Template
 import pycl as cl
+import os
 
 
 try:
@@ -9,7 +10,10 @@ try:
 except cl.DeviceNotFoundError:
     devices = cl.clGetDeviceIDs()
 context = cl.clCreateContext(devices[-1:])
-queues = [cl.clCreateCommandQueue(context) for _ in range(32)]
+if os.environ.get("TRAVIS"):
+    queues = [cl.clCreateCommandQueue(context)]
+else:
+    queues = [cl.clCreateCommandQueue(context) for _ in range(32)]
 queue = queues[0]
 
 
