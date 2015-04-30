@@ -54,7 +54,7 @@ class ConvForward(ElementLevel):
                 bias=sources[2], global_size=num_work_items)
 
 
-class ConvForwardGEMM(DeviceLevel):
+class ConvForward(DeviceLevel):
     """
     top = ConvForward(bottom, weights, bias, kernel_size=(11, 11),
                       stride=(1, 1), padding=(0, 0))
@@ -114,6 +114,11 @@ __kernel void im2col(global const float* data_im, global float* data_col,
         ).build()['im2col']
         im2col.argtypes = (cl.cl_mem, cl.cl_mem, cl.cl_int)
 
+        if im2col_global_size % 64:
+            padded = (im2col_global_size + 63) & (~63)
+        else:
+            padded = im2col_global_size
+
         class ConvLauncher(object):
             def compile(self):
                 pass
@@ -125,17 +130,12 @@ __kernel void im2col(global const float* data_im, global float* data_col,
                 bias = symbol_table[sources[2]]
                 top = symbol_table[sinks[0]]
                 top_offset = np.prod(top.shape[1:])
-
-                if im2col_global_size % 16:
-                    padded = (im2col_global_size + 15) & (~15)
-                else:
-                    padded = im2col_global_size
+                m = weights.shape[0]
+                n = np.prod(top.shape[2:])
+                k = np.prod(weights.shape[1:])
                 for i in range(bottom.shape[0]):
                     im2col(bottom.ocl_buf, col_data.ocl_buf,
                            i * bot_offset).on(queue, (padded, ))
-                    m = weights.shape[0]
-                    n = np.prod(top.shape[2:])
-                    k = np.prod(weights.shape[1:])
                     sgemm(False, False, 1.0, weights, 0, k, col_data,
                           0, n, 0.0, top, i * top_offset, n, m, n, k)
                     sgemm(False, False, 1.0, bias, 0, 1,

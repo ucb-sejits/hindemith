@@ -5,7 +5,9 @@ from hindemith.operations.pool import PoolForward
 from hindemith.operations.lrn import LrnForward
 from hindemith.operations.softmax import SoftmaxForward
 from hindemith.core import compose
+from hindemith.cl import queue
 from hindemith.clibs.clblas import sgemm
+import pycl as cl
 import caffe
 import numpy as np
 import time
@@ -158,44 +160,47 @@ transformer.set_raw_scale('data', 255.0)
 
 
 def get_data():
-    data = np.asarray([
-        transformer.preprocess('data', im),
-        transformer.preprocess('data', im),
-        transformer.preprocess('data', im),
-        transformer.preprocess('data', im),
-        transformer.preprocess('data', im)
-    ]).view(hmarray)
-    data *= hmarray.random((5, 3, 227, 227), _range=(0, 2))
-    data -= hmarray.random((5, 3, 227, 227), _range=(-20, +20))
+    # data = np.asarray([
+    #     transformer.preprocess('data', im),
+    # ]).view(hmarray)
+    data = hmarray.random((128, 3, 227, 227), _range=(0, 255))
+
+    # data *= hmarray.random((5, 3, 227, 227), _range=(0, 2))
+    # data -= hmarray.random((5, 3, 227, 227), _range=(-20, +20))
     data.sync_ocl()
     return data
 
-num_trials = 100
+num_trials = 3
 hm_time = 0
 caffe_time = 0
 
 # warmup
-for _ in range(5):
+for _ in range(2):
     data = get_data()
     forward(data)
     caffe_net.forward_all(data=data)
 
 for i in range(num_trials):
     data = get_data()
+    cl.clFinish(queue)
     start = time.clock()
     forward(data)
+    cl.clFinish(queue)
     hm_time += time.clock() - start
     start = time.clock()
     caffe_net.forward_all(data=data)
     caffe_time += time.clock() - start
 
-    for blob_name in caffe_net.blobs.keys():
-        blob = globals()[blob_name]
-        blob.sync_host()
-        if "_diff" in blob_name:
-            continue
-        caffe_blob = caffe_net.blobs[blob_name].data
-        np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=4)
+    # for blob_name in caffe_net.blobs.keys():
+    #     blob = globals()[blob_name]
+    #     blob.sync_host()
+    #     if "_diff" in blob_name:
+    #         continue
+    #    caffe_blob = caffe_net.blobs[blob_name].data
+    #    np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=3)
+    caffe_prob = caffe_net.blobs['prob'].data
+    prob.sync_host()
+    np.testing.assert_array_almost_equal(prob, caffe_prob, decimal=3)
     print(np.argmax(prob))
     print(np.argmax(caffe_net.blobs['prob'].data))
 print("Hindemith AVG        : {}".format(hm_time / num_trials))
