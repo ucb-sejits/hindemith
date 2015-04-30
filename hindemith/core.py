@@ -4,6 +4,9 @@ import sys
 import textwrap
 from hindemith.operations.core import HMOperation, DeviceLevel
 from hindemith.cl import Kernel, queue
+from hindemith.types import hmarray
+from hindemith.operations.array import ArrayAdd, ArraySub, ArrayMul, ArrayDiv, \
+    ArrayScalarAdd, ArrayScalarSub, ArrayScalarDiv, ArrayScalarMul
 import pycl as cl
 
 
@@ -60,7 +63,7 @@ class Compose(object):
     def __call__(self, *args, **kwargs):
         if not self.compiled:
             self.compile()
-        self.compiled(*args, **kwargs)
+        return self.compiled(*args, **kwargs)
 
     def gen_hm_func(self, block):
         sources = []
@@ -94,8 +97,12 @@ class Compose(object):
                         kernels[-1].append_body(
                             self.get_emit(op, _sources, _sinks)
                         )
-                        kernels[-1].sources |= set(_sources)
-                        kernels[-1].sinks |= set(_sinks)
+                        for source in _sources:
+                            if isinstance(self.symbol_table[source.id], hmarray):
+                                kernels[-1].sources.add(source)
+                        for sink in _sinks:
+                            if isinstance(self.symbol_table[sink.id], hmarray):
+                                kernels[-1].sinks.add(sink)
                     else:
                         kernels.append(self.get_launcher(op, _sources, _sinks))
                 for kernel in kernels:
@@ -103,10 +110,10 @@ class Compose(object):
             for kernel in kernels:
                 kernel.launch(self.symbol_table)
                 # cl.clFinish(queue)
-            # ret = tuple(self.symbol_table[sink.id] for sink in sinks)
-            # if len(ret) == 1:
-            #     return ret[0]
-            # return ret
+            ret = tuple(self.symbol_table[sink.id] for sink in sinks)
+            if len(ret) == 1:
+                return ret[0]
+            return ret
 
         self.unique_id += 1
         name = "_f{}".format(self.unique_id)
@@ -122,8 +129,8 @@ class Compose(object):
             targets = [ast.Tuple(sinks, ast.Store())]
         else:
             targets = [sinks[0]]
-        # return ast.Assign(targets, func)
-        return ast.Expr(func)
+        return ast.Assign(targets, func)
+        # return ast.Expr(func)
 
     def is_not_device_level(self, op):
         func = self.eval_in_symbol_table(op.value.func)
@@ -212,3 +219,93 @@ def compose(fn):
                 symbol_table[arg.arg] = args[index]
         return composed(*args, **kwargs)
     return wrapped
+
+
+class UnpackBinOps(ast.NodeTransformer):
+    def __init__(self):
+        super(UnpackBinOps, self).__init__()
+        self.unique_id = -1
+
+    def gen_tmp(self):
+        self.unique_id += 1
+        return "_t{}".format(self.unique_id)
+
+    def visit_FunctionDecl(self, node):
+        new_body = []
+        for statement in node.body:
+            result = self.visit(statement)
+            if isinstance(result, list):
+                new_body.extend(result)
+            else:
+                new_body.append(result)
+        node.body = new_body
+        return node
+
+    def visit_BinOp(self, node):
+        result = []
+        if isinstance(node.right, ast.BinOp):
+            target = self.gen_tmp()
+            new_right = self.visit(node.right)
+            if isinstance(new_right, list):
+                result.extend(new_right)
+            else:
+                result.append(new_right)
+            result[-1] = ast.Assign([ast.Name(target, ast.Store())],
+                                    result[-1])
+            node.right = ast.Name(target, ast.Load())
+        if isinstance(node.left, ast.BinOp):
+            target = self.gen_tmp()
+            new_left = self.visit(node.left)
+            if isinstance(new_left, list):
+                result.extend(new_left)
+            else:
+                result.append(new_left)
+            result[-1] = ast.Assign([ast.Name(target, ast.Store())],
+                                    result[-1])
+            node.left = ast.Name(target, ast.Load())
+        result.append(node)
+        return result
+
+    def visit_Return(self, node):
+        result = []
+        target = self.gen_tmp()
+        old_target = self.visit(node.value)
+        if isinstance(old_target, list):
+            result.extend(old_target)
+        else:
+            result.append(old_target)
+        result[-1] = ast.Assign([ast.Name(target, ast.Store())], result[-1])
+        node.value = ast.Name(target, ast.Load())
+        result.append(node)
+        return result
+
+
+class ReplaceArrayOps(ast.NodeTransformer):
+    array_op_map = {
+        ast.Add: 'ArrayAdd',
+        ast.Sub: 'ArraySub',
+        ast.Div: 'ArrayDiv',
+        ast.Mult: 'ArrayMul',
+    }
+
+    def __init__(self, symbol_table):
+        super(ReplaceArrayOps, self).__init__()
+        self.symbol_table = symbol_table
+
+    def visit_Assign(self, node):
+        if isinstance(node.value, ast.BinOp) and len(node.targets) == 1:
+            value = self.visit(node.value)
+            if isinstance(value, ast.Call):
+                # TODO: Operations should specify an output generator
+                self.symbol_table[node.targets[0].id] = hmarray.zeros(
+                    self.symbol_table[value.args[0].id].shape)
+            node.value = value
+        return node
+
+    def visit_BinOp(self, node):
+        if isinstance(self.symbol_table[node.left.id], hmarray):
+            if isinstance(self.symbol_table[node.right.id], hmarray):
+                node = ast.Call(ast.Name(self.array_op_map[node.op.__class__],
+                                         ast.Load()),
+                                [node.left, node.right], [], None, None)
+        return node

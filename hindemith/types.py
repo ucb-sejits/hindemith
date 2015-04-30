@@ -34,10 +34,12 @@ class hmarray(np.ndarray):
         self.register = None
 
     def sync_host(self):
+        cl.clFinish(queue)
         _, evt = cl.buffer_to_ndarray(queue, self.ocl_buf, self)
         evt.wait()
 
     def sync_ocl(self):
+        cl.clFinish(queue)
         _, evt = cl.buffer_from_ndarray(queue, self, self.ocl_buf)
         evt.wait()
 

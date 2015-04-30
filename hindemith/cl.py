@@ -19,7 +19,7 @@ class Kernel(object):
         self.kernel = None
 
     def append_body(self, string):
-        self.body += string
+        self.body += string + "\n"
 
     def compile(self):
         if self.kernel is None:
@@ -39,18 +39,23 @@ class Kernel(object):
 __kernel void fn($params) {
     int index = get_global_id(0);
     if (index < $num_work_items) {
-        $body
+$body
     }
 }
     """).substitute(params=params_str, body=self.body,
                     num_work_items=self.launch_parameters[0])
+            print(kernel)
             kernel = cl.clCreateProgramWithSource(
                 context, kernel).build()['fn']
             kernel.argtypes = tuple(cl.cl_mem for _ in self.params)
             self.kernel = kernel
 
     def launch(self, symbol_table):
-        args = [symbol_table[p].ocl_buf for p in self.params]
+        args = []
+        for param in self.params:
+            val = symbol_table[param]
+            if hasattr(val, 'ocl_buf'):
+                args.append(val.ocl_buf)
         global_size = self.launch_parameters[0]
         local_size = 16
         if global_size % local_size:
