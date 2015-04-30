@@ -15,8 +15,9 @@ import time
 prototxt = "models/alexnet-ng/deploy.prototxt"
 caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
-caffe.set_mode_gpu()
-caffe.set_device(2)
+# caffe.set_mode_gpu()
+caffe.set_mode_cpu()
+# caffe.set_device(2)
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 
 conv1_filters = caffe_net.params['conv1'][0].data.view(hmarray)
@@ -163,7 +164,7 @@ def get_data():
     # data = np.asarray([
     #     transformer.preprocess('data', im),
     # ]).view(hmarray)
-    data = hmarray.random((128, 3, 227, 227), _range=(0, 255))
+    data = hmarray.random((5, 3, 227, 227), _range=(0, 255))
 
     # data *= hmarray.random((5, 3, 227, 227), _range=(0, 2))
     # data -= hmarray.random((5, 3, 227, 227), _range=(-20, +20))

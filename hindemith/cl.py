@@ -3,10 +3,12 @@ import pycl as cl
 
 
 try:
-    devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
+    platforms = cl.clGetPlatformIDs()
+    # devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
+    devices = cl.clGetDeviceIDs(platforms[-1])
 except cl.DeviceNotFoundError:
     devices = cl.clGetDeviceIDs()
-context = cl.clCreateContext([devices[-1]])
+context = cl.clCreateContext(devices)
 queue = cl.clCreateCommandQueue(context)
 
 
@@ -57,7 +59,7 @@ $body
             if hasattr(val, 'ocl_buf'):
                 args.append(val.ocl_buf)
         global_size = self.launch_parameters[0]
-        local_size = 16
+        local_size = 32
         if global_size % local_size:
             padded = (global_size + (local_size - 1)) & (~(local_size - 1))
         else:

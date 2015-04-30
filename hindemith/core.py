@@ -120,7 +120,7 @@ class Compose(object):
         self.symbol_table[name] = fn
         func = ast.Call(
             ast.Name(name, ast.Load()),
-            sources,
+            [],
             [],
             None,
             None,
