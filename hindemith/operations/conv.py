@@ -223,19 +223,16 @@ elif backend in {"omp", "openmp"}:
                     weights = symbol_table[sources[1]]
                     bias = symbol_table[sources[2]]
                     top = symbol_table[sinks[0]]
-                    top_offset = np.prod(top.shape[1:])
-                    m = weights.shape[0]
-                    n = np.prod(top.shape[2:])
-                    k = np.prod(weights.shape[1:])
                     col_data = col_datas[0]
                     im2col.argtypes = tuple(
                         np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in
                         [bottom, col_data]) + (ct.c_int, )
+                    if len(weights.shape) > 2:
+                        weights = weights.reshape(weights.shape[0], np.prod(weights.shape[1:]))
                     for i in range(bottom.shape[0]):
                         im2col(bottom, col_data, i * bot_offset)
-                        top[i, ...] = weights.dot(col_data).reshape(weights.shape[0], height_col, width_col)
-                    for t, b in zip(top, bias):
-                        t += b
+                        top[i] = weights.dot(col_data).reshape(weights.shape[0], height_col, width_col)
+                        top[i] += bias[:, np.newaxis, np.newaxis]
             return ConvLauncher()
 
 

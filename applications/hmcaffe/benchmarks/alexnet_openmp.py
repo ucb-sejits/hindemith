@@ -5,9 +5,6 @@ from hindemith.operations.pool import PoolForward
 from hindemith.operations.lrn import LrnForward
 from hindemith.operations.softmax import SoftmaxForward
 from hindemith.core import compose
-from hindemith.cl import queue
-from hindemith.clibs.clblas import sgemm
-import pycl as cl
 import caffe
 import numpy as np
 import time
@@ -15,9 +12,7 @@ import time
 prototxt = "models/alexnet-ng/deploy.prototxt"
 caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
-caffe.set_mode_gpu()
-caffe.set_device(2)
-# caffe.set_mode_cpu()
+caffe.set_mode_cpu()
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 
 conv1_filters = caffe_net.params['conv1'][0].data.view(hmarray)
@@ -59,21 +54,18 @@ fc6_filters = caffe_net.params['fc6'][0].data.view(hmarray)
 fc6_bias = caffe_net.params['fc6'][1].data.view(hmarray)
 fc6_bias_multiplier = hmarray((1, pool5.shape[0]))
 fc6_bias_multiplier.fill(1)
-fc6_bias_multiplier.sync_ocl()
 fc6 = hmarray.zeros(caffe_net.blobs['fc6'].data.shape)
 
 fc7_filters = caffe_net.params['fc7'][0].data.view(hmarray)
 fc7_bias = caffe_net.params['fc7'][1].data.view(hmarray)
 fc7_bias_multiplier = hmarray((1, fc6.shape[0]))
 fc7_bias_multiplier.fill(1)
-fc7_bias_multiplier.sync_ocl()
 fc7 = hmarray.zeros(caffe_net.blobs['fc7'].data.shape)
 
 fc8_filters = caffe_net.params['fc8'][0].data.view(hmarray)
 fc8_bias = caffe_net.params['fc8'][1].data.view(hmarray)
 fc8_bias_multiplier = hmarray((1, fc7.shape[0]))
 fc8_bias_multiplier.fill(1)
-fc8_bias_multiplier.sync_ocl()
 fc8 = hmarray.zeros(caffe_net.blobs['fc8'].data.shape)
 
 prob = hmarray.zeros(caffe_net.blobs['prob'].data.shape)
@@ -121,32 +113,18 @@ def forward(data):
     pool5, pool5_mask = PoolForward(conv5, kernel_size=(3, 3),
                                     padding=(0, 0), stride=(2, 2))
 
-    N = fc6.shape[1]
-    K = np.prod(pool5.shape[1:])
-    M = pool5.shape[0]
-    sgemm(False, True, 1.0, pool5, 0, K, fc6_filters, 0, K, 0.0,
-          fc6, 0, N, M, N, K)
-    sgemm(False, False, 1.0, fc6_bias_multiplier, 0, 1, fc6_bias, 0, N,
-          1.0, fc6, 0, N, M, N, 1)
+    np.dot(pool5.reshape(pool5.shape[0], fc6_filters.shape[1]), fc6_filters.T,
+           fc6)
+    fc6 += fc6_bias
 
     fc6 = ReluForward(fc6)
 
-    N = fc7.shape[1]
-    K = np.prod(fc6.shape[1:])
-    M = fc6.shape[0]
-    sgemm(False, True, 1.0, fc6, 0, K, fc7_filters, 0, K, 0.0,
-          fc7, 0, N, M, N, K)
-    sgemm(False, False, 1.0, fc7_bias_multiplier, 0, 1, fc7_bias, 0, N,
-          1.0, fc7, 0, N, M, N, 1)
+    np.dot(fc6, fc7_filters.T, fc7)
+    fc7 += fc7_bias
     fc7 = ReluForward(fc7)
 
-    N = fc8.shape[1]
-    K = np.prod(fc7.shape[1:])
-    M = fc7.shape[0]
-    sgemm(False, True, 1.0, fc7, 0, K, fc8_filters, 0, K, 0.0,
-          fc8, 0, N, M, N, K)
-    sgemm(False, False, 1.0, fc8_bias_multiplier, 0, 1, fc8_bias, 0, N,
-          1.0, fc8, 0, N, M, N, 1)
+    np.dot(fc7, fc8_filters.T, fc8)
+    fc8 += fc8_bias
     prob = SoftmaxForward(fc8)
     return prob
 
@@ -168,7 +146,6 @@ def get_data():
 
     # data *= hmarray.random((5, 3, 227, 227), _range=(0, 2))
     # data -= hmarray.random((5, 3, 227, 227), _range=(-20, +20))
-    data.sync_ocl()
     return data
 
 num_trials = 3
@@ -183,37 +160,20 @@ for _ in range(2):
 
     for blob_name in caffe_net.blobs.keys():
         blob = globals()[blob_name]
-        blob.sync_host()
-        if "_diff" in blob_name:
-            continue
         print("Checking blob {}".format(blob_name))
         caffe_blob = caffe_net.blobs[blob_name].data
         np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=1)
     caffe_prob = caffe_net.blobs['prob'].data
-    prob.sync_host()
     np.testing.assert_array_almost_equal(prob, caffe_prob, decimal=4)
 
 for i in range(num_trials):
     data = get_data()
-    cl.clFinish(queue)
     start = time.clock()
     forward(data)
-    cl.clFinish(queue)
     hm_time += time.clock() - start
     start = time.clock()
     caffe_net.forward_all(data=data)
     caffe_time += time.clock() - start
-
-    # for blob_name in caffe_net.blobs.keys():
-    #     blob = globals()[blob_name]
-    #     blob.sync_host()
-    #     if "_diff" in blob_name:
-    #         continue
-    #     print("Checking blob {}".format(blob_name))
-    #     caffe_blob = caffe_net.blobs[blob_name].data
-    #     np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=3)
-    # print(np.argmax(prob))
-    # print(np.argmax(caffe_net.blobs['prob'].data))
 print("Hindemith AVG        : {}".format(hm_time / num_trials))
 print("Caffe AVG            : {}".format(caffe_time / num_trials))
 print("Speedup (CAFFE / HM) : {}".format(caffe_time / hm_time))
