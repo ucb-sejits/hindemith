@@ -3,6 +3,7 @@ import numpy as np
 from hindemith.core import compose
 from hindemith.operations.conv import ConvBackward, ConvForward
 from hindemith.types import hmarray
+import os
 
 
 def reference_conv(in_data, weights, bias, out, stride, pad):
@@ -100,8 +101,9 @@ class TestConv(unittest.TestCase):
         reference_conv(a, weights, bias, expected, (4, 4), (0, 0))
         out.sync_host()
         np.testing.assert_array_almost_equal(out, expected,
-                                             decimal=2)
+                                             decimal=1)
 
+    @unittest.skipUnless(os.getenv("HM_BACKEND", "ocl") == "ocl", "Not implemented for openmp")
     def test_conv_backward(self):
         # TODO: Check bias diff
 

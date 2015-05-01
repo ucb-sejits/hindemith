@@ -2,7 +2,7 @@ from hindemith.operations.core import BlockLevel
 import numpy as np
 from string import Template
 
-    
+
 class PoolForward(BlockLevel):
     """
     top, mask = PoolForward(bottom)
@@ -34,7 +34,7 @@ class PoolForward(BlockLevel):
     int ph = (index / $pooled_w) % $pooled_h;
     int c = (index / $pooled_w / $pooled_h) % $channels;
     int n = index / $pooled_w / $pooled_h / $channels;
-    
+
     int hstart = ph * $stride - $pad;
     int wstart = pw * $stride - $pad;
     int hend = min(hstart + $kernel_h, $height);
@@ -43,12 +43,12 @@ class PoolForward(BlockLevel):
     wstart = max(wstart, 0);
     float maxval = -FLT_MAX;
     int maxidx = -1;
-    $bottom += (n * $channels + c) * $height * $width;
+    int offset = (n * $channels + c) * $height * $width;
     for (int h = hstart; h < hend; ++h) {
       for (int w = wstart; w < wend; ++w) {
-        if ($bottom[h * $width + w] > maxval) {
+        if ($bottom[offset + h * $width + w] > maxval) {
           maxidx = h * $width + w;
-          maxval = $bottom[maxidx];
+          maxval = $bottom[offset + h * $width + w];
         }
       }
     }
@@ -91,7 +91,7 @@ class AvePoolForward(BlockLevel):
     int ph = (index / $pooled_w) % $pooled_h;
     int c = (index / $pooled_w / $pooled_h) % $channels;
     int n = index / $pooled_w / $pooled_h / $channels;
-    
+
     int hstart = ph * $stride - $pad;
     int wstart = pw * $stride - $pad;
     int hend = min(hstart + $kernel_h, $height);
@@ -100,10 +100,10 @@ class AvePoolForward(BlockLevel):
     hstart = max(hstart, 0);
     wstart = max(wstart, 0);
     float aveval = 0;
-    $bottom += (n * $channels + c) * $height * $width;
+    int offset = (n * $channels + c) * $height * $width;
     for (int h = hstart; h < hend; ++h) {
       for (int w = wstart; w < wend; ++w) {
-        aveval += $bottom[h * $width + w];
+        aveval += $bottom[offset + h * $width + w];
       }
     }
     $top[index] = aveval / pool_size;
@@ -135,7 +135,6 @@ class PoolBackward(BlockLevel):
         pooled_height = ((height + 2 * pad_h - kernel_h) // stride_h) + 1
         pooled_width = ((width + 2 * pad_w - kernel_w) // stride_w) + 1
         return Template("""
-    int index = get_global_id(0);
     int w = index % $width;
     int h = (index / $width) % $height;
     int c = (index / $width / $height) % $channels;
@@ -148,12 +147,10 @@ class PoolBackward(BlockLevel):
     int pwend = min((w + $pad_w) / $stride_w + 1, $pooled_width);
     float gradient = 0;
     int offset = (n * $channels + c) * $pooled_height * $pooled_width;
-    $top_diff += offset;
-    $mask += offset;
     for (int ph = phstart; ph < phend; ++ph) {
       for (int pw = pwstart; pw < pwend; ++pw) {
-        if ($mask[ph * $pooled_width + pw] == h * $width + w) {
-          gradient += $top_diff[ph * $pooled_width + pw];
+        if ($mask[offset + ph * $pooled_width + pw] == h * $width + w) {
+          gradient += $top_diff[offset + ph * $pooled_width + pw];
         }
       }
     }

@@ -3,6 +3,7 @@ from hindemith.types import hmarray
 from hindemith.core import compose
 from hindemith.operations.relu import ReluForward, ReluBackward
 import numpy as np
+import os
 
 
 class TestRelu(unittest.TestCase):

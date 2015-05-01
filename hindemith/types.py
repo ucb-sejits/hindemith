@@ -1,5 +1,6 @@
 import numpy as np
 import pycl as cl
+import os
 
 from hindemith.cl import context, queue
 
@@ -34,6 +35,8 @@ class hmarray(np.ndarray):
         self.register = None
 
     def sync_host(self):
+        if os.environ.get("HM_BACKEND") in {'omp', 'openmp'}:
+            return
         cl.clFinish(queue)
         _, evt = cl.buffer_to_ndarray(queue, self.ocl_buf, self)
         evt.wait()

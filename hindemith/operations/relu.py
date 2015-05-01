@@ -32,8 +32,8 @@ class ReluBackward(ElementLevel):
     @classmethod
     def emit(cls, sources, sinks, keywords, symbol_table):
         return Template(
-            "$bottom_diff[get_global_id(0)] = $top_diff[get_global_id(0)] * "
-            "(($bottom[get_global_id(0)] > 0)"
-            " + $negative_slope * ($bottom[get_global_id(0)] <= 0));"
+            "$bottom_diff[index] = $top_diff[index] * "
+            "(($bottom[index] > 0)"
+            " + $negative_slope * ($bottom[index] <= 0));"
         ).substitute(bottom_diff=sinks[0], bottom=sources[0],
                      top_diff=sources[1], negative_slope=0)
