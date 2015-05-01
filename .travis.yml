@@ -12,7 +12,11 @@ install:
   - pip install coveralls coverage
   - ./bin/build_clBLAS.sh
 script:
-  - nosetests --verbose --with-coverage --cover-package=hindemith --cover-erase
+  - nosetests --verbose --with-coverage --cover-package=hindemith
+  - mv.coverage .coverage1
+  - HM_BACKEND=omp nosetests --verbose --with-coverage --cover-package=hindemith
+  - mv .coverage .coverage2
+  - coverage combine
 deploy:
   provider: pypi
   user: leonardt
