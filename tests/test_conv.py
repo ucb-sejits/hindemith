@@ -88,7 +88,7 @@ class TestConv(unittest.TestCase):
 
         a = hmarray.random((3, 3, 27, 27), _range=(0, 255))
         weights = hmarray.random((12, 363))
-        out = hmarray.zeros((3, 12, 25))
+        out = hmarray.zeros((3, 12, 5, 5))
         bias = hmarray((12, ))
         bias.fill(1)
         bias.sync_ocl()
@@ -99,7 +99,7 @@ class TestConv(unittest.TestCase):
         expected = np.zeros((3, 12, 5, 5), np.float32)
         reference_conv(a, weights, bias, expected, (4, 4), (0, 0))
         out.sync_host()
-        np.testing.assert_array_almost_equal(out, expected.reshape(3, 12, 25),
+        np.testing.assert_array_almost_equal(out, expected,
                                              decimal=2)
 
     def test_conv_backward(self):

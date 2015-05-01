@@ -43,7 +43,7 @@ def gen_lrn_forward(layer_param):
     """).substitute(name=name, top=top, bottom=bottom,
                     alpha=lrn_param.alpha, beta=lrn_param.beta,
                     local_size=lrn_param.local_size)
-    
+
 
 def gen_pool_buffers(layer_param):
     name = layer_param.name
@@ -51,7 +51,7 @@ def gen_pool_buffers(layer_param):
 $name = hmarray.zeros(caffe_net.blobs['${name}'].data.shape)
 ${name}_mask = hmarray.zeros(${name}.shape)
     """).substitute(name=name)
-    
+
 
 def gen_pool_forward(layer_param):
     name = layer_param.name
@@ -119,15 +119,9 @@ def gen_relu_forward(layer_param):
 
 def gen_concat_buffers(layer_param):
     top = layer_param.top[0]
-    bottoms = layer_param.bottom
-    concat_axis = layer_param.concat_param.axis
-    incr = " + ".join(bottom + ".shape[{}]".format(concat_axis) for bottom in bottoms[1:])
-    
     return Template("""
-_shape = list(${bottom0}.shape
-_shape[${concat_axis}] += $incr
-$top = hmarray.zeros(tuple(_shape))
-    """).substitute(top=top, bottom0=bottoms[0], incr=incr, concat_axis=concat_axis)
+$top = hmarray.zeros(caffe_net.blobs['${top}'].data.shape)
+    """).substitute(top=top)
 
 
 def gen_concat_forward(layer_param):
