@@ -124,9 +124,9 @@ def gen_concat_buffers(layer_param):
     incr = " + ".join(bottom + ".shape[{}]".format(concat_axis) for bottom in bottoms[1:])
     
     return Template("""
-_shape = ${bottom0}.shape
-_shape[${concat_axis}] = $incr
-$top = hmarray.zeros(_shape)
+_shape = list(${bottom0}.shape
+_shape[${concat_axis}] += $incr
+$top = hmarray.zeros(tuple(_shape))
     """).substitute(top=top, bottom0=bottoms[0], incr=incr, concat_axis=concat_axis)
 
 
@@ -134,7 +134,7 @@ def gen_concat_forward(layer_param):
     top = layer_param.top[0]
     bottoms = layer_param.bottom
     return Template("""
-$top = ConcatForward($bottoms)
+    $top = ConcatForward($bottoms)
     """).substitute(top=top, bottoms=", ".join(bottoms))
 
 
@@ -215,6 +215,7 @@ caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 for layer_param in layer_params:
     output += layer_get_buf_map[layer_param.type](layer_param)
 output += """
+@compose
 def forward(data):
 """
 for layer_param in layer_params:

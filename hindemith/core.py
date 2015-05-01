@@ -109,7 +109,7 @@ class Compose(object):
                     kernel.compile()
             for kernel in kernels:
                 kernel.launch(self.symbol_table)
-                # cl.clFinish(queue)
+                cl.clFinish(queue)
             ret = tuple(self.symbol_table[sink.id] for sink in sinks)
             if len(ret) == 1:
                 return ret[0]

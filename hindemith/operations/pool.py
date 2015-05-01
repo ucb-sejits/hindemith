@@ -2,7 +2,7 @@ from hindemith.operations.core import BlockLevel
 import numpy as np
 from string import Template
 
-
+    
 class PoolForward(BlockLevel):
     """
     top, mask = PoolForward(bottom)
@@ -18,17 +18,22 @@ class PoolForward(BlockLevel):
         pad_h, pad_w = keywords['padding']
         stride_h, stride_w = keywords['stride']
         kernel_h, kernel_w = keywords['kernel_size']
-        pooled_height = ((height + 2 * pad_h - kernel_h) // stride_h) + 1
-        pooled_width = ((width + 2 * pad_w - kernel_w) // stride_w) + 1
+        # pooled_height = ((height + 2 * pad_h - kernel_h) // stride_h) + 1
+        # pooled_width = ((width + 2 * pad_w - kernel_w) // stride_w) + 1
+        pooled_height, pooled_width = symbol_table[sinks[0]].shape[2:]
         return Template("""
-    int tmp_idx = index;
-    int n = index / ($pooled_w * $pooled_h * $channels);
-    tmp_idx -= n * ($pooled_w * $pooled_h * $channels);
-    int c = tmp_idx / ($pooled_w * $pooled_h);
-    tmp_idx -= c * ($pooled_w * $pooled_h);
-    int ph = tmp_idx / $pooled_w;
-    tmp_idx -= ph * $pooled_w;
-    int pw = tmp_idx;
+    // int tmp_idx = index;
+    // int n = index / ($pooled_w * $pooled_h * $channels);
+    // tmp_idx -= n * ($pooled_w * $pooled_h * $channels);
+    // int c = tmp_idx / ($pooled_w * $pooled_h);
+    // tmp_idx -= c * ($pooled_w * $pooled_h);
+    // int ph = tmp_idx / $pooled_w;
+    // tmp_idx -= ph * $pooled_w;
+    // int pw = tmp_idx;
+    int pw = index % $pooled_w;
+    int ph = (index / $pooled_w) % $pooled_h;
+    int c = (index / $pooled_w / $pooled_h) % $channels;
+    int n = index / $pooled_w / $pooled_h / $channels;
     
     int hstart = ph * $stride - $pad;
     int wstart = pw * $stride - $pad;
@@ -50,6 +55,59 @@ class PoolForward(BlockLevel):
     $top[index] = maxval;
     $mask[index] = maxidx;
 """).substitute(top=sinks[0], mask=sinks[1], bottom=sources[0],
+                pooled_h=pooled_height, pooled_w=pooled_width,
+                channels=channels, stride=stride_h, pad=pad_h,
+                kernel_h=kernel_h, kernel_w=kernel_w,
+                height=height, width=width)
+
+
+class AvePoolForward(BlockLevel):
+    """
+    top = AvePoolForward(bottom)
+    """
+    @classmethod
+    def get_launch_parameters(cls, sources, sinks):
+        num_work_items = np.prod(sinks[0].shape)
+        return (num_work_items, )
+
+    @classmethod
+    def emit(cls, sources, sinks, keywords, symbol_table):
+        channels, height, width = symbol_table[sources[0]].shape[1:]
+        pad_h, pad_w = keywords['padding']
+        stride_h, stride_w = keywords['stride']
+        kernel_h, kernel_w = keywords['kernel_size']
+        pooled_height = ((height + 2 * pad_h - kernel_h) // stride_h) + 1
+        pooled_width = ((width + 2 * pad_w - kernel_w) // stride_w) + 1
+        return Template("""
+    // int tmp_idx = index;
+    // int n = index / ($pooled_w * $pooled_h * $channels);
+    // tmp_idx -= n * ($pooled_w * $pooled_h * $channels);
+    // int c = tmp_idx / ($pooled_w * $pooled_h);
+    // tmp_idx -= c * ($pooled_w * $pooled_h);
+    // int ph = tmp_idx / $pooled_w;
+    // tmp_idx -= ph * $pooled_w;
+    // int pw = tmp_idx;
+    int pw = index % $pooled_w;
+    int ph = (index / $pooled_w) % $pooled_h;
+    int c = (index / $pooled_w / $pooled_h) % $channels;
+    int n = index / $pooled_w / $pooled_h / $channels;
+    
+    int hstart = ph * $stride - $pad;
+    int wstart = pw * $stride - $pad;
+    int hend = min(hstart + $kernel_h, $height);
+    int wend = min(wstart + $kernel_w, $width);
+    int pool_size = (hend - hstart) * (wend - wstart);
+    hstart = max(hstart, 0);
+    wstart = max(wstart, 0);
+    float aveval = 0;
+    $bottom += (n * $channels + c) * $height * $width;
+    for (int h = hstart; h < hend; ++h) {
+      for (int w = wstart; w < wend; ++w) {
+        aveval += $bottom[h * $width + w];
+      }
+    }
+    $top[index] = aveval / pool_size;
+""").substitute(top=sinks[0], bottom=sources[0],
                 pooled_h=pooled_height, pooled_w=pooled_width,
                 channels=channels, stride=stride_h, pad=pad_h,
                 kernel_h=kernel_h, kernel_w=kernel_w,

@@ -35,7 +35,7 @@ conv2_bias = caffe_net.params['conv2'][1].data.view(hmarray)
 conv2 = hmarray.zeros(caffe_net.blobs['conv2'].data.shape)
 
 norm2 = hmarray.zeros(caffe_net.blobs['norm2'].data.shape)
-norm2_scale = hmarray.zeros(norm1.shape)
+norm2_scale = hmarray.zeros(norm2.shape)
 
 pool2 = hmarray.zeros(caffe_net.blobs['pool2'].data.shape)
 pool2_mask = hmarray.zeros(pool2.shape)
@@ -202,7 +202,7 @@ for i in range(num_trials):
     #     np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=3)
     caffe_prob = caffe_net.blobs['prob'].data
     prob.sync_host()
-    np.testing.assert_array_almost_equal(prob, caffe_prob, decimal=3)
+    np.testing.assert_array_almost_equal(prob, caffe_prob, decimal=4)
     print(np.argmax(prob))
     print(np.argmax(caffe_net.blobs['prob'].data))
 print("Hindemith AVG        : {}".format(hm_time / num_trials))

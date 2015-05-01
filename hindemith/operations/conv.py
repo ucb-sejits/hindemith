@@ -68,6 +68,7 @@ class ConvForward(DeviceLevel):
         channels_col = channels * kernel_h * kernel_w
         height_col = (height + 2 * pad_h - kernel_h) // stride_h + 1
         width_col = (width + 2 * pad_w - kernel_w) // stride_w + 1
+        out_channels, height_col, width_col = symbol_table[sinks[0]].shape[1:]
         col_datas = [hmarray((channels_col, height_col * width_col))
                      for _ in range(len(queues))]
         bias_multiplier = hmarray(

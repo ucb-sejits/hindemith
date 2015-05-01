@@ -13,7 +13,7 @@ context = cl.clCreateContext(devices[-1:])
 if os.environ.get("TRAVIS"):
     queues = [cl.clCreateCommandQueue(context)]
 else:
-    queues = [cl.clCreateCommandQueue(context) for _ in range(32)]
+    queues = [cl.clCreateCommandQueue(context) for _ in range(10)]
 queue = queues[0]
 
 
@@ -51,7 +51,7 @@ $body
 }
     """).substitute(params=params_str, body=self.body,
                     num_work_items=self.launch_parameters[0])
-            print(kernel)
+            # print(kernel)
             kernel = cl.clCreateProgramWithSource(
                 context, kernel).build()['fn']
             kernel.argtypes = tuple(cl.cl_mem for _ in self.params)
