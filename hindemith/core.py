@@ -8,7 +8,10 @@ from hindemith.types import hmarray
 from hindemith.operations.array import ArrayAdd, ArraySub, ArrayMul, ArrayDiv, \
     ArrayScalarAdd, ArrayScalarSub, ArrayScalarDiv, ArrayScalarMul
 import pycl as cl
-from graphviz import Digraph
+try: 
+    from graphviz import Digraph
+except ImportError:
+    pass
 from profilehooks import profile
 
 
@@ -56,7 +59,8 @@ class Compose(object):
                 processed.append(block_or_statement)
         func_def.body = processed
         self.symbol_table['profile'] = profile
-        func_def.decorator_list = [ast.Name('profile', ast.Load())]
+        # func_def.decorator_list = [ast.Name('profile', ast.Load())]
+        func_def.decorator_list = []
         ast.fix_missing_locations(tree)
         exec(compile(tree, filename="<nofile>", mode="exec"),
              self.symbol_table, self.symbol_table)
