@@ -1,4 +1,4 @@
-from hindemith.operations.core import DeviceLevel  # , ElementLevel
+from hindemith.operations.core import DeviceLevel, ElementLevel
 from hindemith.types import hmarray
 from hindemith.clibs.clblas import sgemm, sgemv
 from hindemith.cl import context, queues, hm_compile_and_load
@@ -11,51 +11,53 @@ import ast
 backend = os.getenv("HM_BACKEND", "ocl")
 
 
-# class ConvForward(ElementLevel):
-#     """
-#     top = ConvForward(bottom, weights, bias, kernel_size=(11, 11),
-#                       stride=(1, 1), padding=(0, 0))
-#     """
-#     @classmethod
-#     def get_launch_parameters(cls, sources, sinks):
-#         num_work_items = np.prod(sinks[0].shape)
-#         return (num_work_items, True)
+class ConvForward(ElementLevel):
+    """
+    top = ConvForward(bottom, weights, bias, kernel_size=(11, 11),
+                      stride=(1, 1), padding=(0, 0))
+    """
+    @classmethod
+    def get_launch_parameters(cls, sources, sinks):
+        num_work_items = np.prod(sinks[0].shape)
+        return (num_work_items, True)
 
-#     @classmethod
-#     def emit(cls, sources, sinks, keywords, symbol_table):
-#         kernel_h, kernel_w = keywords['kernel_size']
-#         pad_h, pad_w = keywords['padding']
-#         stride_h, stride_w = keywords['stride']
-#         num, in_channels, in_height, in_width = symbol_table[sources[0]].shape
-#         out_height = (in_height + 2 * pad_h - kernel_h) // stride_h + 1
-#         out_width = (in_width + 2 * pad_w - kernel_w) // stride_w + 1
-#         out_channels = symbol_table[sinks[0]].shape[1]
-#         num_work_items = num * out_channels * out_height * out_width
-#         return Template("""
-#       int out_x = index % $width_out;
-#       int out_y = (index / $width_out) % $height_out;
-#       int out_c = (index / $width_out / $height_out) % $channels_out;
-#       int n = index / $width_out / $height_out / $channels_out;
-#       float tmp = 0.0f;
-#       for (int in_c = 0; in_c < $channels_in; in_c++) {
-#         for (int i = 0; i < $kernel_h; i++) {
-#           for (int j = 0; j < $kernel_w; j++) {
-#             int in_y = out_y * $stride_h - $pad_h + i;
-#             int in_x = out_x * $stride_w - $pad_w + j;
-#             if (in_y >= 0 && in_y < $height_in && in_x >= 0 && in_x < $width_in)
-#               tmp += $in_data[((n * $channels_in + in_c) * $height_in + in_y) * $width_in + in_x] * $weights[((out_c * $channels_in + in_c) * $kernel_h + i) * $kernel_w + j];
-#           }
-#         }
-#       }
-#       $out[index] = tmp + $bias[out_c];
-# """).substitute(kernel_h=kernel_h, kernel_w=kernel_w,
-#                 pad_h=pad_h, pad_w=pad_w,
-#                 stride_h=stride_h, stride_w=stride_w,
-#                 channels_in=in_channels, height_in=in_height,
-#                 width_in=in_width, channels_out=out_channels,
-#                 height_out=out_height, width_out=out_width,
-#                 out=sinks[0], in_data=sources[0], weights=sources[1],
-#                 bias=sources[2], global_size=num_work_items)
+    @classmethod
+    def emit(cls, sources, sinks, keywords, symbol_table):
+        kernel_h, kernel_w = keywords['kernel_size']
+        pad_h, pad_w = keywords['padding']
+        stride_h, stride_w = keywords['stride']
+        num, in_channels, in_height, in_width = symbol_table[sources[0]].shape
+        out_height = (in_height + 2 * pad_h - kernel_h) // stride_h + 1
+        out_width = (in_width + 2 * pad_w - kernel_w) // stride_w + 1
+        out_channels = symbol_table[sinks[0]].shape[1]
+        num_work_items = num * out_channels * out_height * out_width
+        return Template("""
+      int out_x = index % $width_out;
+      int out_y = (index / $width_out) % $height_out;
+      int out_c = (index / $width_out / $height_out) % $channels_out;
+      int n = index / $width_out / $height_out / $channels_out;
+      float tmp = 0.0f;
+      for (int in_c = 0; in_c < $channels_in; in_c++) {
+        #pragma unroll
+        for (int i = 0; i < $kernel_h; i++) {
+          int in_y = out_y * $stride_h - $pad_h + i;
+          #pragma unroll
+          for (int j = 0; j < $kernel_w; j++) {
+            int in_x = out_x * $stride_w - $pad_w + j;
+            if (in_y >= 0 && in_y < $height_in && in_x >= 0 && in_x < $width_in)
+              tmp += $in_data[((n * $channels_in + in_c) * $height_in + in_y) * $width_in + in_x] * $weights[((out_c * $channels_in + in_c) * $kernel_h + i) * $kernel_w + j];
+          }
+        }
+      }
+      $out[index] = tmp + $bias[out_c];
+""").substitute(kernel_h=kernel_h, kernel_w=kernel_w,
+                pad_h=pad_h, pad_w=pad_w,
+                stride_h=stride_h, stride_w=stride_w,
+                channels_in=in_channels, height_in=in_height,
+                width_in=in_width, channels_out=out_channels,
+                height_out=out_height, width_out=out_width,
+                out=sinks[0], in_data=sources[0], weights=sources[1],
+                bias=sources[2], global_size=num_work_items)
 
 
 class ConvForward(DeviceLevel):

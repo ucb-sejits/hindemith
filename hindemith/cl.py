@@ -10,7 +10,7 @@ import random
 
 try:
     # platforms = cl.clGetPlatformIDs()
-    # devices = cl.clGetDeviceIDs(platforms[0])
+    # devices = cl.clGetDeviceIDs(platforms[1])
     devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
 except cl.DeviceNotFoundError:
     devices = cl.clGetDeviceIDs()

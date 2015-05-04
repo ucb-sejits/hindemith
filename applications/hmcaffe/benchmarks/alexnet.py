@@ -4,9 +4,9 @@ from hindemith.operations.relu import ReluForward
 from hindemith.operations.pool import PoolForward
 from hindemith.operations.lrn import LrnForward
 from hindemith.operations.softmax import SoftmaxForward
+from hindemith.operations.inner_product import InnerProductForward
 from hindemith.core import compose
 from hindemith.cl import queue
-from hindemith.clibs.clblas import sgemm
 import pycl as cl
 import caffe
 import numpy as np
@@ -57,23 +57,14 @@ pool5_mask = hmarray.zeros(pool5.shape)
 
 fc6_filters = caffe_net.params['fc6'][0].data.view(hmarray)
 fc6_bias = caffe_net.params['fc6'][1].data.view(hmarray)
-fc6_bias_multiplier = hmarray((1, pool5.shape[0]))
-fc6_bias_multiplier.fill(1)
-fc6_bias_multiplier.sync_ocl()
 fc6 = hmarray.zeros(caffe_net.blobs['fc6'].data.shape)
 
 fc7_filters = caffe_net.params['fc7'][0].data.view(hmarray)
 fc7_bias = caffe_net.params['fc7'][1].data.view(hmarray)
-fc7_bias_multiplier = hmarray((1, fc6.shape[0]))
-fc7_bias_multiplier.fill(1)
-fc7_bias_multiplier.sync_ocl()
 fc7 = hmarray.zeros(caffe_net.blobs['fc7'].data.shape)
 
 fc8_filters = caffe_net.params['fc8'][0].data.view(hmarray)
 fc8_bias = caffe_net.params['fc8'][1].data.view(hmarray)
-fc8_bias_multiplier = hmarray((1, fc7.shape[0]))
-fc8_bias_multiplier.fill(1)
-fc8_bias_multiplier.sync_ocl()
 fc8 = hmarray.zeros(caffe_net.blobs['fc8'].data.shape)
 
 prob = hmarray.zeros(caffe_net.blobs['prob'].data.shape)
@@ -121,32 +112,13 @@ def forward(data):
     pool5, pool5_mask = PoolForward(conv5, kernel_size=(3, 3),
                                     padding=(0, 0), stride=(2, 2))
 
-    N = fc6.shape[1]
-    K = np.prod(pool5.shape[1:])
-    M = pool5.shape[0]
-    sgemm(False, True, 1.0, pool5, 0, K, fc6_filters, 0, K, 0.0,
-          fc6, 0, N, M, N, K)
-    sgemm(False, False, 1.0, fc6_bias_multiplier, 0, 1, fc6_bias, 0, N,
-          1.0, fc6, 0, N, M, N, 1)
-
+    fc6 = InnerProductForward(pool5, fc6_filters, fc6_bias)
     fc6 = ReluForward(fc6)
 
-    N = fc7.shape[1]
-    K = np.prod(fc6.shape[1:])
-    M = fc6.shape[0]
-    sgemm(False, True, 1.0, fc6, 0, K, fc7_filters, 0, K, 0.0,
-          fc7, 0, N, M, N, K)
-    sgemm(False, False, 1.0, fc7_bias_multiplier, 0, 1, fc7_bias, 0, N,
-          1.0, fc7, 0, N, M, N, 1)
+    fc7 = InnerProductForward(fc6, fc7_filters, fc7_bias)
     fc7 = ReluForward(fc7)
 
-    N = fc8.shape[1]
-    K = np.prod(fc7.shape[1:])
-    M = fc7.shape[0]
-    sgemm(False, True, 1.0, fc7, 0, K, fc8_filters, 0, K, 0.0,
-          fc8, 0, N, M, N, K)
-    sgemm(False, False, 1.0, fc8_bias_multiplier, 0, 1, fc8_bias, 0, N,
-          1.0, fc8, 0, N, M, N, 1)
+    fc8 = InnerProductForward(fc7, fc8_filters, fc8_bias)
     prob = SoftmaxForward(fc8)
     return prob
 
@@ -164,7 +136,7 @@ def get_data():
     # data = np.asarray([
     #     transformer.preprocess('data', im),
     # ]).view(hmarray)
-    data = hmarray.random((128, 3, 227, 227), _range=(0, 255))
+    data = hmarray.random((64, 3, 227, 227), _range=(0, 255))
 
     # data *= hmarray.random((5, 3, 227, 227), _range=(0, 2))
     # data -= hmarray.random((5, 3, 227, 227), _range=(-20, +20))
