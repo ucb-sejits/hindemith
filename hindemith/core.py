@@ -10,9 +10,9 @@ from hindemith.operations.array import ArrayAdd, ArraySub, ArrayMul, ArrayDiv, \
 import pycl as cl
 try: 
     from graphviz import Digraph
+    from profilehooks import profile
 except ImportError:
     pass
-from profilehooks import profile
 
 
 def get_ast(obj):
