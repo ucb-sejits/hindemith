@@ -81,7 +81,7 @@ if backend in {"ocl", "opencl", "OCL"}:
                 kernel.argtypes = tuple(cl.cl_mem for _ in self.params)
                 self.kernel = kernel
 
-        def launch(self, symbol_table):
+        def launch(self, symbol_table, wait_for=None):
             args = []
             for param in self.params:
                 val = symbol_table[param]
@@ -93,7 +93,7 @@ if backend in {"ocl", "opencl", "OCL"}:
                 padded = (global_size + (local_size - 1)) & (~(local_size - 1))
             else:
                 padded = global_size
-            self.kernel(*args).on(queue, (padded,))
+            self.kernel(*args).on(queue, (padded,), wait_for=wait_for)
 elif backend in {"omp", "openmp"}:
 
     class Kernel(object):

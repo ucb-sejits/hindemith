@@ -1,4 +1,4 @@
-from hindemith.operations.core import DeviceLevel, ElementLevel
+from hindemith.operations.core import DeviceLevel  # , ElementLevel
 from hindemith.types import hmarray
 from hindemith.clibs.clblas import sgemm, sgemv
 from hindemith.cl import context, queues, hm_compile_and_load
@@ -7,6 +7,7 @@ import pycl as cl
 from string import Template
 import os
 import ctypes as ct
+import ast
 backend = os.getenv("HM_BACKEND", "ocl")
 
 
@@ -57,12 +58,12 @@ backend = os.getenv("HM_BACKEND", "ocl")
 #                 bias=sources[2], global_size=num_work_items)
 
 
-if backend in {"ocl", "opencl", "OCL"}:
-    class ConvForward(DeviceLevel):
-        """
-        top = ConvForward(bottom, weights, bias, kernel_size=(11, 11),
-                          stride=(1, 1), padding=(0, 0))
-        """
+class ConvForward(DeviceLevel):
+    """
+    top = ConvForward(bottom, weights, bias, kernel_size=(11, 11),
+                      stride=(1, 1), padding=(0, 0))
+    """
+    if backend in {"ocl", "opencl", "OCL"}:
         @classmethod
         def get_launcher(cls, sources, sinks, keywords, symbol_table):
             kernel_h, kernel_w = keywords['kernel_size']
@@ -127,11 +128,17 @@ if backend in {"ocl", "opencl", "OCL"}:
             else:
                 padded = im2col_global_size
 
+            print(sources)
+
             class ConvLauncher(object):
+                def __init__(self, sources, sinks):
+                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
+                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+
                 def compile(self):
                     pass
 
-                def launch(self, symbol_table):
+                def launch(self, symbol_table, wait_for):
                     bottom = symbol_table[sources[0]]
                     bot_offset = np.prod(bottom.shape[1:])
                     weights = symbol_table[sources[1]]
@@ -141,25 +148,24 @@ if backend in {"ocl", "opencl", "OCL"}:
                     m = weights.shape[0]
                     n = np.prod(top.shape[2:])
                     k = np.prod(weights.shape[1:])
-                    cl.clFinish(queues[0])
+                    # cl.clFinish(queues[0])
                     for i in range(bottom.shape[0]):
-                        im2col(bottom.ocl_buf, col_datas[i % len(queues)].ocl_buf,
-                               i * bot_offset).on(queues[i % len(queues)], (padded, ))
-                        sgemm(False, False, 1.0, weights, 0, k, col_datas[i % len(queues)],
-                              0, n, 0.0, top, i * top_offset, n, m, n, k, queues[i % len(queues)])
+                        evt = im2col(bottom.ocl_buf,
+                                     col_datas[i % len(queues)].ocl_buf,
+                                     i * bot_offset
+                                     ).on(queues[0], (padded, ),
+                                          wait_for=wait_for)
+                        evt = sgemm(False, False, 1.0, weights, 0, k,
+                                    col_datas[0],
+                                    0, n, 0.0, top, i * top_offset, n, m, n,
+                                    k, queues[0], wait_for=evt)
                         sgemm(False, False, 1.0, bias, 0, 1,
                               bias_multiplier, 0, n, 1.0, top, i *
-                              top_offset, n, m, n, 1, queues[i % len(queues)])
-                    for q in queues:
-                        cl.clFinish(q)
-            return ConvLauncher()
-elif backend in {"omp", "openmp"}:
-    class ConvForward(DeviceLevel):
-        """
-        top = ConvForward(bottom, weights, bias, kernel_size=(11, 11),
-                          stride=(1, 1), padding=(0, 0))
-        """
-        @classmethod
+                              top_offset, n, m, n, 1, queues[0], wait_for=evt)
+                    # for q in queues:
+                    #     cl.clFinish(q)
+            return ConvLauncher(sources, sinks)
+    elif backend in {"omp", "openmp"}:
         def get_launcher(cls, sources, sinks, keywords, symbol_table):
             kernel_h, kernel_w = keywords['kernel_size']
             pad_h, pad_w = keywords['padding']

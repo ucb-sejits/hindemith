@@ -16,8 +16,8 @@ import time
 prototxt = "models/googlenet/deploy.prototxt"
 caffemodel = "models/googlenet/bvlc_googlenet.caffemodel"
 
-caffe.set_mode_gpu()
-caffe.set_device(3)
+# caffe.set_mode_gpu()
+# caffe.set_device(3)
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 
 
@@ -322,6 +322,7 @@ loss3_classifier_bias_multiplier.sync_ocl()
 loss3_classifier = hmarray.zeros(caffe_net.blobs['loss3/classifier'].data.shape)
 
 prob = hmarray.zeros(caffe_net.blobs['prob'].data.shape)
+
 
 @compose
 def forward(data):

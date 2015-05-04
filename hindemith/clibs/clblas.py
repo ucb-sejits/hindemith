@@ -29,7 +29,7 @@ _clblaslib.clblasSgemm.argtypes = (
 
 
 def sgemm(transA, transB, alpha, A, A_offset, lda, B, B_offset, ldb, beta, C,
-          C_offset, ldc, m, n, k, _queue=None):
+          C_offset, ldc, m, n, k, _queue=None, wait_for=None):
     if _queue is None:
         _queue = queue
     cblas_row_major = ct.c_int(0)
@@ -43,17 +43,25 @@ def sgemm(transA, transB, alpha, A, A_offset, lda, B, B_offset, ldb, beta, C,
     k = ct.c_size_t(int(k))
     alpha = ct.c_float(alpha)
     beta = ct.c_float(beta)
+    if wait_for is None:
+        num_wait = 0
+    else:
+        num_wait = 1
+    done_evt = cl.cl_event()
     err = _clblaslib.clblasSgemm(cblas_row_major, transA, transB, m, n, k,
                                  alpha, A.ocl_buf, ct.c_size_t(A_offset), lda,
                                  B.ocl_buf, ct.c_size_t(B_offset), ldb, beta,
                                  C.ocl_buf, ct.c_size_t(C_offset), ldc,
                                  ct.c_size_t(1), ct.byref(_queue),
-                                 ct.c_size_t(0), None, None)
+                                 ct.c_size_t(num_wait), ct.byref(wait_for),
+                                 ct.byref(done_evt))
     if err:
         raise Exception("clBLAS sgemm returned error code {}".format(err))
+    return done_evt
 
 
-def sgemv(transA, M, N, alpha, bufA, offA, lda, bufX, offX, incx, beta, bufY, offY, incy):
+def sgemv(transA, M, N, alpha, bufA, offA, lda, bufX, offX, incx, beta, bufY,
+          offY, incy, wait_for=None):
     cblas_row_major = ct.c_int(0)
     transA = ct.c_int(1 if transA else 0)
     lda = ct.c_size_t(int(lda))
@@ -63,11 +71,18 @@ def sgemv(transA, M, N, alpha, bufA, offA, lda, bufX, offX, incx, beta, bufY, of
     N = ct.c_size_t(int(N))
     alpha = ct.c_float(alpha)
     beta = ct.c_float(beta)
+    if wait_for is None:
+        num_wait = 0
+    else:
+        num_wait = 1
+    done_evt = cl.cl_event()
     err = _clblaslib.clblasSgemv(cblas_row_major, transA, M, N,
                                  alpha, bufA.ocl_buf, ct.c_size_t(offA), lda,
                                  bufX.ocl_buf, ct.c_size_t(offX), incx, beta,
                                  bufY.ocl_buf, ct.c_size_t(offY), incy,
                                  ct.c_size_t(1), ct.byref(queue),
-                                 ct.c_size_t(0), None, None)
+                                 ct.c_size_t(num_wait), ct.byref(wait_for),
+                                 ct.byref(done_evt))
     if err:
         raise Exception("clBLAS sgemv returned error code {}".format(err))
+    return done_evt

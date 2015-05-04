@@ -8,6 +8,7 @@ from hindemith.types import hmarray
 from hindemith.operations.array import ArrayAdd, ArraySub, ArrayMul, ArrayDiv, \
     ArrayScalarAdd, ArrayScalarSub, ArrayScalarDiv, ArrayScalarMul
 import pycl as cl
+from graphviz import Digraph
 
 
 def get_ast(obj):
@@ -68,10 +69,23 @@ class Compose(object):
     def gen_hm_func(self, block):
         sources = []
         sinks = []
-        for op in block:
+        # Uncomment to show graph
+        # dot = Digraph()
+        # dot.body.append('size="6,6"')
+        # sink_map = {}
+        for index, op in enumerate(block):
             _sinks, _sources = self.get_sinks_and_sources(op)
             sinks.extend(_sinks)
             sources.extend(_sources)
+        # Uncomment to show graph
+        #     node_id = "node_{}".format(index)
+        #     dot.node(node_id, op.value.func.id)
+        #     for source in _sources:
+        #         if source.id in sink_map:
+        #             dot.edge(sink_map[source.id], node_id)
+        #     for sink in _sinks:
+        #         sink_map[sink.id] = node_id
+        # dot.render('tmp.gv')
 
         kernels = []
 
@@ -107,9 +121,16 @@ class Compose(object):
                         kernels.append(self.get_launcher(op, _sources, _sinks))
                 for kernel in kernels:
                     kernel.compile()
+            kernel_map = {}
             for kernel in kernels:
-                kernel.launch(self.symbol_table)
-                cl.clFinish(queue)
+                evts = []
+                for source in kernel.sources:
+                    if source.id in kernel_map:
+                        evts.append(kernel_map[source.id])
+                print(evts)
+                evt = kernel.launch(self.symbol_table, evts)
+                for sink in kernel.sinks:
+                    kernel_map[sink.id] = evt
             ret = tuple(self.symbol_table[sink.id] for sink in sinks)
             if len(ret) == 1:
                 return ret[0]
