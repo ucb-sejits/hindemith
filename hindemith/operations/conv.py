@@ -74,8 +74,11 @@ class ConvForward(DeviceLevel):
             height_col = (height + 2 * pad_h - kernel_h) // stride_h + 1
             width_col = (width + 2 * pad_w - kernel_w) // stride_w + 1
             out_channels, height_col, width_col = symbol_table[sinks[0]].shape[1:]
-            col_datas = [hmarray((channels_col, height_col * width_col))
-                         for _ in range(len(queues))]
+            is_1x1 = kernel_w == 1 and kernel_h == 1 and stride_h == 1 and \
+                     stride_w == 1 and pad_h == 0 and pad_w == 0
+            if not is_1x1:
+                col_datas = [hmarray((channels_col, height_col * width_col))
+                            for _ in range(len(queues))]
             bias_multiplier = hmarray(
                 (1, np.prod(symbol_table[sinks[0]].shape[2:])))
             bias_multiplier.fill(1.0)
@@ -128,7 +131,6 @@ class ConvForward(DeviceLevel):
             else:
                 padded = im2col_global_size
 
-            print(sources)
 
             class ConvLauncher(object):
                 def __init__(self, sources, sinks):
@@ -149,19 +151,34 @@ class ConvForward(DeviceLevel):
                     n = np.prod(top.shape[2:])
                     k = np.prod(weights.shape[1:])
                     # cl.clFinish(queues[0])
-                    for i in range(bottom.shape[0]):
-                        evt = im2col(bottom.ocl_buf,
-                                     col_datas[i % len(queues)].ocl_buf,
-                                     i * bot_offset
-                                     ).on(queues[0], (padded, ),
-                                          wait_for=wait_for)
-                        evt = sgemm(False, False, 1.0, weights, 0, k,
-                                    col_datas[0],
-                                    0, n, 0.0, top, i * top_offset, n, m, n,
-                                    k, queues[0], wait_for=evt)
-                        sgemm(False, False, 1.0, bias, 0, 1,
-                              bias_multiplier, 0, n, 1.0, top, i *
-                              top_offset, n, m, n, 1, queues[0], wait_for=evt)
+                    evts = []
+                    if is_1x1:
+                        [evt.wait() for evt in wait_for]
+                        for i in range(bottom.shape[0]):
+                            evt = sgemm(False, False, 1.0, weights, 0, k,
+                                        bottom, i * bot_offset, n, 0.0,
+                                        top, i * top_offset, n, m, n,
+                                        k, queues[i % len(queues)], wait_for=None)
+                            evt = sgemm(False, False, 1.0, bias, 0, 1,
+                                        bias_multiplier, 0, n, 1.0, top, i *
+                                        top_offset, n, m, n, 1, queues[i % len(queues)], wait_for=evt)
+                            evts.append(evt)
+                    else:
+                        for i in range(bottom.shape[0]):
+                            evt = im2col(bottom.ocl_buf,
+                                        col_datas[i % len(queues)].ocl_buf,
+                                        i * bot_offset
+                                        ).on(queues[i % len(queues)], (padded, ),
+                                            wait_for=wait_for)
+                            evt = sgemm(False, False, 1.0, weights, 0, k,
+                                        col_datas[i % len(queues)],
+                                        0, n, 0.0, top, i * top_offset, n, m, n,
+                                        k, queues[i % len(queues)], wait_for=evt)
+                            evt = sgemm(False, False, 1.0, bias, 0, 1,
+                                        bias_multiplier, 0, n, 1.0, top, i *
+                                        top_offset, n, m, n, 1, queues[i % len(queues)], wait_for=evt)
+                            evts.append(evt)
+                    return evts
                     # for q in queues:
                     #     cl.clFinish(q)
             return ConvLauncher(sources, sinks)

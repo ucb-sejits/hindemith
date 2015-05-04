@@ -9,6 +9,7 @@ from hindemith.operations.array import ArrayAdd, ArraySub, ArrayMul, ArrayDiv, \
     ArrayScalarAdd, ArrayScalarSub, ArrayScalarDiv, ArrayScalarMul
 import pycl as cl
 from graphviz import Digraph
+from profilehooks import profile
 
 
 def get_ast(obj):
@@ -54,7 +55,8 @@ class Compose(object):
             else:
                 processed.append(block_or_statement)
         func_def.body = processed
-        func_def.decorator_list = []
+        self.symbol_table['profile'] = profile
+        func_def.decorator_list = [ast.Name('profile', ast.Load())]
         ast.fix_missing_locations(tree)
         exec(compile(tree, filename="<nofile>", mode="exec"),
              self.symbol_table, self.symbol_table)
@@ -126,11 +128,13 @@ class Compose(object):
                 evts = []
                 for source in kernel.sources:
                     if source.id in kernel_map:
-                        evts.append(kernel_map[source.id])
-                print(evts)
-                evt = kernel.launch(self.symbol_table, evts)
+                        filtered = filter(lambda x: x.status != cl.cl_command_execution_status.CL_COMPLETE,
+                                           kernel_map[source.id])
+                        evts.extend(filtered)
+                        kernel_map[source.id] = filtered
+                evts = kernel.launch(self.symbol_table, evts)
                 for sink in kernel.sinks:
-                    kernel_map[sink.id] = evt
+                    kernel_map[sink.id] = evts
             ret = tuple(self.symbol_table[sink.id] for sink in sinks)
             if len(ret) == 1:
                 return ret[0]

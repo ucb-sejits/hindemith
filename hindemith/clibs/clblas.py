@@ -47,13 +47,14 @@ def sgemm(transA, transB, alpha, A, A_offset, lda, B, B_offset, ldb, beta, C,
         num_wait = 0
     else:
         num_wait = 1
+        wait_for = ct.byref(wait_for)
     done_evt = cl.cl_event()
     err = _clblaslib.clblasSgemm(cblas_row_major, transA, transB, m, n, k,
                                  alpha, A.ocl_buf, ct.c_size_t(A_offset), lda,
                                  B.ocl_buf, ct.c_size_t(B_offset), ldb, beta,
                                  C.ocl_buf, ct.c_size_t(C_offset), ldc,
                                  ct.c_size_t(1), ct.byref(_queue),
-                                 ct.c_size_t(num_wait), ct.byref(wait_for),
+                                 ct.c_size_t(num_wait), wait_for,
                                  ct.byref(done_evt))
     if err:
         raise Exception("clBLAS sgemm returned error code {}".format(err))

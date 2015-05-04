@@ -16,8 +16,8 @@ import time
 prototxt = "models/googlenet/deploy.prototxt"
 caffemodel = "models/googlenet/bvlc_googlenet.caffemodel"
 
-# caffe.set_mode_gpu()
-# caffe.set_device(3)
+caffe.set_mode_gpu()
+caffe.set_device(3)
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 
 
@@ -618,7 +618,7 @@ def forward(data):
 
 
 def get_data():
-    data = hmarray.random((64, 3, 224, 224), _range=(0, 255))
+    data = hmarray.random((10, 3, 224, 224), _range=(0, 255))
     data.sync_ocl()
     return data
 

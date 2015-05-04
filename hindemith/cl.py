@@ -5,6 +5,7 @@ import tempfile
 import subprocess
 import ctypes as ct
 import numpy as np
+import random
 
 
 try:
@@ -17,7 +18,7 @@ context = cl.clCreateContext(devices[-1:])
 if os.environ.get("TRAVIS"):
     queues = [cl.clCreateCommandQueue(context)]
 else:
-    queues = [cl.clCreateCommandQueue(context) for _ in range(10)]
+    queues = [cl.clCreateCommandQueue(context, properties=cl.CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE) for _ in range(32)]
 queue = queues[0]
 hm_dir = os.path.join(tempfile.gettempdir(), "hindemith")
 
@@ -93,7 +94,9 @@ if backend in {"ocl", "opencl", "OCL"}:
                 padded = (global_size + (local_size - 1)) & (~(local_size - 1))
             else:
                 padded = global_size
-            self.kernel(*args).on(queue, (padded,), wait_for=wait_for)
+            evt = self.kernel(*args).on(queues[random.randint(0, len(queues) - 1)],
+                                        (padded,), wait_for=wait_for)
+            return [evt]
 elif backend in {"omp", "openmp"}:
 
     class Kernel(object):

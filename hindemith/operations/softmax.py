@@ -5,6 +5,7 @@ import numpy as np
 import pycl as cl
 from string import Template
 import os
+import ast
 
 backend = os.getenv("HM_BACKEND", "ocl")
 
@@ -102,10 +103,14 @@ if backend in {"ocl", "opencl", "OCL"}:
             div_kern.argtypes = (cl.cl_mem, cl.cl_mem)
 
             class SoftmaxLauncher(object):
+                def __init__(self, sources, sinks):
+                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
+                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+
                 def compile(self):
                     pass
 
-                def launch(self, symbol_table):
+                def launch(self, symbol_table, wait_for):
                     bottom = symbol_table[sources[0]]
                     top = symbol_table[sinks[0]]
                     if count % 16:
@@ -117,19 +122,21 @@ if backend in {"ocl", "opencl", "OCL"}:
                         padded_num_times_spatial = (num_times_spatial + 15) & (~15)
                     else:
                         padded_num_times_spatial = num_times_spatial
-                    copy_kern(bottom.ocl_buf, top.ocl_buf).on(queue,
-                                                              (padded_count,))
-                    max_kern(top.ocl_buf, scale.ocl_buf).on(
-                        queue, (padded_num_times_spatial, ))
-                    sub_kern(scale.ocl_buf, top.ocl_buf).on(queue,
-                                                            (padded_count, ))
-                    exp_kern(top.ocl_buf, top.ocl_buf).on(queue, (padded_count, ))
-                    sum_kern(top.ocl_buf, scale.ocl_buf).on(
-                        queue, (padded_num_times_spatial, ))
-                    div_kern(scale.ocl_buf, top.ocl_buf).on(queue,
-                                                            (padded_count, ))
+                    evt = copy_kern(bottom.ocl_buf, top.ocl_buf).on(
+                        queue, (padded_count,), wait_for=wait_for)
+                    evt = max_kern(top.ocl_buf, scale.ocl_buf).on(
+                        queue, (padded_num_times_spatial, ), wait_for=evt)
+                    evt = sub_kern(scale.ocl_buf, top.ocl_buf).on(
+                        queue, (padded_count, ), wait_for=evt)
+                    evt = exp_kern(top.ocl_buf, top.ocl_buf).on(
+                        queue, (padded_count, ), wait_for=evt)
+                    evt = sum_kern(top.ocl_buf, scale.ocl_buf).on(
+                        queue, (padded_num_times_spatial, ), wait_for=evt)
+                    evt = div_kern(scale.ocl_buf, top.ocl_buf).on(
+                        queue, (padded_count, ), wait_for=evt)
+                    return [evt]
 
-            return SoftmaxLauncher()
+            return SoftmaxLauncher(sources, sinks)
 elif backend in {"omp", "openmp"}:
     class SoftmaxForward(DeviceLevel):
         """

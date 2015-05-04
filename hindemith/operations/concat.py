@@ -1,9 +1,10 @@
 from hindemith.operations.core import DeviceLevel
-from hindemith.cl import context, queue
+from hindemith.cl import context, queues
 import pycl as cl
 from string import Template
 import numpy as np
 import os
+import ast
 
 
 backend = os.getenv("HM_BACKEND", "ocl")
@@ -25,23 +26,31 @@ if backend in {"ocl", "opencl", "OCL"}:
             kernel = program['concat']
             kernel.argtypes = (cl.cl_mem, cl.cl_mem, cl.cl_int, cl.cl_int)
             class Launcher():
+                def __init__(self, sources, sinks):
+                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
+                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+
                 def compile(self):
                     pass
 
-                def launch(self, symbol_table):
+                def launch(self, symbol_table, wait_for):
                     top = symbol_table[sinks[0]]
                     bots = [symbol_table[b] for b in bottoms]
-                    for n in range(top.shape[0]):
-                        top_offset = n * np.prod(top.shape[1:])
-                        for i in range(len(bottoms)):
-                            bot_offset = n * np.prod(bots[i].shape[1:])
-                            count = np.prod(bots[i].shape[1:])
-                            kernel(bots[i].ocl_buf, top.ocl_buf,
-                                   top_offset, bot_offset).on(queue, (count, ))
-                            top_offset += np.prod(bots[i].shape[1:])
+                    evts = []
+                    concat_off = 0
+                    for i in range(len(bottoms)):
+                        count = np.prod(bots[i].shape[1:])
+                        for n in range(bots[i].shape[0]):
+                            top_offset = n * np.prod(top.shape[1:]) + concat_off * np.prod(top.shape[2:])
+                            evt = kernel(
+                                bots[i].ocl_buf, top.ocl_buf, top_offset, n * count).on(
+                                    queues[n % len(queues)], (count, ), wait_for=wait_for)
+                            evts.append(evt)
+                        concat_off += bots[i].shape[1]
+                    return evts
 
 
-            return Launcher()
+            return Launcher(sources, sinks)
 
 elif backend in {"omp", "openmp"}:
     class ConcatForward(DeviceLevel):

@@ -4,6 +4,7 @@ from string import Template
 import pycl as cl
 import numpy as np
 import os
+import ast
 backend = os.getenv("HM_BACKEND", "ocl")
 
 
@@ -89,10 +90,14 @@ if backend in {"ocl", "opencl", "OCL"}:
             compute_kern.argtypes = (cl.cl_mem, cl.cl_mem, cl.cl_mem)
 
             class LrnLauncher(object):
+                def __init__(self, sources, sinks):
+                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
+                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+
                 def compile(self):
                     pass
 
-                def launch(self, symbol_table):
+                def launch(self, symbol_table, wait_for):
                     bottom = symbol_table[sources[0]]
                     top = symbol_table[sinks[0]]
                     scale = symbol_table[sinks[1]]
@@ -100,14 +105,15 @@ if backend in {"ocl", "opencl", "OCL"}:
                         padded = (fill_global[0] + 15) & (~15)
                     else:
                         padded = fill_global[0]
-                    fill_kern(bottom.ocl_buf, scale.ocl_buf).on(queue, (padded,))
+                    evt = fill_kern(bottom.ocl_buf, scale.ocl_buf).on(queue, (padded,), wait_for=wait_for)
                     if compute_global[0] % 16:
                         padded = (compute_global[0] + 15) & (~15)
                     else:
                         padded = compute_global[0]
-                    compute_kern(bottom.ocl_buf, scale.ocl_buf,
-                                 top.ocl_buf).on(queue, (padded,))
-            return LrnLauncher()
+                    evt = compute_kern(bottom.ocl_buf, scale.ocl_buf,
+                                       top.ocl_buf).on(queue, (padded,), wait_for=evt)
+                    return [evt]
+            return LrnLauncher(sources, sinks)
 elif backend in {"omp", "openmp"}:
     class LrnForward(DeviceLevel):
         """
@@ -181,6 +187,10 @@ elif backend in {"omp", "openmp"}:
             compute_kern = lib.LRNComputeOutput
 
             class LrnLauncher(object):
+                def __init__(self, sources, sinks):
+                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
+                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+
                 def compile(self):
                     pass
 
@@ -196,7 +206,7 @@ elif backend in {"omp", "openmp"}:
                         [bottom, scale, top])
                     fill_kern(bottom, scale)
                     compute_kern(bottom, scale, top)
-            return LrnLauncher()
+            return LrnLauncher(sources, sinks)
 
 
 class LrnBackward(ElementLevel):
