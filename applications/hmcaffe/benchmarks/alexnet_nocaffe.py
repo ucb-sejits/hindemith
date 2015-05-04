@@ -1,22 +1,44 @@
 import os
 
 os.environ["HM_BACKEND"] = "omp"
-from hindemith.types import hmarray
-from hindemith.operations.conv import ConvForward
-from hindemith.operations.relu import ReluForward
-from hindemith.operations.pool import PoolForward
-from hindemith.operations.lrn import LrnForward
-from hindemith.operations.softmax import SoftmaxForward
-from hindemith.core import compose
-import caffe
-import numpy as np
-import time
+from hindemith.types import hmarray                      # noqa
+from hindemith.operations.conv import ConvForward        # noqa
+from hindemith.operations.relu import ReluForward        # noqa
+from hindemith.operations.pool import PoolForward        # noqa
+from hindemith.operations.lrn import LrnForward          # noqa
+from hindemith.operations.softmax import SoftmaxForward  # noqa
+from hindemith.core import compose                       # noqa
+# import caffe                                             # noqa
+import numpy as np                                       # noqa
+import time                                              # noqa
+import hmcaffe.proto.caffe_pb2 as pb                     # noqa
+from google.protobuf import text_format
 
 prototxt = "models/alexnet-ng/deploy.prototxt"
 caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
-caffe.set_mode_cpu()
-caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
+
+class CaffeNet(object):
+    def __init__(self, prototxt, caffemodel):
+        self.params = {}
+        proto_param = pb.NetParameter()
+        with open(prototxt, "rb") as _file:
+            text_format.Merge(_file.read(), proto_param)
+        net_param = pb.NetParameter()
+        with open(caffemodel, "rb") as _file:
+            net_param.ParseFromString(_file.read())
+
+        for layer in net_param.layers:
+            if len(layer.blobs):
+                self.params[layer.name] = [
+                    np.array(blob) for blob in layer.blobs
+                ]
+
+caffe_net = CaffeNet(prototxt, caffemodel)
+
+import IPython  # noqa
+IPython.embed()
+exit()
 
 conv1_filters = caffe_net.params['conv1'][0].data.view(hmarray)
 conv1_bias = caffe_net.params['conv1'][1].data.view(hmarray)
