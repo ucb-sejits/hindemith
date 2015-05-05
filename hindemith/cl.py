@@ -23,26 +23,33 @@ if backend in {"ocl", "opencl", "OCL"}:
     if os.environ.get("TRAVIS"):
         queues = [cl.clCreateCommandQueue(context)]
     else:
-        queues = [cl.clCreateCommandQueue(context, properties=cl.CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE) for _ in range(32)]
+        queues = [
+            cl.clCreateCommandQueue(
+                context #,
+                #properties=cl.CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE
+            ) for _ in range(8)
+        ]
     queue = queues[0]
     hm_dir = os.path.join(tempfile.gettempdir(), "hindemith")
-    
+
     if not os.path.exists(hm_dir):
         os.mkdir(hm_dir)
     unique_file_id = -1
-    
-    def hm_compile_and_load(_file):
-        file_path = os.path.join(hm_dir, "temp_file.c")
-        with open(file_path, 'w') as f:
-            f.write(_file)
-        global unique_file_id
-        unique_file_id += 1
-        so_name = "compiled{}.so".format(unique_file_id)
-        so_path = os.path.join(hm_dir, so_name)
-        compile_cmd = "gcc -shared -std=gnu99 -fPIC -fopenmp -o {} {}".format(so_path, file_path)
-        subprocess.check_call(compile_cmd, shell=True)
-        lib = ct.cdll.LoadLibrary(so_path)
-        return lib
+
+
+def hm_compile_and_load(_file):
+    file_path = os.path.join(hm_dir, "temp_file.c")
+    with open(file_path, 'w') as f:
+        f.write(_file)
+    global unique_file_id
+    unique_file_id += 1
+    so_name = "compiled{}.so".format(unique_file_id)
+    so_path = os.path.join(hm_dir, so_name)
+    flags = "-shared -std=gnu99 -fPIC -fopenmp"
+    compile_cmd = "gcc {} -o {} {}".format(flags, so_path, file_path)
+    subprocess.check_call(compile_cmd, shell=True)
+    lib = ct.cdll.LoadLibrary(so_path)
+    return lib
 
 
 if backend in {"ocl", "opencl", "OCL"}:

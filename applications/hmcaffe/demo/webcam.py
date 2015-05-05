@@ -15,7 +15,7 @@ import time
 prototxt = "models/alexnet-ng/deploy.prototxt"
 caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
-caffe.set_mode_gpu()
+# caffe.set_mode_gpu()
 # caffe.set_device(2)
 # caffe.set_mode_cpu()
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
@@ -122,29 +122,48 @@ def forward(data):
     prob = SoftmaxForward(fc8)
     return prob
 
-cap = cv2.VideoCapture(0)
 transformer = caffe.io.Transformer(
     {'data': caffe_net.blobs['data'].data.shape})
 transformer.set_mean(
     'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
 
 transformer.set_transpose('data', (2, 0, 1))
-transformer.set_channel_swap('data', (2, 1, 0))
-transformer.set_raw_scale('data', 255.0)
+# transformer.set_channel_swap('data', (2, 1, 0))
+# orig_frame = caffe.io.load_image('data/cat.jpg')
+# transformer.set_raw_scale('data', 255.0)
 
+with open('data/ilsvrc12/synset_words.txt', 'rb') as _file:
+    labels = _file.read().splitlines()
+
+
+cap = cv2.VideoCapture(0)
+cap.set(3, 256)
+cap.set(4, 256)
+pre_sample = np.array([None])
 while(True):
     # Capture frame-by-frame
-    ret, frame = cap.read()
+    ret, orig_frame = cap.read()
 
-    # Our operations on the frame come here
+    # pre_sample[0] = orig_frame
+    # input_ = caffe.io.oversample(pre_sample, np.array([227, 227]))
+
+    # data = np.asarray([
+    #     transformer.preprocess('data', i) for i in input_
+    # ]).view(hmarray)
     data = np.asarray([
-        transformer.preprocess('data', data),
+        transformer.preprocess('data', orig_frame)
     ]).view(hmarray)
     prob = forward(data)
-    print("Prediction", np.argmax(prob))
+    prob.sync_host()
+    # prob = prob.reshape(1, 10, 1000)
+    # prob = prob.mean(1)
+    top_5 = np.argsort(prob[0])[-5:]
+    print("Predictions")
+    for index in top_5:
+        print(labels[index])
 
     # Display the resulting frame
-    cv2.imshow('frame', frame)
+    cv2.imshow('frame', orig_frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 

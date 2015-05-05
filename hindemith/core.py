@@ -12,7 +12,7 @@ backend = os.getenv("HM_BACKEND", "ocl")
 if backend in {"ocl", "opencl", "OCL"}:
     import pycl as cl
     from hindemith.cl import queue
-try: 
+try:
     from graphviz import Digraph
     from profilehooks import profile
 except ImportError:
@@ -62,7 +62,7 @@ class Compose(object):
             else:
                 processed.append(block_or_statement)
         func_def.body = processed
-        self.symbol_table['profile'] = profile
+        # self.symbol_table['profile'] = profile
         # func_def.decorator_list = [ast.Name('profile', ast.Load())]
         func_def.decorator_list = []
         ast.fix_missing_locations(tree)
