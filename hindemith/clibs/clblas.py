@@ -2,7 +2,8 @@ import ctypes as ct
 import pycl as cl
 import os
 
-from hindemith.cl import queue
+from hindemith.cl import queues
+import random
 
 try:
     from sys import platform as _platform
@@ -28,10 +29,21 @@ _clblaslib.clblasSgemm.argtypes = (
 )
 
 
+def make_event_array(events):
+    if isinstance(events, cl.cl_event):
+        events = [events]
+    valid_events = [e for e in events if e]
+    numevents = len(valid_events)
+    event_array = (cl.cl_event * numevents)()
+    for i, e in enumerate(valid_events):
+        event_array[i] = e
+    return numevents, event_array
+
+
 def sgemm(transA, transB, alpha, A, A_offset, lda, B, B_offset, ldb, beta, C,
           C_offset, ldc, m, n, k, _queue=None, wait_for=None):
     if _queue is None:
-        _queue = queue
+        _queue = queues[random.randint(0, len(queues) - 1)]
     cblas_row_major = ct.c_int(0)
     transA = ct.c_int(1 if transA else 0)
     transB = ct.c_int(1 if transB else 0)
@@ -46,8 +58,7 @@ def sgemm(transA, transB, alpha, A, A_offset, lda, B, B_offset, ldb, beta, C,
     if wait_for is None:
         num_wait = 0
     else:
-        num_wait = 1
-        wait_for = ct.byref(wait_for)
+        num_wait, wait_for = make_event_array(wait_for)
     done_evt = cl.cl_event()
     err = _clblaslib.clblasSgemm(cblas_row_major, transA, transB, m, n, k,
                                  alpha, A.ocl_buf, ct.c_size_t(A_offset), lda,

@@ -5,9 +5,9 @@ from hindemith.operations.pool import PoolForward, AvePoolForward
 from hindemith.operations.lrn import LrnForward
 from hindemith.operations.softmax import SoftmaxForward
 from hindemith.operations.concat import ConcatForward
+from hindemith.operations.inner_product import InnerProductForward
 from hindemith.core import compose
 from hindemith.cl import queue
-from hindemith.clibs.clblas import sgemm
 import pycl as cl
 import caffe
 import numpy as np
@@ -316,9 +316,6 @@ pool5_7x7_s1 = hmarray.zeros(caffe_net.blobs['pool5/7x7_s1'].data.shape)
 
 loss3_classifier_filters = caffe_net.params['loss3/classifier'][0].data.view(hmarray)
 loss3_classifier_bias = caffe_net.params['loss3/classifier'][1].data.view(hmarray)
-loss3_classifier_bias_multiplier = hmarray((1, pool5_7x7_s1.shape[0]))
-loss3_classifier_bias_multiplier.fill(1)
-loss3_classifier_bias_multiplier.sync_ocl()
 loss3_classifier = hmarray.zeros(caffe_net.blobs['loss3/classifier'].data.shape)
 
 prob = hmarray.zeros(caffe_net.blobs['prob'].data.shape)
@@ -605,13 +602,7 @@ def forward(data):
 
     pool5_7x7_s1= AvePoolForward(inception_5b_output, kernel_size=(7, 7), padding=(0, 0), stride=(1, 1))
 
-    N = loss3_classifier.shape[1]
-    K = np.prod(pool5_7x7_s1.shape[1:])
-    M = pool5_7x7_s1.shape[0]
-    sgemm(False, True, 1.0, pool5_7x7_s1, 0, K, loss3_classifier_filters, 0, K, 0.0,
-          loss3_classifier, 0, N, M, N, K)
-    sgemm(False, False, 1.0, loss3_classifier_bias_multiplier, 0, 1, loss3_classifier_bias, 0, N,
-          1.0, loss3_classifier, 0, N, M, N, 1)
+    loss3_classifier = InnerProductForward(pool5_7x7_s1, loss3_classifier_filters, loss3_classifier_bias)
 
     prob = SoftmaxForward(loss3_classifier)
     return prob

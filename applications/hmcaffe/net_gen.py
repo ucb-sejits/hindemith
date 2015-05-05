@@ -72,9 +72,6 @@ def gen_fc_buffers(layer_param):
     return Template("""
 ${name}_filters = caffe_net.params['${name}'][0].data.view(hmarray)
 ${name}_bias = caffe_net.params['${name}'][1].data.view(hmarray)
-${name}_bias_multiplier = hmarray((1, ${bottom}.shape[0]))
-${name}_bias_multiplier.fill(1)
-${name}_bias_multiplier.sync_ocl()
 $name = hmarray.zeros(caffe_net.blobs['${name}'].data.shape)
     """).substitute(name=name, bottom=bottom)
 
@@ -84,13 +81,7 @@ def gen_fc_forward(layer_param):
     bottom = layer_param.bottom[0]
     top = layer_param.top[0]
     return Template("""
-    N = ${top}.shape[1]
-    K = np.prod(${bottom}.shape[1:])
-    M = ${bottom}.shape[0]
-    sgemm(False, True, 1.0, ${bottom}, 0, K, ${name}_filters, 0, K, 0.0,
-          ${top}, 0, N, M, N, K)
-    sgemm(False, False, 1.0, ${name}_bias_multiplier, 0, 1, ${name}_bias, 0, N,
-          1.0, ${top}, 0, N, M, N, 1)
+    $top = InnerProductForward($bottom, ${name}_weights, ${name}_bias)
     """).substitute(name=name, bottom=bottom, top=top)
 
 
@@ -191,9 +182,9 @@ from hindemith.operations.pool import PoolForward
 from hindemith.operations.lrn import LrnForward
 from hindemith.operations.softmax import SoftmaxForward
 from hindemith.operations.concat import ConcatForward
+from hindemith.operations.inner_product import InnerProductForward
 from hindemith.core import compose
 from hindemith.cl import queue
-from hindemith.clibs.clblas import sgemm
 import pycl as cl
 import caffe
 import numpy as np

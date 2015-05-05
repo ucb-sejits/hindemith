@@ -155,12 +155,11 @@ class ConvForward(DeviceLevel):
                     # cl.clFinish(queues[0])
                     evts = []
                     if is_1x1:
-                        [evt.wait() for evt in wait_for]
                         for i in range(bottom.shape[0]):
                             evt = sgemm(False, False, 1.0, weights, 0, k,
                                         bottom, i * bot_offset, n, 0.0,
                                         top, i * top_offset, n, m, n,
-                                        k, queues[i % len(queues)], wait_for=None)
+                                        k, queues[i % len(queues)], wait_for=wait_for)
                             evt = sgemm(False, False, 1.0, bias, 0, 1,
                                         bias_multiplier, 0, n, 1.0, top, i *
                                         top_offset, n, m, n, 1, queues[i % len(queues)], wait_for=evt)

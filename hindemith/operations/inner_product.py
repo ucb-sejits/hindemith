@@ -30,9 +30,8 @@ class InnerProductForward(DeviceLevel):
                 weights = symbol_table[sources[1]]
                 bias = symbol_table[sources[2]]
                 top = symbol_table[sinks[0]]
-                cl.clWaitForEvents(*wait_for)
                 evt = sgemm(False, True, 1.0, bottom, 0, K, weights,
-                            0, K, 0.0, top, 0, N, M, N, K)
+                            0, K, 0.0, top, 0, N, M, N, K, wait_for=wait_for)
                 evt = sgemm(False, False, 1.0, bias_multiplier, 0,
                             1, bias, 0, N, 1.0, top, 0, N, M, N,
                             1, wait_for=evt)
