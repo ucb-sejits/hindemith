@@ -1,11 +1,12 @@
 from hindemith.operations.core import DeviceLevel, ElementLevel
-from hindemith.cl import context, queue, hm_compile_and_load
 from string import Template
-import pycl as cl
 import numpy as np
 import os
 import ast
 backend = os.getenv("HM_BACKEND", "ocl")
+if backend in {"ocl", "opencl", "OCL"}:
+    from hindemith.cl import context, queue, hm_compile_and_load
+    import pycl as cl
 
 
 if backend in {"ocl", "opencl", "OCL"}:

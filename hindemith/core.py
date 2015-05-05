@@ -3,11 +3,15 @@ import inspect
 import sys
 import textwrap
 from hindemith.operations.core import HMOperation, DeviceLevel
-from hindemith.cl import Kernel, queue
+from hindemith.cl import Kernel
 from hindemith.types import hmarray
 from hindemith.operations.array import ArrayAdd, ArraySub, ArrayMul, ArrayDiv, \
     ArrayScalarAdd, ArrayScalarSub, ArrayScalarDiv, ArrayScalarMul
-import pycl as cl
+import os
+backend = os.getenv("HM_BACKEND", "ocl")
+if backend in {"ocl", "opencl", "OCL"}:
+    import pycl as cl
+    from hindemith.cl import queue
 try: 
     from graphviz import Digraph
     from profilehooks import profile

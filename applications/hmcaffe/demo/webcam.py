@@ -1,3 +1,5 @@
+import numpy as np
+import cv2
 from hindemith.types import hmarray
 from hindemith.operations.conv import ConvForward
 from hindemith.operations.relu import ReluForward
@@ -6,8 +8,6 @@ from hindemith.operations.lrn import LrnForward
 from hindemith.operations.softmax import SoftmaxForward
 from hindemith.operations.inner_product import InnerProductForward
 from hindemith.core import compose
-from hindemith.cl import queue
-import pycl as cl
 import caffe
 import numpy as np
 import time
@@ -15,7 +15,7 @@ import time
 prototxt = "models/alexnet-ng/deploy.prototxt"
 caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
-# caffe.set_mode_gpu()
+caffe.set_mode_gpu()
 # caffe.set_device(2)
 # caffe.set_mode_cpu()
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
@@ -122,71 +122,32 @@ def forward(data):
     prob = SoftmaxForward(fc8)
     return prob
 
-im = caffe.io.load_image('data/cat.jpg')
+cap = cv2.VideoCapture(0)
 transformer = caffe.io.Transformer(
     {'data': caffe_net.blobs['data'].data.shape})
 transformer.set_mean(
     'data', np.load('models/ilsvrc_2012_mean.npy').mean(1).mean(1))
+
 transformer.set_transpose('data', (2, 0, 1))
 transformer.set_channel_swap('data', (2, 1, 0))
 transformer.set_raw_scale('data', 255.0)
 
+while(True):
+    # Capture frame-by-frame
+    ret, frame = cap.read()
 
-def get_data():
-    # data = np.asarray([
-    #     transformer.preprocess('data', im),
-    # ]).view(hmarray)
-    data = hmarray.random((64, 3, 227, 227), _range=(0, 255))
+    # Our operations on the frame come here
+    data = np.asarray([
+        transformer.preprocess('data', data),
+    ]).view(hmarray)
+    prob = forward(data)
+    print("Prediction", np.argmax(prob))
 
-    # data *= hmarray.random((5, 3, 227, 227), _range=(0, 2))
-    # data -= hmarray.random((5, 3, 227, 227), _range=(-20, +20))
-    data.sync_ocl()
-    return data
+    # Display the resulting frame
+    cv2.imshow('frame', frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
 
-num_trials = 3
-hm_time = 0
-caffe_time = 0
-
-# warmup and test correctness
-for _ in range(2):
-    data = get_data()
-    forward(data)
-    caffe_net.forward_all(data=data)
-
-    for blob_name in caffe_net.blobs.keys():
-        blob = globals()[blob_name]
-        blob.sync_host()
-        if "_diff" in blob_name:
-            continue
-        print("Checking blob {}".format(blob_name))
-        caffe_blob = caffe_net.blobs[blob_name].data
-        np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=1)
-    caffe_prob = caffe_net.blobs['prob'].data
-    prob.sync_host()
-    np.testing.assert_array_almost_equal(prob, caffe_prob, decimal=4)
-
-for i in range(num_trials):
-    data = get_data()
-    cl.clFinish(queue)
-    start = time.clock()
-    forward(data)
-    cl.clFinish(queue)
-    hm_time += time.clock() - start
-    start = time.clock()
-    caffe_net.forward_all(data=data)
-    caffe_time += time.clock() - start
-
-    # for blob_name in caffe_net.blobs.keys():
-    #     blob = globals()[blob_name]
-    #     blob.sync_host()
-    #     if "_diff" in blob_name:
-    #         continue
-    #     print("Checking blob {}".format(blob_name))
-    #     caffe_blob = caffe_net.blobs[blob_name].data
-    #     np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=3)
-    # print(np.argmax(prob))
-    # print(np.argmax(caffe_net.blobs['prob'].data))
-print("Hindemith AVG        : {}".format(hm_time / num_trials))
-print("Caffe AVG            : {}".format(caffe_time / num_trials))
-print("Speedup (CAFFE / HM) : {}".format(caffe_time / hm_time))
-print "SUCCESS"
+# When everything done, release the capture
+cap.release()
+cv2.destroyAllWindows()

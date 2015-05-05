@@ -1,8 +1,6 @@
 import numpy as np
 from string import Template
 from hindemith.types import hmarray
-from hindemith.cl import context, queue
-import pycl as cl
 
 
 class HMUndefinedMethodError(NotImplementedError):

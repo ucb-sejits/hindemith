@@ -6,41 +6,45 @@ import subprocess
 import ctypes as ct
 import numpy as np
 import random
-
-
-try:
-    # platforms = cl.clGetPlatformIDs()
-    # devices = cl.clGetDeviceIDs(platforms[1])
-    devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
-except cl.DeviceNotFoundError:
-    devices = cl.clGetDeviceIDs()
-context = cl.clCreateContext(devices[-1:])
-if os.environ.get("TRAVIS"):
-    queues = [cl.clCreateCommandQueue(context)]
-else:
-    queues = [cl.clCreateCommandQueue(context, properties=cl.CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE) for _ in range(32)]
-queue = queues[0]
-hm_dir = os.path.join(tempfile.gettempdir(), "hindemith")
-
-if not os.path.exists(hm_dir):
-    os.mkdir(hm_dir)
-unique_file_id = -1
-
-def hm_compile_and_load(_file):
-    file_path = os.path.join(hm_dir, "temp_file.c")
-    with open(file_path, 'w') as f:
-        f.write(_file)
-    global unique_file_id
-    unique_file_id += 1
-    so_name = "compiled{}.so".format(unique_file_id)
-    so_path = os.path.join(hm_dir, so_name)
-    compile_cmd = "gcc -shared -std=gnu99 -fPIC -fopenmp -o {} {}".format(so_path, file_path)
-    subprocess.check_call(compile_cmd, shell=True)
-    lib = ct.cdll.LoadLibrary(so_path)
-    return lib
+import os
 
 
 backend = os.getenv("HM_BACKEND", "ocl")
+
+
+if backend in {"ocl", "opencl", "OCL"}:
+    try:
+        # platforms = cl.clGetPlatformIDs()
+        # devices = cl.clGetDeviceIDs(platforms[1])
+        devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
+    except cl.DeviceNotFoundError:
+        devices = cl.clGetDeviceIDs()
+    context = cl.clCreateContext(devices[-1:])
+    if os.environ.get("TRAVIS"):
+        queues = [cl.clCreateCommandQueue(context)]
+    else:
+        queues = [cl.clCreateCommandQueue(context, properties=cl.CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE) for _ in range(32)]
+    queue = queues[0]
+    hm_dir = os.path.join(tempfile.gettempdir(), "hindemith")
+    
+    if not os.path.exists(hm_dir):
+        os.mkdir(hm_dir)
+    unique_file_id = -1
+    
+    def hm_compile_and_load(_file):
+        file_path = os.path.join(hm_dir, "temp_file.c")
+        with open(file_path, 'w') as f:
+            f.write(_file)
+        global unique_file_id
+        unique_file_id += 1
+        so_name = "compiled{}.so".format(unique_file_id)
+        so_path = os.path.join(hm_dir, so_name)
+        compile_cmd = "gcc -shared -std=gnu99 -fPIC -fopenmp -o {} {}".format(so_path, file_path)
+        subprocess.check_call(compile_cmd, shell=True)
+        lib = ct.cdll.LoadLibrary(so_path)
+        return lib
+
+
 if backend in {"ocl", "opencl", "OCL"}:
     class Kernel(object):
         def __init__(self, launch_parameters):
