@@ -352,6 +352,10 @@ __kernel void im2col(global const float* data_im, global float* data_col,
         col2im.argtypes = (cl.cl_mem, cl.cl_mem, cl.cl_int)
 
         class ConvLauncher(object):
+            def __init__(self, sources, sinks):
+                self.sources = [ast.Name(s, ast.Load()) for s in sources]
+                self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+
             def compile(self):
                 pass
 
@@ -398,4 +402,4 @@ __kernel void im2col(global const float* data_im, global float* data_col,
                     col2im(col_data.ocl_buf,
                            bottom_diff.ocl_buf, i *
                            bot_offset).on(queue, col2im_global_size)
-        return ConvLauncher()
+        return ConvLauncher(sources, sinks)
