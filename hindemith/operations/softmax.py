@@ -1,13 +1,14 @@
 from hindemith.operations.core import DeviceLevel
 from hindemith.types import hmarray
-from hindemith.cl import context, queue, hm_compile_and_load
 import numpy as np
-import pycl as cl
 from string import Template
 import os
 import ast
 
 backend = os.getenv("HM_BACKEND", "ocl")
+if backend in {"ocl", "opencl", "OCL"}:
+    from hindemith.cl import context, queue, hm_compile_and_load
+    import pycl as cl
 
 
 if backend in {"ocl", "opencl", "OCL"}:

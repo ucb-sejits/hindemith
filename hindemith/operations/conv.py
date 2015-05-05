@@ -1,7 +1,5 @@
 from hindemith.operations.core import DeviceLevel, ElementLevel
 from hindemith.types import hmarray
-from hindemith.clibs.clblas import sgemm, sgemv
-from hindemith.cl import context, queues, hm_compile_and_load
 import numpy as np
 import pycl as cl
 from string import Template
@@ -9,6 +7,9 @@ import os
 import ctypes as ct
 import ast
 backend = os.getenv("HM_BACKEND", "ocl")
+if backend in {"ocl", "opencl", "OCL"}:
+    from hindemith.clibs.clblas import sgemm, sgemv
+    from hindemith.cl import context, queues, hm_compile_and_load
 
 
 class ConvForward(ElementLevel):

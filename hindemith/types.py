@@ -1,8 +1,10 @@
 import numpy as np
 import pycl as cl
 import os
+backend = os.getenv("HM_BACKEND", "ocl")
 
-from hindemith.cl import context, queue
+if backend in {"ocl", "opencl", "OCL"}:
+    from hindemith.cl import context, queue
 
 
 class hmarray(np.ndarray):
@@ -11,10 +13,11 @@ class hmarray(np.ndarray):
                 strides=None, order=None, info=None):
         obj = np.ndarray.__new__(subtype, shape, dtype, buffer,
                                  offset, strides, order)
-        obj.ocl_buf = cl.clCreateBuffer(
-            context, np.prod(shape) * obj.itemsize)
-        obj.host_dirty = False
-        obj.ocl_dirty = False
+        if backend in {"ocl", "opencl", "OCL"}:
+            obj.ocl_buf = cl.clCreateBuffer(
+                context, np.prod(shape) * obj.itemsize)
+            obj.host_dirty = False
+            obj.ocl_dirty = False
         obj.register = None
         return obj
 
@@ -22,29 +25,32 @@ class hmarray(np.ndarray):
         if obj is None:
             return
 
-        if hasattr(obj, 'ocl_buf'):
-            self.ocl_buf = obj.ocl_buf
-            self.host_dirty = obj.host_dirty
-            self.ocl_dirty = obj.ocl_dirty
-        else:
-            buf, evt = cl.buffer_from_ndarray(queue, obj)
-            evt.wait()
-            self.ocl_buf = buf
-            self.host_dirty = False
-            self.ocl_dirty = False
+        if backend in {"ocl", "opencl", "OCL"}:
+            if hasattr(obj, 'ocl_buf'):
+                self.ocl_buf = obj.ocl_buf
+                self.host_dirty = obj.host_dirty
+                self.ocl_dirty = obj.ocl_dirty
+            else:
+                buf, evt = cl.buffer_from_ndarray(queue, obj)
+                evt.wait()
+                self.ocl_buf = buf
+                self.host_dirty = False
+                self.ocl_dirty = False
         self.register = None
 
     def sync_host(self):
-        if os.environ.get("HM_BACKEND") in {'omp', 'openmp'}:
-            return
-        cl.clFinish(queue)
-        _, evt = cl.buffer_to_ndarray(queue, self.ocl_buf, self)
-        evt.wait()
+        if backend in {"ocl", "opencl", "OCL"}:
+            if os.environ.get("HM_BACKEND") in {'omp', 'openmp'}:
+                return
+            cl.clFinish(queue)
+            _, evt = cl.buffer_to_ndarray(queue, self.ocl_buf, self)
+            evt.wait()
 
     def sync_ocl(self):
-        cl.clFinish(queue)
-        _, evt = cl.buffer_from_ndarray(queue, self, self.ocl_buf)
-        evt.wait()
+        if backend in {"ocl", "opencl", "OCL"}:
+            cl.clFinish(queue)
+            _, evt = cl.buffer_from_ndarray(queue, self, self.ocl_buf)
+            evt.wait()
 
     @staticmethod
     def random(shape, _range=(0, 1), dtype=np.float32):
