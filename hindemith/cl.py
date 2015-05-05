@@ -30,11 +30,12 @@ if backend in {"ocl", "opencl", "OCL"}:
             ) for _ in range(8)
         ]
     queue = queues[0]
-    hm_dir = os.path.join(tempfile.gettempdir(), "hindemith")
 
-    if not os.path.exists(hm_dir):
-        os.mkdir(hm_dir)
-    unique_file_id = -1
+hm_dir = os.path.join(tempfile.gettempdir(), "hindemith")
+
+if not os.path.exists(hm_dir):
+    os.mkdir(hm_dir)
+unique_file_id = -1
 
 
 def hm_compile_and_load(_file):
