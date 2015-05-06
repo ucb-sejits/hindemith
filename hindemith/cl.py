@@ -14,9 +14,9 @@ backend = os.getenv("HM_BACKEND", "ocl")
 
 if backend in {"ocl", "opencl", "OCL"}:
     try:
-        # platforms = cl.clGetPlatformIDs()
-        # devices = cl.clGetDeviceIDs(platforms[1])
-        devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
+        platforms = cl.clGetPlatformIDs()
+        devices = cl.clGetDeviceIDs(platforms[1])
+        # devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
     except cl.DeviceNotFoundError:
         devices = cl.clGetDeviceIDs()
     context = cl.clCreateContext(devices[-1:])
@@ -25,10 +25,15 @@ if backend in {"ocl", "opencl", "OCL"}:
     else:
         queues = [
             cl.clCreateCommandQueue(
-                context #,
-                #properties=cl.CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE
-            ) for _ in range(32)
+                context
+            ) for _ in range(10)
         ]
+        # queues = [
+        #     cl.clCreateCommandQueue(
+        #         context,
+        #         properties=cl.CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE
+        #     ) for _ in range(10)
+        # ]
     queue = queues[0]
 
 hm_dir = os.path.join(tempfile.gettempdir(), "hindemith")

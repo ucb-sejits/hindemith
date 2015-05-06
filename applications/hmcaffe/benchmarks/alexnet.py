@@ -6,17 +6,17 @@ from hindemith.operations.lrn import LrnForward
 from hindemith.operations.softmax import SoftmaxForward
 from hindemith.operations.inner_product import InnerProductForward
 from hindemith.core import compose
-from hindemith.cl import queue
+from hindemith.cl import queues
 import pycl as cl
 import caffe
 import numpy as np
 import time
 
-prototxt = "models/alexnet-ng/deploy.prototxt"
+prototxt = "benchmarks/alexnet.prototxt"
 caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
 caffe.set_mode_gpu()
-caffe.set_device(1)
+caffe.set_device(2)
 # caffe.set_mode_cpu()
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 
@@ -136,14 +136,14 @@ def get_data():
     # data = np.asarray([
     #     transformer.preprocess('data', im),
     # ]).view(hmarray)
-    data = hmarray.random((128, 3, 227, 227), _range=(0, 255))
+    data = hmarray.random((10, 3, 227, 227), _range=(0, 255))
 
     # data *= hmarray.random((5, 3, 227, 227), _range=(0, 2))
     # data -= hmarray.random((5, 3, 227, 227), _range=(-20, +20))
     data.sync_ocl()
     return data
 
-num_trials = 3
+num_trials = 5
 hm_time = 0
 caffe_time = 0
 
@@ -153,24 +153,23 @@ for _ in range(2):
     forward(data)
     caffe_net.forward_all(data=data)
 
-    for blob_name in caffe_net.blobs.keys():
-        blob = globals()[blob_name]
-        blob.sync_host()
-        if "_diff" in blob_name:
-            continue
-        print("Checking blob {}".format(blob_name))
-        caffe_blob = caffe_net.blobs[blob_name].data
-        np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=1)
-    caffe_prob = caffe_net.blobs['prob'].data
-    prob.sync_host()
-    np.testing.assert_array_almost_equal(prob, caffe_prob, decimal=4)
+    # for blob_name in caffe_net.blobs.keys():
+    #     blob = globals()[blob_name]
+    #     blob.sync_host()
+    #     if "_diff" in blob_name:
+    #         continue
+    #     print("Checking blob {}".format(blob_name))
+    #     caffe_blob = caffe_net.blobs[blob_name].data
+    #     np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=1)
+    # caffe_prob = caffe_net.blobs['prob'].data
+    # prob.sync_host()
+    # np.testing.assert_array_almost_equal(prob, caffe_prob, decimal=4)
 
+data = get_data()
+cl.clFinish(queues[0])
 for i in range(num_trials):
-    data = get_data()
-    cl.clFinish(queue)
     start = time.clock()
     forward(data)
-    cl.clFinish(queue)
     hm_time += time.clock() - start
     start = time.clock()
     caffe_net.forward_all(data=data)

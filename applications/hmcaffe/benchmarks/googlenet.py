@@ -13,7 +13,7 @@ import caffe
 import numpy as np
 import time
 
-prototxt = "models/googlenet/deploy.prototxt"
+prototxt = "benchmarks/googlenet.prototxt"
 caffemodel = "models/googlenet/bvlc_googlenet.caffemodel"
 
 caffe.set_mode_gpu()
@@ -609,7 +609,7 @@ def forward(data):
 
 
 def get_data():
-    data = hmarray.random((32, 3, 224, 224), _range=(0, 255))
+    data = hmarray.random((1, 3, 224, 224), _range=(0, 255))
     data.sync_ocl()
     return data
 
@@ -623,12 +623,11 @@ for _ in range(2):
     forward(data)
     caffe_net.forward_all(data=data)
 
+data = get_data()
+cl.clFinish(queue)
 for i in range(num_trials):
-    data = get_data()
-    cl.clFinish(queue)
     start = time.clock()
     forward(data)
-    cl.clFinish(queue)
     hm_time += time.clock() - start
     start = time.clock()
     caffe_net.forward_all(data=data)
@@ -649,7 +648,7 @@ for layer in net_param.layer:
         blob.sync_host()
         print("Checking blob {}".format(blob_name))
         caffe_blob = caffe_net.blobs[blob_name].data
-        np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=2)
+        np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=1)
 caffe_prob = caffe_net.blobs['prob'].data
 prob.sync_host()
 np.testing.assert_array_almost_equal(prob, caffe_prob, decimal=3)
