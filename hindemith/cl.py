@@ -14,9 +14,9 @@ backend = os.getenv("HM_BACKEND", "ocl")
 
 if backend in {"ocl", "opencl", "OCL"}:
     try:
-        platforms = cl.clGetPlatformIDs()
-        devices = cl.clGetDeviceIDs(platforms[1])
-        # devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
+        # platforms = cl.clGetPlatformIDs()
+        # devices = cl.clGetDeviceIDs(platforms[1])
+        devices = cl.clGetDeviceIDs(device_type=cl.CL_DEVICE_TYPE_GPU)
     except cl.DeviceNotFoundError:
         devices = cl.clGetDeviceIDs()
     context = cl.clCreateContext(devices[-1:])
@@ -26,7 +26,7 @@ if backend in {"ocl", "opencl", "OCL"}:
         queues = [
             cl.clCreateCommandQueue(
                 context
-            ) for _ in range(10)
+            ) for _ in range(32)
         ]
         # queues = [
         #     cl.clCreateCommandQueue(
