@@ -27,7 +27,7 @@ if backend in {"ocl", "opencl", "OCL"}:
             cl.clCreateCommandQueue(
                 context #,
                 #properties=cl.CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE
-            ) for _ in range(64)
+            ) for _ in range(32)
         ]
     queue = queues[0]
 

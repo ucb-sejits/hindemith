@@ -11,13 +11,18 @@ from hindemith.core import compose
 import caffe
 import numpy as np
 import time
+import argparse
+parser = argparse.ArgumentParser(description='Classify an image')
+parser.add_argument('image')
+
+args = parser.parse_args()
 
 prototxt = "models/alexnet-ng/deploy.prototxt"
 caffemodel = "models/alexnet-ng/alexnet-ng.caffemodel"
 
 # caffe.set_mode_gpu()
 # caffe.set_device(2)
-# caffe.set_mode_cpu()
+caffe.set_mode_cpu()
 caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 
 conv1_filters = caffe_net.params['conv1'][0].data.view(hmarray)
@@ -136,37 +141,20 @@ with open('data/ilsvrc12/synset_words.txt', 'rb') as _file:
     labels = _file.read().splitlines()
 
 
-cap = cv2.VideoCapture(0)
-cap.set(3, 256)
-cap.set(4, 256)
-pre_sample = np.array([None])
-while(True):
-    # Capture frame-by-frame
-    ret, orig_frame = cap.read()
+# cap = cv2.VideoCapture(0)
+# cap.set(3, 256)
+# cap.set(4, 256)
 
-    # pre_sample[0] = orig_frame
-    # input_ = caffe.io.oversample(pre_sample, np.array([227, 227]))
-
-    # data = np.asarray([
-    #     transformer.preprocess('data', i) for i in input_
-    # ]).view(hmarray)
-    data = np.asarray([
-        transformer.preprocess('data', orig_frame)
-    ]).view(hmarray)
-    prob = forward(data)
-    prob.sync_host()
-    # prob = prob.reshape(1, 10, 1000)
-    # prob = prob.mean(1)
-    top_5 = np.argsort(prob[0])[-5:]
-    print("Predictions")
-    for index in top_5:
-        print(labels[index])
-
-    # Display the resulting frame
-    cv2.imshow('frame', orig_frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# When everything done, release the capture
-cap.release()
-cv2.destroyAllWindows()
+orig_frame = cv2.imread(args.image)
+frame = cv2.resize(orig_frame, (256, 256))
+data = np.asarray([
+    transformer.preprocess('data', frame)
+]).view(hmarray)
+prob = forward(data)
+prob.sync_host()
+# prob = prob.reshape(1, 10, 1000)
+# prob = prob.mean(1)
+top_5 = np.argsort(prob[0])[-5:]
+print("Predictions")
+for index in top_5:
+    print(labels[index])
