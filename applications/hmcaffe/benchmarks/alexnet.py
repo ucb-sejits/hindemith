@@ -136,14 +136,14 @@ def get_data():
     # data = np.asarray([
     #     transformer.preprocess('data', im),
     # ]).view(hmarray)
-    data = hmarray.random((10, 3, 227, 227), _range=(0, 255))
+    data = hmarray.random((64, 3, 227, 227), _range=(0, 255))
 
     # data *= hmarray.random((5, 3, 227, 227), _range=(0, 2))
     # data -= hmarray.random((5, 3, 227, 227), _range=(-20, +20))
     data.sync_ocl()
     return data
 
-num_trials = 5
+num_trials = 10
 hm_time = 0
 caffe_time = 0
 
@@ -153,17 +153,17 @@ for _ in range(2):
     forward(data)
     caffe_net.forward_all(data=data)
 
-    # for blob_name in caffe_net.blobs.keys():
-    #     blob = globals()[blob_name]
-    #     blob.sync_host()
-    #     if "_diff" in blob_name:
-    #         continue
-    #     print("Checking blob {}".format(blob_name))
-    #     caffe_blob = caffe_net.blobs[blob_name].data
-    #     np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=1)
-    # caffe_prob = caffe_net.blobs['prob'].data
-    # prob.sync_host()
-    # np.testing.assert_array_almost_equal(prob, caffe_prob, decimal=4)
+    for blob_name in caffe_net.blobs.keys():
+        blob = globals()[blob_name]
+        blob.sync_host()
+        if "_diff" in blob_name:
+            continue
+        print("Checking blob {}".format(blob_name))
+        caffe_blob = caffe_net.blobs[blob_name].data
+        np.testing.assert_array_almost_equal(blob, caffe_blob, decimal=1)
+    caffe_prob = caffe_net.blobs['prob'].data
+    prob.sync_host()
+    np.testing.assert_array_almost_equal(prob, caffe_prob, decimal=4)
 
 data = get_data()
 cl.clFinish(queues[0])

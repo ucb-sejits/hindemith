@@ -609,7 +609,7 @@ def forward(data):
 
 
 def get_data():
-    data = hmarray.random((1, 3, 224, 224), _range=(0, 255))
+    data = hmarray.random((32, 3, 224, 224), _range=(0, 255))
     data.sync_ocl()
     return data
 

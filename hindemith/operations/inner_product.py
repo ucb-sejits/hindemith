@@ -34,7 +34,7 @@ class InnerProductForward(DeviceLevel):
                     bottom = symbol_table[sources[0]]
                     weights = symbol_table[sources[1]]
                     bias = symbol_table[sources[2]]
-                    top = symbol_table[sinks[0]]
+                    top = symbol_table[sinks[0]].T.view(hmarray)
                     evt = sgemm(False, True, 1.0, bottom, 0, K, weights,
                                 0, K, 0.0, top, 0, N, M, N, K, wait_for=wait_for)
                     evt = sgemm(False, False, 1.0, bias_multiplier, 0,

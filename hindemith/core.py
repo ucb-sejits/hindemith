@@ -136,10 +136,7 @@ class Compose(object):
                 evts = []
                 for source in kernel.sources:
                     if source.id in kernel_map:
-                        filtered = filter(lambda x: x.status != cl.cl_command_execution_status.CL_COMPLETE,
-                                           kernel_map[source.id])
-                        evts.extend(filtered)
-                        kernel_map[source.id] = filtered
+                        evts.extend(kernel_map[source.id])
                 evts = kernel.launch(self.symbol_table, evts)
                 for sink in kernel.sinks:
                     kernel_map[sink.id] = evts

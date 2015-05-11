@@ -26,7 +26,7 @@ if backend in {"ocl", "opencl", "OCL"}:
         queues = [
             cl.clCreateCommandQueue(
                 context
-            ) for _ in range(32)
+            ) for _ in range(8)
         ]
         # queues = [
         #     cl.clCreateCommandQueue(
