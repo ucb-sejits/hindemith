@@ -7,8 +7,10 @@ import ast
 
 backend = os.getenv("HM_BACKEND", "ocl")
 if backend in {"ocl", "opencl", "OCL"}:
-    from hindemith.cl import context, queue, hm_compile_and_load
+    from hindemith.cl import context, queue
     import pycl as cl
+
+from hindemith.cl import hm_compile_and_load
 
 
 if backend in {"ocl", "opencl", "OCL"}:
@@ -222,10 +224,14 @@ elif backend in {"omp", "openmp"}:
             div_kern = lib.kernel_channel_div
 
             class SoftmaxLauncher(object):
+                def __init__(self, sources, sinks):
+                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
+                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+
                 def compile(self):
                     pass
 
-                def launch(self, symbol_table):
+                def launch(self, symbol_table, wait_for):
                     bottom = symbol_table[sources[0]]
                     top = symbol_table[sinks[0]]
                     copy_kern.argtypes = tuple(
@@ -253,4 +259,4 @@ elif backend in {"omp", "openmp"}:
                         [scale, top])
                     div_kern(scale, top)
 
-            return SoftmaxLauncher()
+            return SoftmaxLauncher(sources, sinks)

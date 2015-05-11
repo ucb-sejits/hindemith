@@ -10,6 +10,8 @@ backend = os.getenv("HM_BACKEND", "ocl")
 if backend in {"ocl", "opencl", "OCL"}:
     from hindemith.clibs.clblas import sgemm, sgemv
     from hindemith.cl import context, queues, hm_compile_and_load
+else:
+    from hindemith.cl import hm_compile_and_load
 
 
 class ConvForward(ElementLevel):
@@ -185,6 +187,7 @@ class ConvForward(DeviceLevel):
                     #     cl.clFinish(q)
             return ConvLauncher(sources, sinks)
     elif backend in {"omp", "openmp"}:
+        @classmethod
         def get_launcher(cls, sources, sinks, keywords, symbol_table):
             kernel_h, kernel_w = keywords['kernel_size']
             pad_h, pad_w = keywords['padding']
@@ -194,8 +197,7 @@ class ConvForward(DeviceLevel):
             height_col = (height + 2 * pad_h - kernel_h) // stride_h + 1
             width_col = (width + 2 * pad_w - kernel_w) // stride_w + 1
             out_channels, height_col, width_col = symbol_table[sinks[0]].shape[1:]
-            col_datas = [hmarray((channels_col, height_col * width_col))
-                         for _ in range(len(queues))]
+            col_data = hmarray((channels_col, height_col * width_col))
             bias_multiplier = hmarray(
                 (1, np.prod(symbol_table[sinks[0]].shape[2:])))
             bias_multiplier.fill(1.0)
@@ -239,16 +241,19 @@ class ConvForward(DeviceLevel):
 
 
             class ConvLauncher(object):
+                def __init__(self, sources, sinks):
+                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
+                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+
                 def compile(self):
                     pass
 
-                def launch(self, symbol_table):
+                def launch(self, symbol_table, wait_for):
                     bottom = symbol_table[sources[0]]
                     bot_offset = np.prod(bottom.shape[1:])
                     weights = symbol_table[sources[1]]
                     bias = symbol_table[sources[2]]
                     top = symbol_table[sinks[0]]
-                    col_data = col_datas[0]
                     im2col.argtypes = tuple(
                         np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in
                         [bottom, col_data]) + (ct.c_int, )
@@ -258,7 +263,7 @@ class ConvForward(DeviceLevel):
                         im2col(bottom, col_data, i * bot_offset)
                         top[i] = weights.dot(col_data).reshape(weights.shape[0], height_col, width_col)
                         top[i] += bias[:, np.newaxis, np.newaxis]
-            return ConvLauncher()
+            return ConvLauncher(sources, sinks)
 
 
 class ConvBackward(DeviceLevel):

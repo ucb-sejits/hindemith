@@ -1,16 +1,14 @@
 from hindemith.operations.core import DeviceLevel
-from hindemith.cl import context, queues
 import pycl as cl
 from string import Template
 import numpy as np
 import os
 import ast
 
-
 backend = os.getenv("HM_BACKEND", "ocl")
 
-
 if backend in {"ocl", "opencl", "OCL"}:
+    from hindemith.cl import context, queues
     class ConcatForward(DeviceLevel):
         @classmethod
         def get_launcher(cls, sources, sinks, keyword, symbol_table):
@@ -58,10 +56,14 @@ elif backend in {"omp", "openmp"}:
         def get_launcher(cls, sources, sinks, keyword, symbol_table):
             bottoms = sources
             class Launcher():
+                def __init__(self, sources, sinks):
+                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
+                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+
                 def compile(self):
                     pass
 
-                def launch(self, symbol_table):
+                def launch(self, symbol_table, wait_for):
                     top = symbol_table[sinks[0]]
                     bots = [symbol_table[b] for b in bottoms]
                     top_offset = 0
@@ -70,4 +72,4 @@ elif backend in {"omp", "openmp"}:
                         top_offset += bot.shape[1]
 
 
-            return Launcher()
+            return Launcher(sources, sinks)

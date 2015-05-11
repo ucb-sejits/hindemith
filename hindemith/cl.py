@@ -155,8 +155,7 @@ elif backend in {"omp", "openmp"}:
                 self.func = lib.fn
                 self.func.restype = None
 
-
-        def launch(self, symbol_table):
+        def launch(self, symbol_table, wait_for):
             args = []
             for param in self.params:
                 val = symbol_table[param]

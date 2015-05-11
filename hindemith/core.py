@@ -141,7 +141,8 @@ class Compose(object):
                 for sink in kernel.sinks:
                     kernel_map[sink.id] = evts
 
-            cl.clWaitForEvents(*evts)
+            if backend in {"ocl", "opencl", "OCL"}:
+                cl.clWaitForEvents(*evts)
             ret = tuple(self.symbol_table[sink.id] for sink in sinks)
             if len(ret) == 1:
                 return ret[0]

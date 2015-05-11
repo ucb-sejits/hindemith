@@ -7,6 +7,8 @@ backend = os.getenv("HM_BACKEND", "ocl")
 if backend in {"ocl", "opencl", "OCL"}:
     from hindemith.cl import context, queue, hm_compile_and_load
     import pycl as cl
+else:
+    from hindemith.cl import hm_compile_and_load
 
 
 if backend in {"ocl", "opencl", "OCL"}:
@@ -195,7 +197,7 @@ elif backend in {"omp", "openmp"}:
                 def compile(self):
                     pass
 
-                def launch(self, symbol_table):
+                def launch(self, symbol_table, wait_for):
                     bottom = symbol_table[sources[0]]
                     top = symbol_table[sinks[0]]
                     scale = symbol_table[sinks[1]]
