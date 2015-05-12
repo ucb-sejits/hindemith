@@ -1,6 +1,10 @@
 import numpy as np
 from string import Template
 from hindemith.types import hmarray
+from ctree.frontend import get_ast
+from ctree.transformations import PyBasicConversions
+import ctree.c.nodes as C
+import ast
 
 
 class HMUndefinedMethodError(NotImplementedError):
@@ -68,7 +72,7 @@ class ElementLevel(HMOperation):
         raise HMUndefinedMethodError(cls, "get_launch_parameters")
 
     @classmethod
-    def emit(cls, sources, sinks, symbol_table):
+    def emit(cls, sources, sinks, keywords, symbol_table):
         """
         Emit the code to be inserted into the body of the Kernel,
         ElementLevel operations are not allowed to communicate across
@@ -83,3 +87,43 @@ class ElementLevel(HMOperation):
         :rtype: str
         """
         raise HMUndefinedMethodError(cls, "emit")
+
+
+class MapTransformer(ast.NodeTransformer):
+    def __init__(self, mapping, target):
+        super(MapTransformer, self).__init__()
+        self.mapping = mapping
+        self.target = target
+
+    def visit_SymbolRef(self, node):
+        if node.name in self.mapping:
+            return C.ArrayRef(C.SymbolRef(self.mapping[node.name]),
+                              C.SymbolRef('index'))
+        return node
+
+    def visit_Return(self, node):
+        value = self.visit(node.value)
+        return C.Assign(C.ArrayRef(C.SymbolRef(self.target),
+                                   C.SymbolRef('index')),
+                        value)
+
+
+class Map(ElementLevel):
+    """
+    sink = fn(source1, source2, ...)
+    """
+    @classmethod
+    def get_launch_parameters(cls, sources, sinks):
+        num_work_items = np.prod(sources[0].shape)
+        return (num_work_items, )
+
+    @classmethod
+    def emit(cls, sources, sinks, keywords, symbol_table):
+        tree = get_ast(cls.fn)
+        tree = PyBasicConversions().visit(tree)
+        body = tree.body[0].defn
+        mapping = {arg.name: source
+                   for arg, source in zip(tree.body[0].params, sources)}
+        visitor = MapTransformer(mapping, sinks[0])
+        body = [visitor.visit(s) for s in body]
+        return "\n".join([str(s) + ";" for s in body])

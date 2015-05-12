@@ -137,19 +137,17 @@ with open('data/ilsvrc12/synset_words.txt', 'rb') as _file:
 
 
 cap = cv2.VideoCapture(0)
-# cap.set(3, 256)
-# cap.set(4, 256)
+cap.set(3, 1280)
+cap.set(4, 720)
 pre_sample = np.array([None])
 import time
 start = time.clock()
-count = 0
 while(True):
-    count += 1
     # Capture frame-by-frame
     ret, orig_frame = cap.read()
 
-    cropped = orig_frame[60:-60, 480:-480, :]
-    cv2.rectangle(orig_frame, (480, 60), (1920 - 480, 1080 - 60), (0, 255, 0))
+    cropped = orig_frame[60:-60, 340:-340, :]
+    cv2.rectangle(orig_frame, (340, 60), (1280 - 340, 720 - 60), (0, 255, 0))
     frame = cv2.resize(cropped, (256, 256))
 
     # pre_sample[0] = orig_frame
@@ -170,16 +168,13 @@ while(True):
     for i, index in enumerate(reversed(top_5)):
         print(labels[index])
         label = labels[index].split(" ")
-        cv2.putText(orig_frame, " ".join(label[1:]), (1920 - 480, 80 + i * 40),
+        cv2.putText(orig_frame, " ".join(label[1:]), (1280 - 340, 80 + i * 40),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
     # Display the resulting frame
     cv2.imshow('frame', orig_frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
-end = time.clock()
-
-print("FPS: ", count / (end - start))
 
 # When everything done, release the capture
 cap.release()
