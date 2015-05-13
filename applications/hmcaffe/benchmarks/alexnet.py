@@ -136,7 +136,7 @@ def get_data():
     # data = np.asarray([
     #     transformer.preprocess('data', im),
     # ]).view(hmarray)
-    data = hmarray.random((64, 3, 227, 227), _range=(0, 255))
+    data = hmarray.random((128, 3, 227, 227), _range=(0, 255))
 
     # data *= hmarray.random((5, 3, 227, 227), _range=(0, 2))
     # data -= hmarray.random((5, 3, 227, 227), _range=(-20, +20))
