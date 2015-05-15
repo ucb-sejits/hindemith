@@ -358,6 +358,8 @@ class ReplaceArrayOps(ast.NodeTransformer):
         self.symbol_table = symbol_table
 
     def visit_Assign(self, node):
+        if not isinstance(node.targets[0], ast.Name) or node.targets[0].id in self.symbol_table:
+            return node
         if isinstance(node.value, ast.BinOp) and len(node.targets) == 1:
             value = self.visit(node.value)
             if isinstance(value, ast.Call):
