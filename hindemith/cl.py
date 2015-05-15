@@ -93,7 +93,7 @@ if backend in {"ocl", "opencl", "OCL"}:
     }
         """).substitute(params=params_str, body=self.body,
                         num_work_items=self.launch_parameters[0])
-                # print(kernel)
+                print(kernel)
                 kernel = cl.clCreateProgramWithSource(
                     context, kernel).build()['fn']
                 kernel.argtypes = tuple(cl.cl_mem for _ in self.params)

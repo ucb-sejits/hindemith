@@ -63,3 +63,7 @@ class hmarray(np.ndarray):
     @staticmethod
     def zeros(shape, dtype=np.float32):
         return np.zeros(shape, dtype).view(hmarray)
+
+    @staticmethod
+    def zeros_like(arr):
+        return np.zeros_like(arr).view(hmarray)

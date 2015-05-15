@@ -11,7 +11,6 @@ import os
 backend = os.getenv("HM_BACKEND", "ocl")
 if backend in {"ocl", "opencl", "OCL"}:
     import pycl as cl
-    from hindemith.cl import queue
 try:
     from graphviz import Digraph
     from profilehooks import profile
@@ -40,27 +39,42 @@ class Compose(object):
 
     def __init__(self, func, symbol_table):
         self.symbol_table = symbol_table
+        symbol_table.update(**globals())
         self.tree = get_ast(func)
         self.compiled = None
 
-    def compile(self):
-        tree = self.tree
-        func_def = tree.body[0]
-        new_body = []
-        for statement in func_def.body:
-            if self.is_hindemith_operation(statement):
-                if len(new_body) < 1 or not isinstance(new_body[-1], Block):
-                    new_body.append(Block())
-                new_body[-1].append(statement)
-            else:
-                new_body.append(statement)
+    def process_hm_ops(self, statements):
         processed = []
+        for statement in statements:
+            if self.is_hindemith_operation(statement):
+                if len(processed) < 1 or not isinstance(processed[-1], Block):
+                    processed.append(Block())
+                processed[-1].append(statement)
+            else:
+                if isinstance(statement, ast.For):
+                    statement.body = self.process_hm_ops(statement.body)
+                processed.append(statement)
+        return processed
 
-        for block_or_statement in new_body:
+    def gen_blocks(self, body):
+        processed = []
+        for block_or_statement in body:
             if isinstance(block_or_statement, Block):
                 processed.append(self.gen_hm_func(block_or_statement))
             else:
+                if isinstance(block_or_statement, ast.For):
+                    block_or_statement.body = self.gen_blocks(block_or_statement.body)
                 processed.append(block_or_statement)
+        return processed
+
+    def compile(self):
+        tree = self.tree
+        tree = UnpackBinOps().visit(tree)
+        tree = ReplaceArrayOps(self.symbol_table).visit(tree)
+        func_def = tree.body[0]
+        new_body = self.process_hm_ops(func_def.body)
+        processed = self.gen_blocks(new_body)
+
         func_def.body = processed
         # self.symbol_table['profile'] = profile
         # func_def.decorator_list = [ast.Name('profile', ast.Load())]
@@ -276,7 +290,7 @@ class UnpackBinOps(ast.NodeTransformer):
 
     def visit_BinOp(self, node):
         result = []
-        if isinstance(node.right, ast.BinOp):
+        if not isinstance(node.right, ast.Name):
             target = self.gen_tmp()
             new_right = self.visit(node.right)
             if isinstance(new_right, list):
@@ -286,7 +300,7 @@ class UnpackBinOps(ast.NodeTransformer):
             result[-1] = ast.Assign([ast.Name(target, ast.Store())],
                                     result[-1])
             node.right = ast.Name(target, ast.Load())
-        if isinstance(node.left, ast.BinOp):
+        if not isinstance(node.left, ast.Name):
             target = self.gen_tmp()
             new_left = self.visit(node.left)
             if isinstance(new_left, list):
@@ -298,6 +312,17 @@ class UnpackBinOps(ast.NodeTransformer):
             node.left = ast.Name(target, ast.Load())
         result.append(node)
         return result
+
+    def visit_Assign(self, node):
+        value = self.visit(node.value)
+        if isinstance(value, list):
+            node.value = value[-1]
+            if len(value) > 1:
+                value[-1] = node
+                return value
+        else:
+            node.value = value
+        return node
 
     def visit_Return(self, node):
         result = []
@@ -321,6 +346,13 @@ class ReplaceArrayOps(ast.NodeTransformer):
         ast.Mult: 'ArrayMul',
     }
 
+    array_scalar_op_map = {
+        ast.Add: 'ArrayScalarAdd',
+        ast.Sub: 'ArrayScalarSub',
+        ast.Div: 'ArrayScalarDiv',
+        ast.Mult: 'ArrayScalarMul',
+    }
+
     def __init__(self, symbol_table):
         super(ReplaceArrayOps, self).__init__()
         self.symbol_table = symbol_table
@@ -333,12 +365,22 @@ class ReplaceArrayOps(ast.NodeTransformer):
                 self.symbol_table[node.targets[0].id] = hmarray.zeros(
                     self.symbol_table[value.args[0].id].shape)
             node.value = value
+        else:
+            if isinstance(node.value, ast.Call) and \
+                    issubclass(self.symbol_table[node.value.func.id], HMOperation):
+                # TODO: Operations should specify an output generator
+                self.symbol_table[node.targets[0].id] = hmarray.zeros(
+                    self.symbol_table[node.value.args[0].id].shape)
         return node
 
     def visit_BinOp(self, node):
         if isinstance(self.symbol_table[node.left.id], hmarray):
             if isinstance(self.symbol_table[node.right.id], hmarray):
                 node = ast.Call(ast.Name(self.array_op_map[node.op.__class__],
+                                         ast.Load()),
+                                [node.left, node.right], [], None, None)
+            elif isinstance(self.symbol_table[node.right.id], (int, float)):
+                node = ast.Call(ast.Name(self.array_scalar_op_map[node.op.__class__],
                                          ast.Load()),
                                 [node.left, node.right], [], None, None)
         return node
