@@ -1,4 +1,4 @@
-from hindemith.operations.core import ElementLevel
+from hindemith.operations.core import ElementLevel, DeviceLevel
 import numpy as np
 from string import Template
 

@@ -153,10 +153,10 @@ class TestArrayUnpacker(unittest.TestCase):
 
     def test_unpack_binops(self):
         def fn(a, b):
-            _t2 = a + b
-            _t1 = a / _t2
-            _t0 = _t1 * b
-            return _t0
+            _hm_generated_2 = a + b
+            _hm_generated_1 = a / _hm_generated_2
+            _hm_generated_0 = _hm_generated_1 * b
+            return _hm_generated_0
 
         expected = get_ast(fn)
 
@@ -168,10 +168,10 @@ class TestArrayUnpacker(unittest.TestCase):
 
     def test_conver_arrayops(self):
         def fn(a, b):
-            _t2 = ArrayAdd(a, b)
-            _t1 = ArrayDiv(a, _t2)
-            _t0 = ArrayMul(_t1, b)
-            return _t0
+            _hm_generated_2 = ArrayAdd(a, b)
+            _hm_generated_1 = ArrayDiv(a, _hm_generated_2)
+            _hm_generated_0 = ArrayMul(_hm_generated_1, b)
+            return _hm_generated_0
 
         expected = get_ast(fn)
 
@@ -182,6 +182,7 @@ class TestArrayUnpacker(unittest.TestCase):
             'a': self.a,
             'b': self.b
         }
+        symbol_table.update(globals())
 
         unpacked = UnpackBinOps().visit(get_ast(fn))
         result = ReplaceArrayOps(symbol_table).visit(unpacked)

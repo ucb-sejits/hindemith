@@ -29,7 +29,9 @@ class Convolve2D(ElementLevel):
                 kernel_str += """
                 accum += {0}f * $input[min(max(y + {1}, 0), $height - 1) * $width + min(max(x + {2}, 0), $width - 1)];
                 """.format(symbol_table[sources[1]][i, j], i - (kernel_h // 2), j - (kernel_w // 2))
-        kernel_str += "\n$output[index] = accum;\n}\n"
+        kernel_str += """
+            $output[index] = accum;
+        }"""
         return Template(
             kernel_str
         ).substitute(output=sinks[0], input=sources[0], filter=sources[1],

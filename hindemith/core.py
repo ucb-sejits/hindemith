@@ -39,7 +39,7 @@ class Compose(object):
 
     def __init__(self, func, symbol_table):
         self.symbol_table = symbol_table
-        symbol_table.update(**globals())
+        self.symbol_table.update(globals())
         self.tree = get_ast(func)
         self.compiled = None
 
@@ -269,13 +269,11 @@ def compose(fn):
 
 
 class UnpackBinOps(ast.NodeTransformer):
-    def __init__(self):
-        super(UnpackBinOps, self).__init__()
-        self.unique_id = -1
+    unique_id = -1
 
     def gen_tmp(self):
         self.unique_id += 1
-        return "_t{}".format(self.unique_id)
+        return "_hm_generated_{}".format(self.unique_id)
 
     def visit_FunctionDecl(self, node):
         new_body = []
@@ -310,6 +308,41 @@ class UnpackBinOps(ast.NodeTransformer):
             result[-1] = ast.Assign([ast.Name(target, ast.Store())],
                                     result[-1])
             node.left = ast.Name(target, ast.Load())
+        result.append(node)
+        return result
+
+    def visit_If(self, node):
+        # Ignore If statements
+        return node
+
+    def visit_For(self, node):
+        new_body = []
+        for statement in node.body:
+            result = self.visit(statement)
+            if isinstance(result, list):
+                new_body.extend(result)
+            else:
+                new_body.append(result)
+        node.body = new_body
+        return node
+
+    def visit_Call(self, node):
+        result = []
+        new_args = []
+        for arg in node.args:
+            if not isinstance(arg, ast.Name):
+                tmp = self.gen_tmp()
+                new_arg = self.visit(arg)
+                if isinstance(new_arg, list):
+                    result.extend(new_arg)
+                else:
+                    result.append(new_arg)
+                result[-1] = ast.Assign([ast.Name(tmp, ast.Store())],
+                                        result[-1])
+                new_args.append(ast.Name(tmp, ast.Load()))
+            else:
+                new_args.append(arg)
+        node.args = new_args
         result.append(node)
         return result
 
@@ -358,15 +391,14 @@ class ReplaceArrayOps(ast.NodeTransformer):
         self.symbol_table = symbol_table
 
     def visit_Assign(self, node):
+        node.value = self.visit(node.value)
         if not isinstance(node.targets[0], ast.Name) or node.targets[0].id in self.symbol_table:
             return node
         if isinstance(node.value, ast.BinOp) and len(node.targets) == 1:
-            value = self.visit(node.value)
-            if isinstance(value, ast.Call):
+            if isinstance(node.value, ast.Call):
                 # TODO: Operations should specify an output generator
                 self.symbol_table[node.targets[0].id] = hmarray.zeros(
-                    self.symbol_table[value.args[0].id].shape)
-            node.value = value
+                    self.symbol_table[node.value.args[0].id].shape)
         else:
             if isinstance(node.value, ast.Call) and \
                     issubclass(self.symbol_table[node.value.func.id], HMOperation):

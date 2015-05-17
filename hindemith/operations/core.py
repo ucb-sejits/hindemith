@@ -22,7 +22,7 @@ class DeviceLevel(HMOperation):
     An operation that can run multiple OpenCL kernels without interference.
     """
     @classmethod
-    def get_launcher(cls, sources, sinks, symbol_table):
+    def get_launcher(cls, sources, sinks, keywords, symbol_table):
         raise HMUndefinedMethodError(cls, "get_launcher")
 
 

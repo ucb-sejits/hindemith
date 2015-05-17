@@ -6,7 +6,7 @@ import numpy as np
 import cv2
 from scipy.ndimage.filters import convolve
 
-alpha = 15.0
+alpha = 30.0
 
 jacobi = np.array([
     [1.0/12.0, 1.0/6.0, 1.0/12.0],
@@ -34,6 +34,7 @@ def np_hs_jacobi(im0, im1, u, v):
 
 
 alpha2 = alpha ** 2
+epsilon = .01
 
 @compose
 def hs_jacobi(im0, im1, u, v):
@@ -75,17 +76,20 @@ def solve_single_image():
     cv2.imshow('flow', flow)
     cv2.waitKey()
 
-def solve_webcam():
-    cap = cv2.VideoCapture(0)
+def solve_video():
+    cap = cv2.VideoCapture('ir.mp4')
     ret, frame = cap.read()
-    prev = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.float32).view(hmarray)
+    prev = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    prev = cv2.GaussianBlur(prev, (5, 5), .7).astype(np.float32).view(hmarray)
     hsv = np.zeros_like(frame)
     hsv[..., 1] = 255
     hm_u = hmarray.zeros_like(prev)
     hm_v = hmarray.zeros_like(prev)
     while True:
-        ret, frame = cap.read()
-        curr = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.float32).view(hmarray)
+        if frame is None:
+            break
+        curr = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        curr = cv2.GaussianBlur(curr, (5, 5), .7).astype(np.float32).view(hmarray)
         hm_u, hm_v = hs_jacobi(prev, curr, hm_u, hm_v)
         hm_u.sync_host()
         hm_v.sync_host()
@@ -103,4 +107,5 @@ def solve_webcam():
     cap.release()
     cv2.destroyAllWindows()
 
-solve_webcam()
+solve_video()
+#solve_single_image()
