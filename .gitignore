@@ -32,3 +32,4 @@ mnist_train_lmdb_clean
 applications/hmcaffe/data/**/*.txt
 *.binaryproto
 *.bet.pickle
+.coverage
