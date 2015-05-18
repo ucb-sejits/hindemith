@@ -1,4 +1,5 @@
 import unittest
+import hindemith as hm
 from hindemith.core import compose
 from hindemith.types import hmarray
 from hindemith.operations.concat import ConcatForward
@@ -12,10 +13,10 @@ class TestConcat(unittest.TestCase):
             d = ConcatForward(a, b, c)
             return d
 
-        a = hmarray.random((16, 12, 55, 55))
-        b = hmarray.random((16, 12, 55, 55))
-        c = hmarray.random((16, 12, 55, 55))
-        d = hmarray.zeros((16, 36, 55, 55))
+        a = hm.random((16, 12, 55, 55))
+        b = hm.random((16, 12, 55, 55))
+        c = hm.random((16, 12, 55, 55))
+        d = hm.zeros((16, 36, 55, 55))
         d = fn(a, b, c, d)
         d.sync_host()
         np.testing.assert_array_almost_equal(d[:16, 0:12, ...], a)

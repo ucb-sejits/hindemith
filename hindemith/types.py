@@ -51,19 +51,3 @@ class hmarray(np.ndarray):
             cl.clFinish(queue)
             _, evt = cl.buffer_from_ndarray(queue, self, self.ocl_buf)
             evt.wait()
-
-    @staticmethod
-    def random(shape, _range=(0, 1), dtype=np.float32):
-        rand = np.random.rand(*shape).astype(dtype)
-        length = _range[1] - _range[0]
-        rand *= length
-        rand += _range[0]
-        return rand.view(hmarray)
-
-    @staticmethod
-    def zeros(shape, dtype=np.float32):
-        return np.zeros(shape, dtype).view(hmarray)
-
-    @staticmethod
-    def zeros_like(arr):
-        return np.zeros_like(arr).view(hmarray)

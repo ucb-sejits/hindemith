@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+import hindemith as hm
 from hindemith.types import hmarray
 from hindemith.operations.pool import PoolForward, PoolBackward, AvePoolForward
 from hindemith.core import compose
@@ -63,7 +64,7 @@ class TestPool(unittest.TestCase):
 
     def test_pool(self):
         shape = (3, 16, 24, 24)
-        a = hmarray.random(shape, _range=(0, 255))
+        a = hm.random(shape, _range=(0, 255))
         actual_mask = hmarray((3, 16, 12, 12))
         actual = hmarray((3, 16, 12, 12))
         expected_mask = hmarray((3, 16, 12, 12))
@@ -82,10 +83,10 @@ class TestPool(unittest.TestCase):
         reference_pool(a, expected, expected_mask, (2, 2), (2, 2), (0, 0))
         self._check(actual, expected)
         self._check(actual_mask, expected_mask)
-        bottom_diff = hmarray.zeros(shape)
-        expected_bottom_diff = hmarray.zeros(shape)
+        bottom_diff = hm.zeros(shape)
+        expected_bottom_diff = hm.zeros(shape)
         mask = actual_mask
-        top_diff = hmarray.random((3, 16, 12, 12))
+        top_diff = hm.random((3, 16, 12, 12))
 
         @compose
         def fn(top_diff, mask, bottom_diff):
@@ -103,7 +104,7 @@ class TestPool(unittest.TestCase):
 
     def test_avg(self):
         shape = (3, 16, 24, 24)
-        a = hmarray.random(shape, _range=(0, 255))
+        a = hm.random(shape, _range=(0, 255))
         actual_mask = hmarray((3, 16, 12, 12))
         actual = hmarray((3, 16, 12, 12))
         expected = hmarray((3, 16, 12, 12))

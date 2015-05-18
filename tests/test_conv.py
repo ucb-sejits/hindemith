@@ -3,6 +3,7 @@ import numpy as np
 from hindemith.core import compose
 from hindemith.operations.conv import ConvBackward, ConvForward
 from hindemith.types import hmarray
+import hindemith as hm
 import os
 
 
@@ -87,10 +88,10 @@ class TestConv(unittest.TestCase):
                               padding=(0, 0), stride=(4, 4))
             return out
 
-        a = hmarray.random((3, 3, 27, 27), _range=(0, 255))
-        weights = hmarray.random((12, 363), _range=(-.2, .2))
-        out = hmarray.zeros((3, 12, 5, 5))
-        bias = hmarray.random((12, ))
+        a = hm.random((3, 3, 27, 27), _range=(0, 255))
+        weights = hm.random((12, 363), _range=(-.2, .2))
+        out = hm.zeros((3, 12, 5, 5))
+        bias = hm.random((12, ))
         fn(a, weights, out, bias)
 
         weights = weights.reshape(12, 3, 11, 11)
@@ -114,13 +115,13 @@ class TestConv(unittest.TestCase):
                              stride=(4, 4))
             return bottom_diff, weights_diff, bias_diff
 
-        top_diff = hmarray.random((3, 12, 25), _range=(0, 5))
-        bottom = hmarray.random((3, 3, 27, 27), _range=(0, 255))
-        weights = hmarray.random((12, 363), _range=(-.2, .2))
+        top_diff = hm.random((3, 12, 25), _range=(0, 5))
+        bottom = hm.random((3, 3, 27, 27), _range=(0, 255))
+        weights = hm.random((12, 363), _range=(-.2, .2))
 
-        weights_diff = hmarray.zeros((12, 363))
-        bias_diff = hmarray.zeros((12, ))
-        bottom_diff = hmarray.zeros((3, 3, 27, 27))
+        weights_diff = hm.zeros((12, 363))
+        bias_diff = hm.zeros((12, ))
+        bottom_diff = hm.zeros((3, 3, 27, 27))
 
         fn(top_diff, weights, bottom, bottom_diff, weights_diff, bias_diff)
 

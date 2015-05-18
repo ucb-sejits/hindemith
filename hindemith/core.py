@@ -2,6 +2,7 @@ import ast
 import inspect
 import sys
 import textwrap
+import hindemith as hm
 from hindemith.operations.core import HMOperation, DeviceLevel
 from hindemith.cl import Kernel
 from hindemith.types import hmarray
@@ -413,13 +414,13 @@ class ReplaceArrayOps(ast.NodeTransformer):
         if isinstance(node.value, ast.BinOp) and len(node.targets) == 1:
             if isinstance(node.value, ast.Call):
                 # TODO: Operations should specify an output generator
-                self.symbol_table[node.targets[0].id] = hmarray.zeros(
+                self.symbol_table[node.targets[0].id] = hm.zeros(
                     self.symbol_table[node.value.args[0].id].shape)
         else:
             if isinstance(node.value, ast.Call) and \
                     issubclass(self.symbol_table[node.value.func.id], HMOperation):
                 # TODO: Operations should specify an output generator
-                self.symbol_table[node.targets[0].id] = hmarray.zeros(
+                self.symbol_table[node.targets[0].id] = hm.zeros(
                     self.symbol_table[node.value.args[0].id].shape)
         return node
 

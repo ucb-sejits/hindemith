@@ -1,4 +1,5 @@
 import unittest
+import hindemith as hm
 from hindemith.types import hmarray
 from hindemith.core import compose
 from hindemith.operations.relu import ReluForward, ReluBackward
@@ -11,8 +12,8 @@ class TestRelu(unittest.TestCase):
         np.testing.assert_allclose(actual, expected)
 
     def test_relu(self):
-        top = hmarray.zeros((4, 12, 15, 15))
-        bottom = hmarray.random((4, 12, 15, 15), _range=(-1, 1))
+        top = hm.zeros((4, 12, 15, 15))
+        bottom = hm.random((4, 12, 15, 15), _range=(-1, 1))
 
         @compose
         def fn(bottom, top):
@@ -26,7 +27,7 @@ class TestRelu(unittest.TestCase):
         expected[expected < 0] = 0
         self._check(top, expected)
 
-        top_diff = hmarray.random(top.shape)
+        top_diff = hm.random(top.shape)
         bottom_diff = hmarray(top.shape)
 
         @compose
