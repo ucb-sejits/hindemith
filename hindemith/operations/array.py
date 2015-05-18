@@ -15,9 +15,9 @@ class ElementwiseArrayOp(ElementLevel):
     @classmethod
     def emit(cls, sources, sinks, keywords, symbol_table):
         return Template(
-            "$target[index] = $operand1[index] $op $operand2[index];"
-        ).substitute(target=sinks[0], op=cls.op, operand1=sources[0],
-                     operand2=sources[1])
+            "$target = $operand1 $op $operand2;"
+        ).substitute(target=sinks[0].get_element(), op=cls.op, operand1=sources[0].get_element(),
+                     operand2=sources[1].get_element())
 
 
 class ArrayAdd(ElementwiseArrayOp):
@@ -43,9 +43,9 @@ class ArrayScalarOp(ElementwiseArrayOp):
     @classmethod
     def emit(cls, sources, sinks, keywords, symbol_table):
         return Template(
-            "$target[index] = $operand1[index] $op $operand2;"
-        ).substitute(target=sinks[0], op=cls.op, operand1=sources[0],
-                     operand2=symbol_table[sources[1]])
+            "$target = $operand1 $op $operand2;"
+        ).substitute(target=sinks[0].get_element(), op=cls.op, operand1=sources[0].get_element(),
+                     operand2=symbol_table[sources[1].name])
 
 
 class ArrayScalarAdd(ArrayScalarOp, ArrayAdd):
@@ -71,8 +71,8 @@ class ElementwiseArrayMap(ElementwiseArrayOp):
     @classmethod
     def emit(cls, sources, sinks, keywords, symbol_table):
         return Template(
-            "$target[index] = $fn($operand[index]);"
-        ).substitute(target=sinks[0], fn=cls.fn, operand=sources[0])
+            "$target = $fn($operand);"
+        ).substitute(target=sinks[0].get_element(), fn=cls.fn, operand=sources[0].get_element())
 
 
 class Sqrt(ElementwiseArrayMap):
@@ -83,5 +83,5 @@ class Square(ElementwiseArrayMap):
     @classmethod
     def emit(cls, sources, sinks, keywords, symbol_table):
         return Template(
-            "$target[index] = pow($operand[index], 2);"
-        ).substitute(target=sinks[0], operand=sources[0])
+            "$target = pow($operand, 2);"
+        ).substitute(target=sinks[0].get_element(), operand=sources[0].get_element())

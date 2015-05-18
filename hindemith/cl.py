@@ -68,31 +68,47 @@ if backend in {"ocl", "opencl", "OCL"}:
             self.kernel = None
 
         def append_body(self, string):
-            self.body += string + "\n"
+            lines = [l.lstrip() for l in string.splitlines()]
+            self.body += "\t\t\t" + "\n\t\t\t".join(lines) + "\n"
 
         def compile(self):
             if self.kernel is None:
-                sources = set(src.id for src in self.sources)
-                sinks = set(src.id for src in self.sinks)
-                params = sources | sinks
-                self.params = list(params)
-                params = []
-                for param in self.params:
-                    if param in sinks:
-                        str = "global float* {}".format(param)
+                params = set(self.sources) | set(self.sinks)
+                seen_decls = set()
+                seen_params = set()
+                decls = []
+                filtered = set()
+                for param in params:
+                    if '_hm_generated_' in param.name:
+                        if param.name not in seen_decls:
+                            seen_decls.add(param.name)
+                            decls.append('float {}'.format(param.name))
                     else:
-                        str = "global const float* {}".format(param)
+                        if param.name not in seen_params:
+                            seen_params.add(param.name)
+                            filtered.add(param)
+                self.params = list(filtered)
+                params = []
+                sinks = set(sink.name for sink in self.sinks)
+                for param in self.params:
+                    if param.name in sinks:
+                        str = "global float* {}".format(param.name)
+                    else:
+                        str = "global const float* {}".format(param.name)
                     params.append(str)
                 params_str = ", ".join(params)
+                decls = ";\n\t\t\t".join(decls) + ";\n"
                 kernel = Template("""
     __kernel void fn($params) {
         int index = get_global_id(0);
         if (index < $num_work_items) {
-    $body
+            $decls
+$body
         }
     }
-        """).substitute(params=params_str, body=self.body,
+        """).substitute(params=params_str, body=self.body, decls=decls,
                         num_work_items=self.launch_parameters[0])
+                print([p.name for p in self.params])
                 print(kernel)
                 kernel = cl.clCreateProgramWithSource(
                     context, kernel).build()['fn']
@@ -102,7 +118,7 @@ if backend in {"ocl", "opencl", "OCL"}:
         def launch(self, symbol_table, wait_for=None):
             args = []
             for param in self.params:
-                val = symbol_table[param]
+                val = symbol_table[param.name]
                 if hasattr(val, 'ocl_buf'):
                     args.append(val.ocl_buf)
             global_size = self.launch_parameters[0]
@@ -129,8 +145,8 @@ elif backend in {"omp", "openmp"}:
 
         def compile(self):
             if self.kernel is None:
-                sources = set(src.id for src in self.sources)
-                sinks = set(src.id for src in self.sinks)
+                sources = set(src.name for src in self.sources)
+                sinks = set(src.name for src in self.sinks)
                 params = sources | sinks
                 self.params = list(params)
                 params = []

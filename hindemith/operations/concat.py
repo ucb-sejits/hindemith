@@ -23,17 +23,18 @@ if backend in {"ocl", "opencl", "OCL"}:
             program = cl.clCreateProgramWithSource(context, concat_kern).build()
             kernel = program['concat']
             kernel.argtypes = (cl.cl_mem, cl.cl_mem, cl.cl_int, cl.cl_int)
+
             class Launcher():
                 def __init__(self, sources, sinks):
-                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
-                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+                    self.sources = sources
+                    self.sinks = sinks
 
                 def compile(self):
                     pass
 
                 def launch(self, symbol_table, wait_for):
-                    top = symbol_table[sinks[0]]
-                    bots = [symbol_table[b] for b in bottoms]
+                    top = symbol_table[sinks[0].name]
+                    bots = [symbol_table[b.name] for b in bottoms]
                     evts = []
                     concat_off = 0
                     for i in range(len(bottoms)):

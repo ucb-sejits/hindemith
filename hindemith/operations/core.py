@@ -4,6 +4,7 @@ from hindemith.types import hmarray
 from ctree.frontend import get_ast
 from ctree.transformations import PyBasicConversions
 import ctree.c.nodes as C
+from ctree.templates.nodes import StringTemplate
 import ast
 
 
@@ -97,15 +98,12 @@ class MapTransformer(ast.NodeTransformer):
 
     def visit_SymbolRef(self, node):
         if node.name in self.mapping:
-            return C.ArrayRef(C.SymbolRef(self.mapping[node.name]),
-                              C.SymbolRef('index'))
+            return StringTemplate(self.mapping[node.name].get_element())
         return node
 
     def visit_Return(self, node):
         value = self.visit(node.value)
-        return C.Assign(C.ArrayRef(C.SymbolRef(self.target),
-                                   C.SymbolRef('index')),
-                        value)
+        return C.Assign(StringTemplate(self.target.get_element()), value)
 
 
 class Map(ElementLevel):

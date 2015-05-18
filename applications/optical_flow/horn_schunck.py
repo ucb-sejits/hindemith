@@ -105,7 +105,7 @@ def solve_video():
         prev = curr
 
     cap.release()
-    cv2.destroyAllWindows()
 
 solve_video()
-#solve_single_image()
+solve_single_image()
+cv2.destroyAllWindows()

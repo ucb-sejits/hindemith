@@ -166,7 +166,7 @@ class TestArrayUnpacker(unittest.TestCase):
         result = UnpackBinOps().visit(get_ast(fn))
         self.assertEqual(ast.dump(expected), ast.dump(result))
 
-    def test_conver_arrayops(self):
+    def test_convert_arrayops(self):
         def fn(a, b):
             _hm_generated_2 = ArrayAdd(a, b)
             _hm_generated_1 = ArrayDiv(a, _hm_generated_2)

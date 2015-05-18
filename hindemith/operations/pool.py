@@ -14,13 +14,13 @@ class PoolForward(BlockLevel):
 
     @classmethod
     def emit(cls, sources, sinks, keywords, symbol_table):
-        channels, height, width = symbol_table[sources[0]].shape[1:]
+        channels, height, width = symbol_table[sources[0].name].shape[1:]
         pad_h, pad_w = keywords['padding']
         stride_h, stride_w = keywords['stride']
         kernel_h, kernel_w = keywords['kernel_size']
         # pooled_height = ((height + 2 * pad_h - kernel_h) // stride_h) + 1
         # pooled_width = ((width + 2 * pad_w - kernel_w) // stride_w) + 1
-        pooled_height, pooled_width = symbol_table[sinks[0]].shape[2:]
+        pooled_height, pooled_width = symbol_table[sinks[0].name].shape[2:]
         return Template("""
     // int tmp_idx = index;
     // int n = index / ($pooled_w * $pooled_h * $channels);
@@ -52,9 +52,9 @@ class PoolForward(BlockLevel):
         }
       }
     }
-    $top[index] = maxval;
-    $mask[index] = maxidx;
-""").substitute(top=sinks[0], mask=sinks[1], bottom=sources[0],
+    $top = maxval;
+    $mask = maxidx;
+""").substitute(top=sinks[0].get_element(), mask=sinks[1].get_element(), bottom=sources[0].name,
                 pooled_h=pooled_height, pooled_w=pooled_width,
                 channels=channels, stride=stride_h, pad=pad_h,
                 kernel_h=kernel_h, kernel_w=kernel_w,
@@ -72,7 +72,7 @@ class AvePoolForward(BlockLevel):
 
     @classmethod
     def emit(cls, sources, sinks, keywords, symbol_table):
-        channels, height, width = symbol_table[sources[0]].shape[1:]
+        channels, height, width = symbol_table[sources[0].name].shape[1:]
         pad_h, pad_w = keywords['padding']
         stride_h, stride_w = keywords['stride']
         kernel_h, kernel_w = keywords['kernel_size']
@@ -106,8 +106,8 @@ class AvePoolForward(BlockLevel):
         aveval += $bottom[offset + h * $width + w];
       }
     }
-    $top[index] = aveval / pool_size;
-""").substitute(top=sinks[0], bottom=sources[0],
+    $top = aveval / pool_size;
+""").substitute(top=sinks[0].get_element(), bottom=sources[0].name,
                 pooled_h=pooled_height, pooled_w=pooled_width,
                 channels=channels, stride=stride_h, pad=pad_h,
                 kernel_h=kernel_h, kernel_w=kernel_w,
@@ -128,7 +128,7 @@ class PoolBackward(BlockLevel):
 
     @classmethod
     def emit(cls, sources, sinks, keywords, symbol_table):
-        channels, height, width = symbol_table[sinks[0]].shape[1:]
+        channels, height, width = symbol_table[sinks[0].name].shape[1:]
         pad_h, pad_w = keywords['padding']
         stride_h, stride_w = keywords['stride']
         kernel_h, kernel_w = keywords['kernel_size']
@@ -154,8 +154,8 @@ class PoolBackward(BlockLevel):
         }
       }
     }
-    $bottom_diff[index] = gradient;
-""").substitute(bottom_diff=sinks[0], mask=sources[1], top_diff=sources[0],
+    $bottom_diff = gradient;
+""").substitute(bottom_diff=sinks[0].get_element(), mask=sources[1].name, top_diff=sources[0].name,
                 pooled_height=pooled_height, pooled_width=pooled_width,
                 channels=channels, stride_h=stride_h,
                 stride_w=stride_w, pad_h=pad_h, pad_w=pad_w,

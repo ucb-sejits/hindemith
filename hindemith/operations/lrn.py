@@ -19,7 +19,7 @@ if backend in {"ocl", "opencl", "OCL"}:
         """
         @classmethod
         def get_launcher(cls, sources, sinks, keywords, symbol_table):
-            num, channels, height, width = symbol_table[sources[0]].shape
+            num, channels, height, width = symbol_table[sources[0].name].shape
             local_size = keywords['local_size']
             alpha = keywords['alpha']
             k = keywords['k']
@@ -94,16 +94,16 @@ if backend in {"ocl", "opencl", "OCL"}:
 
             class LrnLauncher(object):
                 def __init__(self, sources, sinks):
-                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
-                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+                    self.sources = sources
+                    self.sinks = sinks
 
                 def compile(self):
                     pass
 
                 def launch(self, symbol_table, wait_for):
-                    bottom = symbol_table[sources[0]]
-                    top = symbol_table[sinks[0]]
-                    scale = symbol_table[sinks[1]]
+                    bottom = symbol_table[sources[0].name]
+                    top = symbol_table[sinks[0].name]
+                    scale = symbol_table[sinks[1].name]
                     if fill_global[0] % 16:
                         padded = (fill_global[0] + 15) & (~15)
                     else:

@@ -20,7 +20,7 @@ if backend in {"ocl", "opencl", "OCL"}:
         """
         @classmethod
         def get_launcher(cls, sources, sinks, keywords, symbol_table):
-            bottom = symbol_table[sources[0]]
+            bottom = symbol_table[sources[0].name]
             num = bottom.shape[0]
             channels = bottom.shape[1]
             scale_shape = list(bottom.shape)
@@ -107,15 +107,15 @@ if backend in {"ocl", "opencl", "OCL"}:
 
             class SoftmaxLauncher(object):
                 def __init__(self, sources, sinks):
-                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
-                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+                    self.sources = sources
+                    self.sinks = sources
 
                 def compile(self):
                     pass
 
                 def launch(self, symbol_table, wait_for):
-                    bottom = symbol_table[sources[0]]
-                    top = symbol_table[sinks[0]]
+                    bottom = symbol_table[sources[0].name]
+                    top = symbol_table[sinks[0].name]
                     if count % 16:
                         padded_count = (count + 15) & (~15)
                     else:

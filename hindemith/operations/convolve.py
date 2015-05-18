@@ -16,8 +16,8 @@ class Convolve2D(ElementLevel):
 
     @classmethod
     def emit(cls, sources, sinks, keywords, symbol_table):
-        height, width = symbol_table[sources[0]].shape
-        kernel_h, kernel_w = symbol_table[sources[1]].shape
+        height, width = symbol_table[sources[0].name].shape
+        kernel_h, kernel_w = symbol_table[sources[1].name].shape
         kernel_str = """
         {
         int x = index % $width;
@@ -28,11 +28,11 @@ class Convolve2D(ElementLevel):
             for j in range(kernel_w):
                 kernel_str += """
                 accum += {0}f * $input[min(max(y + {1}, 0), $height - 1) * $width + min(max(x + {2}, 0), $width - 1)];
-                """.format(symbol_table[sources[1]][i, j], i - (kernel_h // 2), j - (kernel_w // 2))
+                """.format(symbol_table[sources[1].name][i, j], i - (kernel_h // 2), j - (kernel_w // 2))
         kernel_str += """
-            $output[index] = accum;
+            $output = accum;
         }"""
         return Template(
             kernel_str
-        ).substitute(output=sinks[0], input=sources[0], filter=sources[1],
+        ).substitute(output=sinks[0].get_element(), input=sources[0].name,
                      height=height, width=width, kernel_h=kernel_h, kernel_w=kernel_w)

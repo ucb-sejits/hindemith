@@ -34,6 +34,26 @@ class Block(list):
     pass
 
 
+class Param(object):
+    def __init__(self, node):
+        self.name = node.id
+        self.node = node
+
+    def get_element(self):
+        if '_hm_generated_' in self.name:
+            return self.name
+        else:
+            return "{}[index]".format(self.name)
+
+
+class Source(Param):
+    pass
+
+
+class Sink(Param):
+    pass
+
+
 class Compose(object):
     unique_id = -1
 
@@ -136,10 +156,10 @@ class Compose(object):
                             self.get_emit(op, _sources, _sinks)
                         )
                         for source in _sources:
-                            if isinstance(self.symbol_table[source.id], hmarray):
+                            if isinstance(self.symbol_table[source.name], hmarray):
                                 kernels[-1].sources.add(source)
                         for sink in _sinks:
-                            if isinstance(self.symbol_table[sink.id], hmarray):
+                            if isinstance(self.symbol_table[sink.name], hmarray):
                                 kernels[-1].sinks.add(sink)
                     else:
                         kernels.append(self.get_launcher(op, _sources, _sinks))
@@ -149,15 +169,15 @@ class Compose(object):
             for kernel in kernels:
                 evts = []
                 for source in kernel.sources:
-                    if source.id in kernel_map:
-                        evts.extend(kernel_map[source.id])
+                    if source.name in kernel_map:
+                        evts.extend(kernel_map[source.name])
                 evts = kernel.launch(self.symbol_table, evts)
                 for sink in kernel.sinks:
-                    kernel_map[sink.id] = evts
+                    kernel_map[sink.name] = evts
 
             if backend in {"ocl", "opencl", "OCL"}:
                 cl.clWaitForEvents(*evts)
-            ret = tuple(self.symbol_table[sink.id] for sink in sinks)
+            ret = tuple(self.symbol_table[sink.name] for sink in sinks)
             if len(ret) == 1:
                 return ret[0]
             return ret
@@ -173,9 +193,9 @@ class Compose(object):
             None,
         )
         if len(sinks) > 1:
-            targets = [ast.Tuple(sinks, ast.Store())]
+            targets = [ast.Tuple([sink.node for sink in sinks], ast.Store())]
         else:
-            targets = [sinks[0]]
+            targets = [sinks[0].node]
         return ast.Assign(targets, func)
         # return ast.Expr(func)
 
@@ -196,33 +216,29 @@ class Compose(object):
 
     def get_sinks_and_sources(self, operation):
         if isinstance(operation.targets[0], ast.Name):
-            sources = [operation.targets[0]]
+            sources = [Source(operation.targets[0])]
         else:
-            sources = [elt for elt in operation.targets[0].elts]
+            sources = [Source(elt) for elt in operation.targets[0].elts]
         if isinstance(operation.value, ast.Call):
-            sinks = [arg for arg in operation.value.args]
+            sinks = [Sink(arg) for arg in operation.value.args]
         else:
             raise NotImplementedError()
         return sources, sinks
 
     def get_emit(self, operation, sources, sinks):
         func = self.eval_in_symbol_table(operation.value.func)
-        sources = [src.id for src in sources]
-        sinks = [sink.id for sink in sinks]
         keywords = self.get_keywords(operation)
         return func.emit(sources, sinks, keywords, self.symbol_table)
 
     def get_launcher(self, operation, sources, sinks):
         func = self.eval_in_symbol_table(operation.value.func)
-        sources = [src.id for src in sources]
-        sinks = [sink.id for sink in sinks]
         keywords = self.get_keywords(operation)
         return func.get_launcher(sources, sinks, keywords, self.symbol_table)
 
     def get_launch_params(self, operation, sources, sinks):
         func = self.eval_in_symbol_table(operation.value.func)
-        sources = [self.eval_in_symbol_table(src) for src in sources]
-        sinks = [self.eval_in_symbol_table(sink) for sink in sinks]
+        sources = [self.symbol_table[src.name] for src in sources]
+        sinks = [self.symbol_table[sink.name] for sink in sinks]
         return func.get_launch_parameters(sources, sinks)
 
     def eval_in_symbol_table(self, val):
