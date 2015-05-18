@@ -13,9 +13,9 @@ install:
   - ./bin/build_clBLAS.sh
 script:
   - nosetests --verbose --with-coverage --cover-package=hindemith
-  - mv .coverage .coverage1
+  - mv .coverage .coverage.1
   - HM_BACKEND=omp nosetests --verbose --with-coverage --cover-package=hindemith
-  - mv .coverage .coverage2
+  - mv .coverage .coverage.2
   - coverage combine
 deploy:
   provider: pypi
