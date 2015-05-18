@@ -191,14 +191,14 @@ class ConvForward(DeviceLevel):
             kernel_h, kernel_w = keywords['kernel_size']
             pad_h, pad_w = keywords['padding']
             stride_h, stride_w = keywords['stride']
-            num, channels, height, width = symbol_table[sources[0]].shape
+            num, channels, height, width = symbol_table[sources[0].name].shape
             channels_col = channels * kernel_h * kernel_w
             height_col = (height + 2 * pad_h - kernel_h) // stride_h + 1
             width_col = (width + 2 * pad_w - kernel_w) // stride_w + 1
-            out_channels, height_col, width_col = symbol_table[sinks[0]].shape[1:]
+            out_channels, height_col, width_col = symbol_table[sinks[0].name].shape[1:]
             col_data = hmarray((channels_col, height_col * width_col))
             bias_multiplier = hmarray(
-                (1, np.prod(symbol_table[sinks[0]].shape[2:])))
+                (1, np.prod(symbol_table[sinks[0].name].shape[2:])))
             bias_multiplier.fill(1.0)
             bias_multiplier.sync_ocl()
 
@@ -241,18 +241,18 @@ class ConvForward(DeviceLevel):
 
             class ConvLauncher(object):
                 def __init__(self, sources, sinks):
-                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
-                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+                    self.sources = sources
+                    self.sinks = sinks
 
                 def compile(self):
                     pass
 
                 def launch(self, symbol_table, wait_for):
-                    bottom = symbol_table[sources[0]]
+                    bottom = symbol_table[sources[0].name]
                     bot_offset = np.prod(bottom.shape[1:])
-                    weights = symbol_table[sources[1]]
-                    bias = symbol_table[sources[2]]
-                    top = symbol_table[sinks[0]]
+                    weights = symbol_table[sources[1].name]
+                    bias = symbol_table[sources[2].name]
+                    top = symbol_table[sinks[0].name]
                     im2col.argtypes = tuple(
                         np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in
                         [bottom, col_data]) + (ct.c_int, )

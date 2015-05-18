@@ -125,7 +125,7 @@ elif backend in {"omp", "openmp"}:
         """
         @classmethod
         def get_launcher(cls, sources, sinks, keywords, symbol_table):
-            num, channels, height, width = symbol_table[sources[0]].shape
+            num, channels, height, width = symbol_table[sources[0].name].shape
             local_size = keywords['local_size']
             alpha = keywords['alpha']
             k = keywords['k']
@@ -191,22 +191,22 @@ elif backend in {"omp", "openmp"}:
 
             class LrnLauncher(object):
                 def __init__(self, sources, sinks):
-                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
-                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+                    self.sources = sources
+                    self.sinks = sinks
 
                 def compile(self):
                     pass
 
                 def launch(self, symbol_table, wait_for):
-                    bottom = symbol_table[sources[0]]
-                    top = symbol_table[sinks[0]]
-                    scale = symbol_table[sinks[1]]
+                    bottom = symbol_table[sources[0].name]
+                    top = symbol_table[sinks[0].name]
+                    scale = symbol_table[sinks[1].name]
                     fill_kern.argtypes = tuple(
-                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in
-                        [bottom, scale])
+                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape)
+                        for p in [bottom, scale])
                     compute_kern.argtypes = tuple(
-                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in
-                        [bottom, scale, top])
+                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape)
+                        for p in [bottom, scale, top])
                     fill_kern(bottom, scale)
                     compute_kern(bottom, scale, top)
             return LrnLauncher(sources, sinks)

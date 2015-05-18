@@ -58,15 +58,15 @@ elif backend in {"omp", "openmp"}:
             bottoms = sources
             class Launcher():
                 def __init__(self, sources, sinks):
-                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
-                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+                    self.sources = sources
+                    self.sinks = sinks
 
                 def compile(self):
                     pass
 
                 def launch(self, symbol_table, wait_for):
-                    top = symbol_table[sinks[0]]
-                    bots = [symbol_table[b] for b in bottoms]
+                    top = symbol_table[sinks[0].name]
+                    bots = [symbol_table[b.name] for b in bottoms]
                     top_offset = 0
                     for bot in bots:
                         top[:top.shape[0], top_offset:top_offset + bot.shape[1], ...] = bot

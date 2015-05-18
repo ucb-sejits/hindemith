@@ -3,14 +3,12 @@ from hindemith.types import hmarray
 import numpy as np
 from string import Template
 import os
-import ast
+from hindemith.cl import hm_compile_and_load
 
 backend = os.getenv("HM_BACKEND", "ocl")
 if backend in {"ocl", "opencl", "OCL"}:
     from hindemith.cl import context, queue
     import pycl as cl
-
-from hindemith.cl import hm_compile_and_load
 
 
 if backend in {"ocl", "opencl", "OCL"}:
@@ -147,7 +145,7 @@ elif backend in {"omp", "openmp"}:
         """
         @classmethod
         def get_launcher(cls, sources, sinks, keywords, symbol_table):
-            bottom = symbol_table[sources[0]]
+            bottom = symbol_table[sources[0].name]
             num = bottom.shape[0]
             channels = bottom.shape[1]
             scale_shape = list(bottom.shape)
@@ -225,38 +223,38 @@ elif backend in {"omp", "openmp"}:
 
             class SoftmaxLauncher(object):
                 def __init__(self, sources, sinks):
-                    self.sources = [ast.Name(s, ast.Load()) for s in sources]
-                    self.sinks = [ast.Name(s, ast.Load()) for s in sinks]
+                    self.sources = sources
+                    self.sinks = sinks
 
                 def compile(self):
                     pass
 
                 def launch(self, symbol_table, wait_for):
-                    bottom = symbol_table[sources[0]]
-                    top = symbol_table[sinks[0]]
+                    bottom = symbol_table[sources[0].name]
+                    top = symbol_table[sinks[0].name]
                     copy_kern.argtypes = tuple(
-                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in
-                        [bottom, top])
+                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape)
+                        for p in [bottom, top])
                     copy_kern(bottom, top)
                     max_kern.argtypes = tuple(
-                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in
-                        [top, scale])
+                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape)
+                        for p in [top, scale])
                     max_kern(top, scale)
                     sub_kern.argtypes = tuple(
-                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in
-                        [scale, top])
+                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape)
+                        for p in [scale, top])
                     sub_kern(scale, top)
                     exp_kern.argtypes = tuple(
-                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in
-                        [top, top])
+                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape)
+                        for p in [top, top])
                     exp_kern(top, top)
                     sum_kern.argtypes = tuple(
-                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in
-                        [top, scale])
+                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape)
+                        for p in [top, scale])
                     sum_kern(top, scale)
                     div_kern.argtypes = tuple(
-                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in
-                        [scale, top])
+                        np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape)
+                        for p in [scale, top])
                     div_kern(scale, top)
 
             return SoftmaxLauncher(sources, sinks)
