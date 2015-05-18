@@ -1,3 +1,4 @@
+import hindemith as hm
 from hindemith.core import compose, get_ast, UnpackBinOps, ReplaceArrayOps
 from hindemith.types import hmarray
 from hindemith.operations.array import ArrayAdd, ArraySub, ArrayMul, ArrayDiv, \
@@ -10,9 +11,9 @@ import ast
 
 class TestArrays(unittest.TestCase):
     def setUp(self):
-        self.a = hmarray.random((256, 256), _range=(0, 255))
-        self.b = hmarray.random((256, 256), _range=(0, 255))
-        self.c = hmarray.random((256, 256), _range=(0, 255))
+        self.a = hm.random((256, 256), _range=(0, 255))
+        self.b = hm.random((256, 256), _range=(0, 255))
+        self.c = hm.random((256, 256), _range=(0, 255))
 
     def _check(self, actual, expected):
         np.testing.assert_allclose(actual, expected)
@@ -147,9 +148,9 @@ class TestArrays(unittest.TestCase):
 
 class TestArrayUnpacker(unittest.TestCase):
     def setUp(self):
-        self.a = hmarray.random((256, 256), _range=(0, 255))
-        self.b = hmarray.random((256, 256), _range=(0, 255))
-        self.c = hmarray.random((256, 256), _range=(0, 255))
+        self.a = hm.random((256, 256), _range=(0, 255))
+        self.b = hm.random((256, 256), _range=(0, 255))
+        self.c = hm.random((256, 256), _range=(0, 255))
 
     def test_unpack_binops(self):
         def fn(a, b):

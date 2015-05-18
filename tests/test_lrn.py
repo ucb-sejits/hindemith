@@ -1,8 +1,7 @@
 import unittest
 import numpy as np
 from math import pow
-
-
+import hindemith as hm
 from hindemith.operations.lrn import LrnForward
 from hindemith.types import hmarray
 from hindemith.core import compose
@@ -36,7 +35,7 @@ class TestLrn(unittest.TestCase):
         np.testing.assert_array_almost_equal(actual, expected, decimal=2)
 
     def test_simple(self):
-        a = hmarray.random((3, 16, 27, 27))
+        a = hm.random((3, 16, 27, 27))
         scale = hmarray((3, 16, 27, 27))
         actual = hmarray((3, 16, 27, 27))
 

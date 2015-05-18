@@ -9,15 +9,15 @@ try:
     from sys import platform as _platform
     if _platform == "linux" or _platform == "linux2":
         ext = "so"
-    elif _platform == "darwin":
+    elif _platform == "darwin":  # pragma: no cover
         ext = "dylib"
     path = os.path.dirname(os.path.abspath(__file__))
     _clblaslib = ct.cdll.LoadLibrary(path + "/libclBLAS.{}".format(ext))
-except OSError:
+except OSError:  # pragma: no cover
     raise Exception("Could not load clBLAS, build it with ./build_clBLAS.sh")
 
 err = _clblaslib.clblasSetup()
-if err:
+if err:  # pragma: no cover
     raise Exception("Error setting up clBLAS: {}".format(err))
 
 _clblaslib.clblasSgemm.restype = ct.c_void_p

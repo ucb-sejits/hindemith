@@ -2,6 +2,7 @@ import unittest
 from math import exp
 from hindemith.core import compose
 from hindemith.types import hmarray
+import hindemith as hm
 from hindemith.operations.softmax import SoftmaxForward
 
 
@@ -12,7 +13,7 @@ class TestSoftmax(unittest.TestCase):
             top = SoftmaxForward(bottom, label)
             return top
 
-        bottom = hmarray.random((6, 13, 1), _range=(-5, 5))
+        bottom = hm.random((6, 13, 1), _range=(-5, 5))
         label = hmarray((6, ))
         for i in range(6):
             label = i % 6
