@@ -1,3 +1,4 @@
+import hindemith as hm
 from hindemith.types import hmarray
 from hindemith.core import compose
 from hindemith.operations.array import Square
@@ -6,7 +7,7 @@ import numpy as np
 import cv2
 from scipy.ndimage.filters import convolve
 
-alpha = 30.0
+alpha = 15.0
 
 jacobi = np.array([
     [1.0/12.0, 1.0/6.0, 1.0/12.0],
@@ -47,8 +48,10 @@ def hs_jacobi(im0, im1, u, v):
         ubar = Convolve2D(u, jacobi)
         vbar = Convolve2D(v, jacobi)
         t = (Ix * ubar + Iy * vbar + It) / denom
-        u = ubar - Ix * t
-        v = vbar - Iy * t
+        u_new = ubar - Ix * t
+        v_new = vbar - Iy * t
+        print(u_new[200][200], v_new[200][200])
+        u, v = u_new, v_new
     return u, v
 
 
@@ -58,8 +61,8 @@ def solve_single_image():
     im0 = cv2.cvtColor(frame0, cv2.COLOR_BGR2GRAY).astype(np.float32).view(hmarray)
     im1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY).astype(np.float32).view(hmarray)
 
-    hm_u = hmarray.zeros_like(im0)
-    hm_v = hmarray.zeros_like(im0)
+    hm_u = hm.zeros_like(im0)
+    hm_v = hm.zeros_like(im0)
     hm_u, hm_v = hs_jacobi(im0, im1, hm_u, hm_v)
 
     hm_u.sync_host()
@@ -83,8 +86,8 @@ def solve_video():
     prev = cv2.GaussianBlur(prev, (5, 5), .7).astype(np.float32).view(hmarray)
     hsv = np.zeros_like(frame)
     hsv[..., 1] = 255
-    hm_u = hmarray.zeros_like(prev)
-    hm_v = hmarray.zeros_like(prev)
+    hm_u = hm.zeros_like(prev)
+    hm_v = hm.zeros_like(prev)
     while True:
         if frame is None:
             break
@@ -106,6 +109,6 @@ def solve_video():
 
     cap.release()
 
-solve_video()
+# solve_video()
 solve_single_image()
 cv2.destroyAllWindows()

@@ -95,6 +95,8 @@ class Compose(object):
         func_def = tree.body[0]
         new_body = self.process_hm_ops(func_def.body)
         processed = self.gen_blocks(new_body)
+        for s in processed:
+            print(ast.dump(s))
 
         func_def.body = processed
         # self.symbol_table['profile'] = profile
@@ -133,10 +135,23 @@ class Compose(object):
         # dot.render('tmp.gv')
 
         kernels = []
+        filtered_sources = []
+        for source in sources:
+            if "_hm_generated_" in source.name:
+                continue
+            is_sink = False
+            for sink in sinks:
+                if sink.name == source.name:
+                    is_sink = True
+                    break
+            if is_sink:
+                continue
+            filtered_sources.append(source)
+        filtered_sinks = filter(lambda x: "_hm_generated_" not in x.name, sinks)
 
         def fn(*args, **kwargs):
-            for source, arg in zip(sources, args):
-                self.symbol_table[source.id] = arg
+            for source, arg in zip(filtered_sources, args):
+                self.symbol_table[source.name] = arg
             if len(kernels) == 0:
                 for op in block:
                     _sinks, _sources = self.get_sinks_and_sources(op)
@@ -178,7 +193,7 @@ class Compose(object):
 
             if backend in {"ocl", "opencl", "OCL"}:
                 cl.clWaitForEvents(*evts)
-            ret = tuple(self.symbol_table[sink.name] for sink in sinks)
+            ret = tuple(self.symbol_table[sink.name] for sink in filtered_sinks)
             if len(ret) == 1:
                 return ret[0]
             return ret
@@ -188,13 +203,14 @@ class Compose(object):
         self.symbol_table[name] = fn
         func = ast.Call(
             ast.Name(name, ast.Load()),
-            [],
+            [ast.Name(source.name, ast.Load()) for source in filtered_sources],
+            #[],
             [],
             None,
             None,
         )
         if len(sinks) > 1:
-            targets = [ast.Tuple([sink.node for sink in sinks], ast.Store())]
+            targets = [ast.Tuple([sink.node for sink in filtered_sinks], ast.Store())]
         else:
             targets = [sinks[0].node]
         return ast.Assign(targets, func)

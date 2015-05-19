@@ -7,6 +7,7 @@ import ctypes as ct
 import numpy as np
 import random
 import os
+import sys
 
 
 backend = os.getenv("HM_BACKEND", "ocl")
@@ -44,6 +45,7 @@ unique_file_id = -1
 
 
 def hm_compile_and_load(_file):
+    print(_file)
     file_path = os.path.join(hm_dir, "temp_file.c")
     with open(file_path, 'w') as f:
         f.write(_file)
@@ -52,7 +54,8 @@ def hm_compile_and_load(_file):
     so_name = "compiled{}.so".format(unique_file_id)
     so_path = os.path.join(hm_dir, so_name)
     flags = "-shared -std=gnu99 -fPIC -fopenmp"
-    compile_cmd = "gcc {} -o {} {}".format(flags, so_path, file_path)
+    compiler = os.environ.get("CC", "CC")
+    compile_cmd = "{} {} -o {} {}".format(compiler, flags, so_path, file_path)
     subprocess.check_call(compile_cmd, shell=True)
     lib = ct.cdll.LoadLibrary(so_path)
     return lib
@@ -145,15 +148,27 @@ elif backend in {"omp", "openmp"}:
 
         def compile(self):
             if self.kernel is None:
-                sources = set(src.name for src in self.sources)
-                sinks = set(src.name for src in self.sinks)
-                params = sources | sinks
-                self.params = list(params)
+                params = set(self.sources) | set(self.sinks)
+                seen_decls = set()
+                seen_params = set()
+                decls = []
+                filtered = set()
+                for param in params:
+                    if '_hm_generated_' in param.name:
+                        if param.name not in seen_decls:
+                            seen_decls.add(param.name)
+                            decls.append('float {}'.format(param.name))
+                    else:
+                        if param.name not in seen_params:
+                            seen_params.add(param.name)
+                            filtered.add(param)
+                self.params = list(filtered)
                 params = []
                 for param in self.params:
-                    _str = "float* {}".format(param)
+                    _str = "float* {}".format(param.name)
                     params.append(_str)
                 params_str = ", ".join(params)
+                decls = ";\n\t\t\t".join(decls) + ";\n"
                 kernel = Template("""
      #include <math.h>
      #include <float.h>
@@ -162,10 +177,11 @@ elif backend in {"omp", "openmp"}:
      void fn($params) {
         #pragma omp parallel for
         for (int index = 0; index < $num_work_items; index++) {
+            $decls
             $body
         }
     }
-        """).substitute(params=params_str, body=self.body,
+        """).substitute(params=params_str, body=self.body, decls=decls,
                         num_work_items=self.launch_parameters[0])
                 lib = hm_compile_and_load(kernel)
                 self.func = lib.fn
@@ -174,7 +190,7 @@ elif backend in {"omp", "openmp"}:
         def launch(self, symbol_table, wait_for):
             args = []
             for param in self.params:
-                val = symbol_table[param]
+                val = symbol_table[param.name]
                 args.append(val)
             self.func.argtypes = (
                 np.ctypeslib.ndpointer(p.dtype, p.ndim, p.shape) for p in args)
