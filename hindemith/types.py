@@ -26,28 +26,21 @@ class hmarray(np.ndarray):
             return
 
         if backend in {"ocl", "opencl", "OCL"}:
-            if hasattr(obj, 'ocl_buf'):
-                self.ocl_buf = obj.ocl_buf
-                self.host_dirty = obj.host_dirty
-                self.ocl_dirty = obj.ocl_dirty
-            else:
-                buf, evt = cl.buffer_from_ndarray(queue, obj)
-                evt.wait()
-                self.ocl_buf = buf
-                self.host_dirty = False
-                self.ocl_dirty = False
+            buf, evt = cl.buffer_from_ndarray(queue, obj)
+            evt.wait()
+            self.ocl_buf = buf
+            self.host_dirty = False
+            self.ocl_dirty = False
         self.register = None
 
     def sync_host(self):
         if backend in {"ocl", "opencl", "OCL"}:
             if os.environ.get("HM_BACKEND") in {'omp', 'openmp'}:
                 return
-            cl.clFinish(queue)
             _, evt = cl.buffer_to_ndarray(queue, self.ocl_buf, self)
             evt.wait()
 
     def sync_ocl(self):
         if backend in {"ocl", "opencl", "OCL"}:
-            cl.clFinish(queue)
             _, evt = cl.buffer_from_ndarray(queue, self, self.ocl_buf)
             evt.wait()

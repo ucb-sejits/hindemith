@@ -95,8 +95,6 @@ class Compose(object):
         func_def = tree.body[0]
         new_body = self.process_hm_ops(func_def.body)
         processed = self.gen_blocks(new_body)
-        for s in processed:
-            print(ast.dump(s))
 
         func_def.body = processed
         # self.symbol_table['profile'] = profile
@@ -128,10 +126,10 @@ class Compose(object):
         #     node_id = "node_{}".format(index)
         #     dot.node(node_id, op.value.func.id)
         #     for source in _sources:
-        #         if source.id in sink_map:
-        #             dot.edge(sink_map[source.id], node_id)
+        #         if source.name in sink_map:
+        #             dot.edge(sink_map[source.name], node_id)
         #     for sink in _sinks:
-        #         sink_map[sink.id] = node_id
+        #         sink_map[sink.name] = node_id
         # dot.render('tmp.gv')
 
         kernels = []
@@ -139,12 +137,15 @@ class Compose(object):
         for source in sources:
             if "_hm_generated_" in source.name:
                 continue
-            is_sink = False
+            cont = False
             for sink in sinks:
                 if sink.name == source.name:
-                    is_sink = True
+                    cont = True
                     break
-            if is_sink:
+            for s in filtered_sources:
+                if source.name == s.name:
+                    cont = True
+            if cont:
                 continue
             filtered_sources.append(source)
         filtered_sinks = filter(lambda x: "_hm_generated_" not in x.name, sinks)

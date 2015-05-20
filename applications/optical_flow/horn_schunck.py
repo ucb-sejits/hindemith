@@ -50,7 +50,6 @@ def hs_jacobi(im0, im1, u, v):
         t = (Ix * ubar + Iy * vbar + It) / denom
         u_new = ubar - Ix * t
         v_new = vbar - Iy * t
-        print(u_new[200][200], v_new[200][200])
         u, v = u_new, v_new
     return u, v
 
