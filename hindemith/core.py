@@ -148,7 +148,7 @@ class Compose(object):
             if cont:
                 continue
             filtered_sources.append(source)
-        filtered_sinks = filter(lambda x: "_hm_generated_" not in x.name, sinks)
+        filtered_sinks = [sink for sink in sinks if '_hm_generated_' not in sink.name]
 
         def fn(*args, **kwargs):
             for source, arg in zip(filtered_sources, args):
