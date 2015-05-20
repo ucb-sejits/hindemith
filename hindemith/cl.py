@@ -82,7 +82,7 @@ if backend in {"ocl", "opencl", "OCL"}:
                 decls = []
                 filtered = set()
                 for param in params:
-                    if '_hm_generated_' in param.name:
+                    if param.level == 'register':
                         if param.name not in seen_decls:
                             seen_decls.add(param.name)
                             decls.append('float {}'.format(param.name))
@@ -154,7 +154,7 @@ elif backend in {"omp", "openmp"}:
                 decls = []
                 filtered = set()
                 for param in params:
-                    if '_hm_generated_' in param.name:
+                    if param.level == 'register':
                         if param.name not in seen_decls:
                             seen_decls.add(param.name)
                             decls.append('float {}'.format(param.name))

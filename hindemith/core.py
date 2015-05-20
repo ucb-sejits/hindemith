@@ -31,7 +31,48 @@ def get_ast(obj):
     return ast.parse(program_txt)
 
 
+class Analyzer(ast.NodeVisitor):
+    def __init__(self):
+        self.gen = set()
+        self.kill = set()
+        self.return_values = set()
+
+    def visit_Call(self, node):
+        for arg in node.args:
+            self.visit(arg)
+
+    def visit_Assign(self, node):
+        # Need to visit loads before store
+        self.visit(node.value)
+        self.visit(node.targets[0])
+
+    def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Load):
+            if node.id not in self.kill:
+                self.gen.add(node.id)
+        else:
+            self.kill.add(node.id)
+
+    def visit_Return(self, node):
+        if isinstance(node, ast.Tuple):
+            for val in node.value.elts:
+                self.return_values.add(val.id)
+        else:
+            self.return_values.add(node.value.id)
+
+
 class Block(list):
+    def __init__(self):
+        super(Block, self).__init__()
+        self.live_ins = set()
+        self.live_outs = set()
+
+
+class ComposableBlock(Block):
+    pass
+
+
+class NonComposableBlock(Block):
     pass
 
 
@@ -39,9 +80,10 @@ class Param(object):
     def __init__(self, node):
         self.name = node.id
         self.node = node
+        self.level = 'buffer'
 
     def get_element(self):
-        if '_hm_generated_' in self.name:
+        if self.level == 'register':
             return self.name
         else:
             return "{}[index]".format(self.name)
@@ -68,24 +110,38 @@ class Compose(object):
         processed = []
         for statement in statements:
             if self.is_hindemith_operation(statement):
-                if len(processed) < 1 or not isinstance(processed[-1], Block):
-                    processed.append(Block())
+                if len(processed) < 1 or not isinstance(processed[-1], ComposableBlock):
+                    processed.append(ComposableBlock())
                 processed[-1].append(statement)
             else:
                 if isinstance(statement, ast.For):
                     statement.body = self.process_hm_ops(statement.body)
-                processed.append(statement)
+                if len(processed) < 1 or not isinstance(processed[-1], NonComposableBlock):
+                    processed.append(NonComposableBlock())
+                processed[-1].append(statement)
+        for index, block in enumerate(reversed(processed)):
+            analyzer = Analyzer()
+            for statement in block:
+                analyzer.visit(statement)
+                if isinstance(statement, ast.For):
+                    block.live_ins |= statement.body[0].live_ins
+                    block.live_outs |= statement.body[-1].live_outs
+            block.live_outs |= analyzer.return_values
+            if index < len(processed):
+                block.live_outs = block.live_outs.union(*(block.live_ins for block in processed[-index:]))
+            block.live_ins = analyzer.gen | (block.live_outs - analyzer.kill)
         return processed
 
     def gen_blocks(self, body):
         processed = []
-        for block_or_statement in body:
-            if isinstance(block_or_statement, Block):
-                processed.append(self.gen_hm_func(block_or_statement))
+        for block in body:
+            if isinstance(block, ComposableBlock):
+                processed.append(self.gen_hm_func(block))
             else:
-                if isinstance(block_or_statement, ast.For):
-                    block_or_statement.body = self.gen_blocks(block_or_statement.body)
-                processed.append(block_or_statement)
+                for statement in block:
+                    if isinstance(statement, ast.For):
+                        statement.body = self.gen_blocks(statement.body)
+                processed.extend(block)
         return processed
 
     def compile(self):
@@ -118,10 +174,12 @@ class Compose(object):
         # dot = Digraph()
         # dot.body.append('size="6,6"')
         # sink_map = {}
+        block_params = []
         for index, op in enumerate(block):
             _sinks, _sources = self.get_sinks_and_sources(op)
             sinks.extend(_sinks)
             sources.extend(_sources)
+            block_params.append((_sinks, _sources))
         # Uncomment to show graph
         #     node_id = "node_{}".format(index)
         #     dot.node(node_id, op.value.func.id)
@@ -133,29 +191,35 @@ class Compose(object):
         # dot.render('tmp.gv')
 
         kernels = []
+        filtered_sinks = []
+        for sink in sinks:
+            if sink.name not in block.live_outs:
+                sink.level = 'register'
+            else:
+                filtered_sinks.append(sink)
+
         filtered_sources = []
         for source in sources:
-            if "_hm_generated_" in source.name:
-                continue
             cont = False
             for sink in sinks:
                 if sink.name == source.name:
+                    source.level = sink.level
                     cont = True
                     break
             for s in filtered_sources:
                 if source.name == s.name:
                     cont = True
+                    break
             if cont:
                 continue
             filtered_sources.append(source)
-        filtered_sinks = [sink for sink in sinks if '_hm_generated_' not in sink.name]
 
         def fn(*args, **kwargs):
             for source, arg in zip(filtered_sources, args):
                 self.symbol_table[source.name] = arg
             if len(kernels) == 0:
-                for op in block:
-                    _sinks, _sources = self.get_sinks_and_sources(op)
+                for op, params in zip(block, block_params):
+                    _sinks, _sources = params
                     # if len(kernels) < 1 or \
                     #    kernels[-1].launch_paramaters != launch_params:
                     #    kernels.append(Kernel(launch_params))
@@ -234,11 +298,11 @@ class Compose(object):
 
     def get_sinks_and_sources(self, operation):
         if isinstance(operation.targets[0], ast.Name):
-            sources = [Source(operation.targets[0])]
+            sources = [Sink(operation.targets[0])]
         else:
-            sources = [Source(elt) for elt in operation.targets[0].elts]
+            sources = [Sink(elt) for elt in operation.targets[0].elts]
         if isinstance(operation.value, ast.Call):
-            sinks = [Sink(arg) for arg in operation.value.args]
+            sinks = [Source(arg) for arg in operation.value.args]
         else:
             raise NotImplementedError()
         return sources, sinks

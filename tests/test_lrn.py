@@ -43,7 +43,7 @@ class TestLrn(unittest.TestCase):
         def fn(bottom, scale, top):
             top, scale = LrnForward(bottom, alpha=alpha, beta=beta,
                                     local_size=local_size, k=1)
-            return top
+            return top, scale
 
         fn(a, scale, actual)
         actual.sync_host()

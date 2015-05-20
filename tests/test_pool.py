@@ -75,7 +75,7 @@ class TestPool(unittest.TestCase):
         def fn(bottom, mask, top):
             top, mask = PoolForward(bottom, kernel_size=(2, 2),
                                     padding=(0, 0), stride=(2, 2))
-            return top
+            return top, mask
 
         fn(a, actual_mask, actual)
         actual.sync_host()
