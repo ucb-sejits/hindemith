@@ -273,8 +273,8 @@ class Compose(object):
         self.symbol_table[name] = fn
         func = ast.Call(
             ast.Name(name, ast.Load()),
-            # [ast.Name(source.name, ast.Load()) for source in filtered_sources],
-            [],
+            [ast.Name(source.name, ast.Load()) for source in filtered_sources],
+            # [],
             [],
             None,
             None,
@@ -508,6 +508,7 @@ class ReplaceArrayOps(ast.NodeTransformer):
                     self.symbol_table[node.value.args[0].id].shape)
         else:
             if isinstance(node.value, ast.Call) and \
+                    inspect.isclass(self.symbol_table[node.value.func.id]) and \
                     issubclass(self.symbol_table[node.value.func.id], HMOperation):
                 # TODO: Operations should specify an output generator
                 self.symbol_table[node.targets[0].id] = hm.zeros(
