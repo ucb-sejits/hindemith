@@ -100,11 +100,12 @@ class Sink(Param):
 class Compose(object):
     unique_id = -1
 
-    def __init__(self, func, symbol_table):
+    def __init__(self, func, symbol_table, fusion):
         self.symbol_table = symbol_table
         self.symbol_table.update(globals())
         self.tree = get_ast(func)
         self.compiled = None
+        self.fusion = fusion
 
     def process_hm_ops(self, statements):
         processed = []
@@ -192,27 +193,31 @@ class Compose(object):
 
         kernels = []
         filtered_sinks = []
-        for sink in sinks:
-            if sink.name not in block.live_outs:
-                sink.level = 'register'
-            else:
-                filtered_sinks.append(sink)
-
-        filtered_sources = []
-        for source in sources:
-            cont = False
+        if self.fusion:
             for sink in sinks:
-                if sink.name == source.name:
-                    source.level = sink.level
-                    cont = True
-                    break
-            for s in filtered_sources:
-                if source.name == s.name:
-                    cont = True
-                    break
-            if cont:
-                continue
-            filtered_sources.append(source)
+                if sink.name not in block.live_outs:
+                    sink.level = 'register'
+                else:
+                    filtered_sinks.append(sink)
+
+            filtered_sources = []
+            for source in sources:
+                cont = False
+                for sink in sinks:
+                    if sink.name == source.name:
+                        source.level = sink.level
+                        cont = True
+                        break
+                for s in filtered_sources:
+                    if source.name == s.name:
+                        cont = True
+                        break
+                if cont:
+                    continue
+                filtered_sources.append(source)
+        else:
+            filtered_sinks = sinks
+            filtered_sources = sources
 
         def fn(*args, **kwargs):
             for source, arg in zip(filtered_sources, args):
@@ -268,8 +273,8 @@ class Compose(object):
         self.symbol_table[name] = fn
         func = ast.Call(
             ast.Name(name, ast.Load()),
-            [ast.Name(source.name, ast.Load()) for source in filtered_sources],
-            #[],
+            # [ast.Name(source.name, ast.Load()) for source in filtered_sources],
+            [],
             [],
             None,
             None,
@@ -346,24 +351,28 @@ class Compose(object):
         return False
 
 
-def compose(fn):
-    tree = get_ast(fn)
-    symbol_table = {}
-    frame = inspect.stack()[1][0]
-    while frame is not None:
-        symbol_table.update(frame.f_locals)
-        symbol_table.update(frame.f_globals)
-        frame = frame.f_back
-    composed = Compose(fn, symbol_table)
+def compose(fn=None, fusion=True):
+    def composer(fn):
+        tree = get_ast(fn)
+        symbol_table = {}
+        frame = inspect.stack()[1][0]
+        while frame is not None:
+            symbol_table.update(frame.f_locals)
+            symbol_table.update(frame.f_globals)
+            frame = frame.f_back
+        composed = Compose(fn, symbol_table, fusion)
 
-    def wrapped(*args, **kwargs):
-        for index, arg in enumerate(tree.body[0].args.args):
-            if sys.version_info < (3, 0):
-                symbol_table[arg.id] = args[index]
-            else:
-                symbol_table[arg.arg] = args[index]
-        return composed(*args, **kwargs)
-    return wrapped
+        def wrapped(*args, **kwargs):
+            for index, arg in enumerate(tree.body[0].args.args):
+                if sys.version_info < (3, 0):
+                    symbol_table[arg.id] = args[index]
+                else:
+                    symbol_table[arg.arg] = args[index]
+            return composed(*args, **kwargs)
+        return wrapped
+    if fn is not None:
+        return composer(fn)
+    return composer
 
 
 class UnpackBinOps(ast.NodeTransformer):
