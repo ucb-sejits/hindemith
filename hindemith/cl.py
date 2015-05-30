@@ -111,7 +111,7 @@ $body
     }
         """).substitute(params=params_str, body=self.body, decls=decls,
                         num_work_items=self.launch_parameters[0])
-                print([p.name for p in self.params])
+                # print([p.name for p in self.params])
                 print(kernel)
                 kernel = cl.clCreateProgramWithSource(
                     context, kernel).build()['fn']

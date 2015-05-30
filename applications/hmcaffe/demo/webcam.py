@@ -1,3 +1,4 @@
+import hindemith as hm
 import numpy as np
 import cv2
 from hindemith.types import hmarray
@@ -22,59 +23,59 @@ caffe_net = caffe.Net(prototxt, caffemodel, caffe.TEST)
 
 conv1_filters = caffe_net.params['conv1'][0].data.view(hmarray)
 conv1_bias = caffe_net.params['conv1'][1].data.view(hmarray)
-conv1 = hmarray.zeros(caffe_net.blobs['conv1'].data.shape)
+conv1 = hm.zeros(caffe_net.blobs['conv1'].data.shape)
 
-norm1 = hmarray.zeros(caffe_net.blobs['norm1'].data.shape)
-norm1_scale = hmarray.zeros(norm1.shape)
+norm1 = hm.zeros(caffe_net.blobs['norm1'].data.shape)
+norm1_scale = hm.zeros(norm1.shape)
 
-pool1 = hmarray.zeros(caffe_net.blobs['pool1'].data.shape)
-pool1_mask = hmarray.zeros(pool1.shape)
+pool1 = hm.zeros(caffe_net.blobs['pool1'].data.shape)
+pool1_mask = hm.zeros(pool1.shape)
 
 conv2_filters = caffe_net.params['conv2'][0].data.view(hmarray)
 conv2_bias = caffe_net.params['conv2'][1].data.view(hmarray)
-conv2 = hmarray.zeros(caffe_net.blobs['conv2'].data.shape)
+conv2 = hm.zeros(caffe_net.blobs['conv2'].data.shape)
 
-norm2 = hmarray.zeros(caffe_net.blobs['norm2'].data.shape)
-norm2_scale = hmarray.zeros(norm2.shape)
+norm2 = hm.zeros(caffe_net.blobs['norm2'].data.shape)
+norm2_scale = hm.zeros(norm2.shape)
 
-pool2 = hmarray.zeros(caffe_net.blobs['pool2'].data.shape)
-pool2_mask = hmarray.zeros(pool2.shape)
+pool2 = hm.zeros(caffe_net.blobs['pool2'].data.shape)
+pool2_mask = hm.zeros(pool2.shape)
 
 conv3_filters = caffe_net.params['conv3'][0].data.view(hmarray)
 conv3_bias = caffe_net.params['conv3'][1].data.view(hmarray)
-conv3 = hmarray.zeros(caffe_net.blobs['conv3'].data.shape)
+conv3 = hm.zeros(caffe_net.blobs['conv3'].data.shape)
 
 conv4_filters = caffe_net.params['conv4'][0].data.view(hmarray)
 conv4_bias = caffe_net.params['conv4'][1].data.view(hmarray)
-conv4 = hmarray.zeros(caffe_net.blobs['conv4'].data.shape)
+conv4 = hm.zeros(caffe_net.blobs['conv4'].data.shape)
 
 conv5_filters = caffe_net.params['conv5'][0].data.view(hmarray)
 conv5_bias = caffe_net.params['conv5'][1].data.view(hmarray)
-conv5 = hmarray.zeros(caffe_net.blobs['conv5'].data.shape)
+conv5 = hm.zeros(caffe_net.blobs['conv5'].data.shape)
 
-pool5 = hmarray.zeros(caffe_net.blobs['pool5'].data.shape)
-pool5_mask = hmarray.zeros(pool5.shape)
+pool5 = hm.zeros(caffe_net.blobs['pool5'].data.shape)
+pool5_mask = hm.zeros(pool5.shape)
 
 fc6_filters = caffe_net.params['fc6'][0].data.view(hmarray)
 fc6_bias = caffe_net.params['fc6'][1].data.view(hmarray)
-fc6 = hmarray.zeros(caffe_net.blobs['fc6'].data.shape)
+fc6 = hm.zeros(caffe_net.blobs['fc6'].data.shape)
 
 fc7_filters = caffe_net.params['fc7'][0].data.view(hmarray)
 fc7_bias = caffe_net.params['fc7'][1].data.view(hmarray)
-fc7 = hmarray.zeros(caffe_net.blobs['fc7'].data.shape)
+fc7 = hm.zeros(caffe_net.blobs['fc7'].data.shape)
 
 fc8_filters = caffe_net.params['fc8'][0].data.view(hmarray)
 fc8_bias = caffe_net.params['fc8'][1].data.view(hmarray)
-fc8 = hmarray.zeros(caffe_net.blobs['fc8'].data.shape)
+fc8 = hm.zeros(caffe_net.blobs['fc8'].data.shape)
 
-prob = hmarray.zeros(caffe_net.blobs['prob'].data.shape)
+prob = hm.zeros(caffe_net.blobs['prob'].data.shape)
 
 local_size = 5
 alpha = 0.0001
 beta = 0.75
 
 
-@compose
+@compose(fusion=False)
 def forward(data):
     global fc6, fc7, fc8
     conv1 = ConvForward(data, conv1_filters, conv1_bias,
@@ -136,9 +137,9 @@ with open('data/ilsvrc12/synset_words.txt', 'rb') as _file:
     labels = _file.read().splitlines()
 
 
-cap = cv2.VideoCapture(0)
-cap.set(3, 1280)
-cap.set(4, 720)
+cap = cv2.VideoCapture('../optical_flow/ir.mp4')
+# cap.set(3, 1280)
+# cap.set(4, 720)
 pre_sample = np.array([None])
 import time
 start = time.clock()
@@ -146,9 +147,10 @@ while(True):
     # Capture frame-by-frame
     ret, orig_frame = cap.read()
 
-    cropped = orig_frame[60:-60, 340:-340, :]
-    cv2.rectangle(orig_frame, (340, 60), (1280 - 340, 720 - 60), (0, 255, 0))
-    frame = cv2.resize(cropped, (256, 256))
+    # cropped = orig_frame[60:-60, 340:-340, :]
+    # cv2.rectangle(orig_frame, (340, 60), (1280 - 340, 720 - 60), (0, 255, 0))
+    # frame = cv2.resize(cropped, (256, 256))
+    frame = cv2.resize(orig_frame, (256, 256))
 
     # pre_sample[0] = orig_frame
     # input_ = caffe.io.oversample(pre_sample, np.array([227, 227]))

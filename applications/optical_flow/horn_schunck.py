@@ -54,23 +54,24 @@ def hs_jacobi(im0, im1, u, v):
     return u, v
 
 
-def solve_single_image():
+def solve():
     frame0 = cv2.imread('images/frame0.png')
     frame1 = cv2.imread('images/frame1.png')
+    # cap = cv2.VideoCapture('ir.mp4')
+    # ret, frame0 = cap.read()
+    hsv = np.zeros_like(frame0)
     im0 = cv2.cvtColor(frame0, cv2.COLOR_BGR2GRAY).astype(np.float32).view(hmarray)
-    im1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY).astype(np.float32).view(hmarray)
-
     hm_u = hm.zeros_like(im0)
     hm_v = hm.zeros_like(im0)
+    im1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY).astype(np.float32).view(hmarray)
+
     hm_u, hm_v = hs_jacobi(im0, im1, hm_u, hm_v)
 
     hm_u.sync_host()
     hm_v.sync_host()
-
     mag, ang = cv2.cartToPolar(hm_u, hm_v)
     mag = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
     ang = ang*180/np.pi/2
-    hsv = np.zeros_like(frame1)
     hsv[..., 1] = 255
     hsv[..., 0] = ang
     hsv[..., 2] = mag
@@ -78,36 +79,5 @@ def solve_single_image():
     cv2.imshow('flow', flow)
     cv2.waitKey()
 
-def solve_video():
-    cap = cv2.VideoCapture('ir.mp4')
-    ret, frame = cap.read()
-    prev = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    prev = cv2.GaussianBlur(prev, (5, 5), .7).astype(np.float32).view(hmarray)
-    hsv = np.zeros_like(frame)
-    hsv[..., 1] = 255
-    hm_u = hm.zeros_like(prev)
-    hm_v = hm.zeros_like(prev)
-    while True:
-        if frame is None:
-            break
-        curr = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        curr = cv2.GaussianBlur(curr, (5, 5), .7).astype(np.float32).view(hmarray)
-        hm_u, hm_v = hs_jacobi(prev, curr, hm_u, hm_v)
-        hm_u.sync_host()
-        hm_v.sync_host()
-        mag, ang = cv2.cartToPolar(hm_u, hm_v)
-        mag = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
-        ang = ang*180/np.pi/2
-        hsv[..., 0] = ang
-        hsv[..., 2] = mag
-        flow = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-        cv2.imshow('flow', flow)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-        prev = curr
-
-    cap.release()
-
-# solve_video()
-solve_single_image()
-cv2.destroyAllWindows()
+if __name__ == '__main__':
+    solve()

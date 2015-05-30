@@ -153,7 +153,6 @@ void fn(float* Ix, float* v, float* It, float* Iy,
         u_new[index] = ubar - _hm_generated_7;
         _hm_generated_8 = Iy[index] * t;
         v_new[index] = vbar - _hm_generated_8;
-
     }
 }""").substitute(size=np.prod(u.shape), width=u.shape[1], height=u.shape[0])
         lib = hm_compile_and_load(func)
