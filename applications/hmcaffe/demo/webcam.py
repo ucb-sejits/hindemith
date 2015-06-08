@@ -137,9 +137,10 @@ with open('data/ilsvrc12/synset_words.txt', 'rb') as _file:
     labels = _file.read().splitlines()
 
 
-cap = cv2.VideoCapture('../optical_flow/ir.mp4')
-# cap.set(3, 1280)
-# cap.set(4, 720)
+# cap = cv2.VideoCapture('../optical_flow/ir.mp4')
+cap = cv2.VideoCapture(0)
+cap.set(3, 1280)
+cap.set(4, 720)
 pre_sample = np.array([None])
 import time
 start = time.clock()
@@ -147,8 +148,8 @@ while(True):
     # Capture frame-by-frame
     ret, orig_frame = cap.read()
 
-    # cropped = orig_frame[60:-60, 340:-340, :]
-    # cv2.rectangle(orig_frame, (340, 60), (1280 - 340, 720 - 60), (0, 255, 0))
+    cropped = orig_frame[60:-60, 340:-340, :]
+    cv2.rectangle(orig_frame, (340, 60), (1280 - 340, 720 - 60), (0, 255, 0))
     # frame = cv2.resize(cropped, (256, 256))
     frame = cv2.resize(orig_frame, (256, 256))
 
