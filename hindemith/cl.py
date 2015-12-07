@@ -12,6 +12,12 @@ import sys
 
 backend = os.getenv("HM_BACKEND", "ocl")
 
+count = 0
+def get_unique_kernel_name():
+    global count
+    count += 1
+    return "fn{}".format(count)
+
 
 if backend in {"ocl", "opencl", "OCL"}:
     try:
@@ -69,6 +75,7 @@ if backend in {"ocl", "opencl", "OCL"}:
             self.sources = set()
             self.sinks = set()
             self.kernel = None
+            self.kernel_str = None
 
         def append_body(self, string):
             lines = [l.lstrip() for l in string.splitlines()]
@@ -101,20 +108,22 @@ if backend in {"ocl", "opencl", "OCL"}:
                     params.append(str)
                 params_str = ", ".join(params)
                 decls = ";\n\t\t\t".join(decls) + ";\n"
+                kernel_name = get_unique_kernel_name()
                 kernel = Template("""
-    __kernel void fn($params) {
+    __kernel void $name($params) {
         int index = get_global_id(0);
         if (index < $num_work_items) {
             $decls
 $body
         }
     }
-        """).substitute(params=params_str, body=self.body, decls=decls,
+        """).substitute(name=kernel_name, params=params_str, body=self.body, decls=decls,
                         num_work_items=self.launch_parameters[0])
                 # print([p.name for p in self.params])
                 print(kernel)
+                self.kernel_str = kernel
                 kernel = cl.clCreateProgramWithSource(
-                    context, kernel).build()['fn']
+                    context, kernel).build()[kernel_name]
                 kernel.argtypes = tuple(cl.cl_mem for _ in self.params)
                 self.kernel = kernel
 

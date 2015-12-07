@@ -106,6 +106,7 @@ class Compose(object):
         self.tree = get_ast(func)
         self.compiled = None
         self.fusion = fusion
+        self.kernels = []
 
     def process_hm_ops(self, statements):
         processed = []
@@ -251,6 +252,7 @@ class Compose(object):
                         kernels.append(self.get_launcher(op, _sources, _sinks))
                 for kernel in kernels:
                     kernel.compile()
+                    self.kernels.append(kernel)
             kernel_map = {}
             for kernel in kernels:
                 evts = []
@@ -350,6 +352,11 @@ class Compose(object):
                 return True
         return False
 
+    def dump_kernels(self):
+        with open("kernel.cl", "w") as f:
+            for kernel in self.kernels:
+                f.write(kernel.kernel_str)
+
 
 def compose(fn=None, fusion=True):
     def composer(fn):
@@ -369,6 +376,7 @@ def compose(fn=None, fusion=True):
                 else:
                     symbol_table[arg.arg] = args[index]
             return composed(*args, **kwargs)
+        wrapped.composed = composed
         return wrapped
     if fn is not None:
         return composer(fn)
