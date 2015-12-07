@@ -97,7 +97,8 @@ if backend in {"ocl", "opencl", "OCL"}:
                         if param.name not in seen_params:
                             seen_params.add(param.name)
                             filtered.add(param)
-                self.params = list(filtered).sort(key=lambda x: x.name)
+                self.params = list(filtered)
+                self.params.sort(key=lambda x: x.name)
                 params = []
                 sinks = set(sink.name for sink in self.sinks)
                 for param in self.params:
